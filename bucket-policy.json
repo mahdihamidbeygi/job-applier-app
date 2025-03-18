@@ -1,0 +1,35 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PublicReadForGetBucketObjects",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::job-applier-files/*",
+            "Condition": {
+                "StringLike": {
+                    "aws:Referer": [
+                        "http://localhost:3000/*",
+                        "https://your-production-domain.com/*"
+                    ]
+                }
+            }
+        },
+        {
+            "Sid": "DenyNonSecureTransport",
+            "Effect": "Deny",
+            "Principal": "*",
+            "Action": "s3:*",
+            "Resource": [
+                "arn:aws:s3:::job-applier-files",
+                "arn:aws:s3:::job-applier-files/*"
+            ],
+            "Condition": {
+                "Bool": {
+                    "aws:SecureTransport": "false"
+                }
+            }
+        }
+    ]
+} 
