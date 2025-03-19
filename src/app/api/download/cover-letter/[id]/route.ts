@@ -4,6 +4,15 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import { NextResponse } from "next/server";
 import { format } from "date-fns";
 
+// Helper function to sanitize text for PDF
+function sanitizeText(text: string): string {
+  return text
+    .replace(/[\u2010-\u2015]/g, '-') // Replace various hyphens with simple hyphen
+    .replace(/[^\x00-\x7F]/g, '') // Remove non-ASCII characters
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .trim();
+}
+
 export async function GET(
   request: Request,
   { params }: { params: { id: string } }
@@ -35,6 +44,14 @@ export async function GET(
       return new Response("User profile not found", { status: 404 });
     }
 
+    if (!userProfile.experience || userProfile.experience.length === 0) {
+      return new Response("No experience found in profile. Please add experience details before generating a cover letter.", { status: 400 });
+    }
+
+    if (!userProfile.skills || userProfile.skills.length === 0) {
+      return new Response("No skills found in profile. Please add skills before generating a cover letter.", { status: 400 });
+    }
+
     // Create PDF document
     const pdfDoc = await PDFDocument.create();
     const page = pdfDoc.addPage();
@@ -47,7 +64,7 @@ export async function GET(
 
     // Date
     const today = format(new Date(), "MMMM d, yyyy");
-    page.drawText(today, {
+    page.drawText(sanitizeText(today), {
       x: 50,
       y: yOffset,
       size: fontSize,
@@ -56,7 +73,7 @@ export async function GET(
     yOffset -= lineHeight * 2;
 
     // Company Information
-    page.drawText(job.company, {
+    page.drawText(sanitizeText(job.company), {
       x: 50,
       y: yOffset,
       size: fontSize,
@@ -65,7 +82,7 @@ export async function GET(
     yOffset -= lineHeight;
 
     if (job.location) {
-      page.drawText(job.location, {
+      page.drawText(sanitizeText(job.location), {
         x: 50,
         y: yOffset,
         size: fontSize,
@@ -84,8 +101,8 @@ export async function GET(
     yOffset -= lineHeight * 2;
 
     // Opening Paragraph
-    const openingText = `I am writing to express my strong interest in the ${job.title} position at ${job.company}. With my background in ${userProfile.experience[0]?.title || "relevant field"} and passion for ${job.company}, I am confident in my ability to contribute effectively to your team.`;
-    const openingLines = splitTextIntoLines(openingText, 80);
+    const openingText = `I am writing to express my strong interest in the ${sanitizeText(job.title)} position at ${sanitizeText(job.company)}. With my background in ${sanitizeText(userProfile.experience[0]?.title || 'relevant field')} and passion for ${sanitizeText(job.company)}, I am confident in my ability to contribute effectively to your team.`;
+    const openingLines = splitTextIntoLines(sanitizeText(openingText), 80);
     for (const line of openingLines) {
       page.drawText(line, {
         x: 50,
@@ -100,8 +117,8 @@ export async function GET(
     // Experience Paragraph
     const latestExperience = userProfile.experience[0];
     if (latestExperience) {
-      const experienceText = `In my current role as ${latestExperience.title} at ${latestExperience.company}, I have developed strong skills in ${latestExperience.description}. This experience has prepared me well for the challenges and opportunities that come with the ${job.title} position.`;
-      const experienceLines = splitTextIntoLines(experienceText, 80);
+      const experienceText = `In my current role as ${sanitizeText(latestExperience.title)} at ${sanitizeText(latestExperience.company)}, I have developed strong skills in ${sanitizeText(latestExperience.description || '')}. This experience has prepared me well for the challenges and opportunities that come with the ${sanitizeText(job.title)} position.`;
+      const experienceLines = splitTextIntoLines(sanitizeText(experienceText), 80);
       for (const line of experienceLines) {
         page.drawText(line, {
           x: 50,
@@ -116,8 +133,8 @@ export async function GET(
 
     // Skills Paragraph
     if (userProfile.skills.length > 0) {
-      const skillsText = `My key skills include ${userProfile.skills.map(skill => skill.name).join(", ")}, which align well with the requirements of this position.`;
-      const skillsLines = splitTextIntoLines(skillsText, 80);
+      const skillsText = `My key skills include ${userProfile.skills.map(skill => sanitizeText(skill.name || '')).join(", ")}, which align well with the requirements of this position.`;
+      const skillsLines = splitTextIntoLines(sanitizeText(skillsText), 80);
       for (const line of skillsLines) {
         page.drawText(line, {
           x: 50,
@@ -131,8 +148,8 @@ export async function GET(
     }
 
     // Closing
-    const closingText = `I am excited about the opportunity to bring my skills and experience to ${job.company} and would welcome the chance to discuss how I can contribute to your team.`;
-    const closingLines = splitTextIntoLines(closingText, 80);
+    const closingText = `I am excited about the opportunity to bring my skills and experience to ${sanitizeText(job.company)} and would welcome the chance to discuss how I can contribute to your team.`;
+    const closingLines = splitTextIntoLines(sanitizeText(closingText), 80);
     for (const line of closingLines) {
       page.drawText(line, {
         x: 50,
@@ -153,7 +170,7 @@ export async function GET(
     });
     yOffset -= lineHeight * 2;
 
-    page.drawText(userProfile.name, {
+    page.drawText(sanitizeText(userProfile.name), {
       x: 50,
       y: yOffset,
       size: fontSize,
@@ -161,7 +178,7 @@ export async function GET(
     });
     yOffset -= lineHeight;
 
-    page.drawText(userProfile.email, {
+    page.drawText(sanitizeText(userProfile.email), {
       x: 50,
       y: yOffset,
       size: fontSize,
@@ -170,7 +187,7 @@ export async function GET(
     yOffset -= lineHeight;
 
     if (userProfile.phone) {
-      page.drawText(userProfile.phone, {
+      page.drawText(sanitizeText(userProfile.phone), {
         x: 50,
         y: yOffset,
         size: fontSize,
@@ -183,12 +200,17 @@ export async function GET(
     return new NextResponse(pdfBytes, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="cover-letter-${job.company}.pdf"`,
+        "Content-Disposition": `attachment; filename="cover-letter-${sanitizeText(job.company)}.pdf"`,
       },
     });
   } catch (error) {
     console.error("Error generating cover letter:", error);
-    return new Response("Error generating cover letter", { status: 500 });
+    return new Response(
+      error instanceof Error 
+        ? `Error generating cover letter: ${error.message}`
+        : "Error generating cover letter",
+      { status: 500 }
+    );
   }
 }
 

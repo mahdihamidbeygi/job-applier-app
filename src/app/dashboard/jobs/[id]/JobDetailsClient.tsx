@@ -67,15 +67,11 @@ export default function JobDetailsClient({ job, userProfile }: JobDetailsClientP
   const [isGeneratingCoverLetter, setIsGeneratingCoverLetter] = useState(false);
 
   const generateTailoredResume = async (): Promise<Blob> => {
-    const response = await fetch('/api/generate/resume', {
-      method: 'POST',
+    const response = await fetch(`/api/download/resume/${job.id}`, {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        job,
-        userProfile,
-      }),
     });
     
     if (!response.ok) {
@@ -86,19 +82,16 @@ export default function JobDetailsClient({ job, userProfile }: JobDetailsClientP
   };
 
   const generateCoverLetter = async (): Promise<Blob> => {
-    const response = await fetch('/api/generate/cover-letter', {
-      method: 'POST',
+    const response = await fetch(`/api/download/cover-letter/${job.id}`, {
+      method: 'GET',
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        job,
-        userProfile,
-      }),
     });
     
     if (!response.ok) {
-      throw new Error('Failed to generate cover letter');
+      const errorText = await response.text();
+      throw new Error(`Failed to generate cover letter: ${errorText}`);
     }
     
     return response.blob();
@@ -138,7 +131,7 @@ export default function JobDetailsClient({ job, userProfile }: JobDetailsClientP
       URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Error generating cover letter:', error);
-      toast.error('Failed to generate cover letter');
+      toast.error(error instanceof Error ? error.message : 'Failed to generate cover letter');
     } finally {
       setIsGeneratingCoverLetter(false);
     }
