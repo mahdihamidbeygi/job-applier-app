@@ -70,28 +70,28 @@ export default function JobCard({ job, isSaved: initialIsSaved, userId, savedJob
   };
 
   return (
-    <div className="bg-white shadow rounded-lg p-6 mb-4">
+    <div className="bg-slate-800 shadow rounded-lg p-6 mb-4">
       <div className="flex justify-between items-start">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900 cursor-pointer hover:text-indigo-600" onClick={handleViewDetails}>
+          <h3 className="text-lg font-semibold text-slate-100 cursor-pointer hover:text-slate-300" onClick={handleViewDetails}>
             {job.title}
           </h3>
-          <p className="text-sm text-gray-600">{job.company}</p>
-          {job.location && <p className="text-sm text-gray-500">{job.location}</p>}
+          <p className="text-sm text-slate-300">{job.company}</p>
+          {job.location && <p className="text-sm text-slate-400">{job.location}</p>}
         </div>
         <div className="flex space-x-2">
           {userId && (
             <button
               onClick={handleSave}
               disabled={isLoading}
-              className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="inline-flex items-center px-3 py-2 border border-slate-600 shadow-sm text-sm leading-4 font-medium rounded-md text-slate-100 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
             >
               {isSaved ? 'Unsave' : 'Save'}
             </button>
           )}
           <button
             onClick={handleViewOriginal}
-            className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+            className="inline-flex items-center px-3 py-2 border border-slate-600 shadow-sm text-sm leading-4 font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500"
           >
             <ExternalLink className="h-4 w-4 mr-1" />
             View Original
@@ -99,14 +99,14 @@ export default function JobCard({ job, isSaved: initialIsSaved, userId, savedJob
         </div>
       </div>
       <div className="mt-4">
-        <p className="text-sm text-gray-500 line-clamp-3">{job.description}</p>
+        <p className="text-sm text-slate-400 line-clamp-3">{job.description}</p>
       </div>
       <div className="mt-4 flex justify-between items-center">
         <div className="flex space-x-4">
-          {job.salary && <span className="text-sm text-gray-500">{job.salary}</span>}
-          {job.jobType && <span className="text-sm text-gray-500">{job.jobType}</span>}
+          {job.salary && <span className="text-sm text-slate-400">{job.salary}</span>}
+          {job.jobType && <span className="text-sm text-slate-400">{job.jobType}</span>}
         </div>
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-slate-400">
           Posted {formatDistanceToNow(new Date(job.postedAt))} ago
         </span>
       </div>

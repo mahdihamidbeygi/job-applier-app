@@ -121,7 +121,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-slate-800 shadow rounded-lg p-6">
         <div className="flex items-center space-x-6">
           {profile.user.image && (
             <Image
@@ -133,22 +133,22 @@ export default async function ProfilePage() {
             />
           )}
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{profile.user.name}</h1>
-            <p className="text-gray-500">{profile.user.email}</p>
+            <h1 className="text-2xl font-bold text-slate-100">{profile.user.name}</h1>
+            <p className="text-slate-300">{profile.user.email}</p>
           </div>
         </div>
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Resume</h2>
+      <div className="bg-slate-800 shadow rounded-lg p-6">
+        <h2 className="text-xl font-semibold text-slate-100 mb-4">Resume</h2>
         <ResumeUpload
           currentResume={profile.resumeUrl}
           lastUpdated={profile.updatedAt}
         />
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Professional Profile</h2>
+      <div className="bg-slate-800 shadow rounded-lg p-6">
+        <h2 className="text-xl font-semibold text-slate-100 mb-4">Professional Profile</h2>
         <ProfileForm
           initialData={{
             linkedInUrl: profile.linkedinUrl || "",
@@ -162,20 +162,20 @@ export default async function ProfilePage() {
         />
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Account Statistics</h2>
+      <div className="bg-slate-800 shadow rounded-lg p-6">
+        <h2 className="text-xl font-semibold text-slate-100 mb-4">Account Statistics</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900">Applications</h3>
-            <p className="text-3xl font-bold text-blue-600">{totalApplications}</p>
+          <div className="bg-slate-700 p-4 rounded-lg">
+            <h3 className="text-lg font-medium text-slate-100">Applications</h3>
+            <p className="text-3xl font-bold text-blue-400">{totalApplications}</p>
           </div>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900">Saved Jobs</h3>
-            <p className="text-3xl font-bold text-blue-600">{savedJobs}</p>
+          <div className="bg-slate-700 p-4 rounded-lg">
+            <h3 className="text-lg font-medium text-slate-100">Saved Jobs</h3>
+            <p className="text-3xl font-bold text-blue-400">{savedJobs}</p>
           </div>
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <h3 className="text-lg font-medium text-gray-900">Active Applications</h3>
-            <p className="text-3xl font-bold text-blue-600">{activeApplications}</p>
+          <div className="bg-slate-700 p-4 rounded-lg">
+            <h3 className="text-lg font-medium text-slate-100">Active Applications</h3>
+            <p className="text-3xl font-bold text-blue-400">{activeApplications}</p>
           </div>
         </div>
       </div>

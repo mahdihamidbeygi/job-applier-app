@@ -64,6 +64,14 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
     { id: 'past_month', name: 'Past Month' }
   ];
 
+  // Define consistent color classes
+  const inputClass = "w-full rounded-md border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 placeholder-slate-400 focus:border-slate-500 focus:ring-slate-500";
+  const labelClass = "block text-sm font-medium text-slate-300 mb-1";
+  const selectClass = "w-full rounded-md border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 focus:border-slate-500 focus:ring-slate-500";
+  const checkboxClass = "h-4 w-4 rounded border-slate-600 bg-slate-700 text-slate-300";
+  const checkboxLabelClass = "ml-2 text-sm text-slate-300";
+  const buttonClass = "rounded-md bg-slate-700 px-4 py-2 text-sm font-medium text-slate-100 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2 disabled:opacity-50 border border-slate-600";
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
@@ -100,7 +108,7 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
     <form onSubmit={handleSearch} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label htmlFor="query" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="query" className={labelClass}>
             Job Title, Keywords, or Company
           </label>
           <input
@@ -108,13 +116,13 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black"
+            className={inputClass}
             placeholder="e.g. Software Engineer"
           />
         </div>
         
         <div>
-          <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="location" className={labelClass}>
             Location
           </label>
           <input
@@ -122,7 +130,7 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
             type="text"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black"
+            className={inputClass}
             placeholder="e.g. New York, NY"
           />
         </div>
@@ -130,14 +138,14 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
-          <label htmlFor="jobType" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="jobType" className={labelClass}>
             Job Type
           </label>
           <select
             id="jobType"
             value={jobType}
             onChange={(e) => setJobType(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black"
+            className={selectClass}
           >
             {jobTypes.map(type => (
               <option key={type.id} value={type.id}>{type.name}</option>
@@ -146,14 +154,14 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
         </div>
         
         <div>
-          <label htmlFor="experienceLevel" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="experienceLevel" className={labelClass}>
             Experience Level
           </label>
           <select
             id="experienceLevel"
             value={experienceLevel}
             onChange={(e) => setExperienceLevel(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black"
+            className={selectClass}
           >
             {experienceLevels.map(level => (
               <option key={level.id} value={level.id}>{level.name}</option>
@@ -162,14 +170,14 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
         </div>
         
         <div>
-          <label htmlFor="datePosted" className="block text-sm font-medium text-gray-700 mb-1">
+          <label htmlFor="datePosted" className={labelClass}>
             Date Posted
           </label>
           <select
             id="datePosted"
             value={datePosted}
             onChange={(e) => setDatePosted(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm text-black"
+            className={selectClass}
           >
             {datePostedOptions.map(option => (
               <option key={option.id} value={option.id}>{option.name}</option>
@@ -184,15 +192,15 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
           type="checkbox"
           checked={remote}
           onChange={(e) => setRemote(e.target.checked)}
-          className="h-4 w-4 rounded border-gray-300 text-blue-600"
+          className={checkboxClass}
         />
-        <label htmlFor="remote" className="ml-2 text-sm font-medium text-gray-700">
+        <label htmlFor="remote" className={checkboxLabelClass}>
           Remote Jobs Only
         </label>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className={labelClass}>
           Job Platforms
         </label>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
@@ -203,9 +211,9 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
                 type="checkbox"
                 checked={selectedPlatforms.includes(platform.id)}
                 onChange={() => togglePlatform(platform.id)}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                className={checkboxClass}
               />
-              <label htmlFor={`platform-${platform.id}`} className="ml-2 text-sm text-gray-700">
+              <label htmlFor={`platform-${platform.id}`} className={checkboxLabelClass}>
                 {platform.name}
               </label>
             </div>
@@ -217,7 +225,7 @@ export default function EnhancedJobSearchForm({ initialValues = {} }: EnhancedJo
         <button
           type="submit"
           disabled={isLoading}
-          className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-gray-100 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+          className={buttonClass}
         >
           {isLoading ? 'Searching...' : 'Search Jobs'}
         </button>
