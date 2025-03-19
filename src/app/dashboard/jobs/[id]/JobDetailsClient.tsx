@@ -153,7 +153,7 @@ export default function JobDetailsClient({ job, userProfile }: JobDetailsClientP
             <div className="flex justify-between items-start">
               <div>
                 <CardTitle className="text-2xl font-bold text-slate-100">{job.title}</CardTitle>
-                <CardDescription className="mt-2">
+                <div className="mt-2">
                   <div className="flex items-center text-lg text-slate-300">
                     <Building className="w-5 h-5 mr-2" />
                     {job.company}
@@ -166,7 +166,7 @@ export default function JobDetailsClient({ job, userProfile }: JobDetailsClientP
                     <Clock className="w-4 h-4 mr-2" />
                     Posted {formatDistanceToNow(new Date(job.postedAt))} ago
                   </div>
-                </CardDescription>
+                </div>
               </div>
               <Button 
                 variant="outline" 

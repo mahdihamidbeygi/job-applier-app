@@ -39,7 +39,7 @@ export default async function JobsPage({
 
   // Default to LinkedIn and Indeed if no platforms specified
   if (platforms.length === 0) {
-    platforms = ['linkedin', 'indeed'];
+    platforms = ['linkedin'];
   }
 
   console.log(`Searching for jobs with query: "${query}", location: "${location}", type: "${type}", platforms:`, platforms);
@@ -123,7 +123,12 @@ export default async function JobsPage({
                 jobType: job.jobType || null,
                 url: job.url,
                 postedAt: job.postedAt || new Date(),
-                isExternal: true
+                isExternal: true,
+                user: {
+                  connect: {
+                    id: session.user.id
+                  }
+                }
               }
             });
             console.log(`Stored new job in database: ${newJob.id}`);
@@ -165,9 +170,6 @@ export default async function JobsPage({
           switch (job.platform.toLowerCase()) {
             case 'linkedin':
               job.url = `https://www.linkedin.com/jobs/view/${job.externalId}`;
-              break;
-            case 'indeed':
-              job.url = `https://www.indeed.com/viewjob?jk=${job.externalId}`;
               break;
             case 'glassdoor':
               job.url = `https://www.glassdoor.com/job-listing/${job.externalId}`;

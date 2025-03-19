@@ -1,7 +1,6 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
 import { OpenAI } from '@langchain/openai';
-import puppeteer from 'puppeteer';
 import { IndeedFeedService } from './indeedFeedService';
 
 // Define interfaces
@@ -75,7 +74,7 @@ export class JobAggregatorService {
   /**
    * Search for jobs across multiple platforms
    */
-  async searchJobs(params: JobSearchParams, platforms: string[] | string = ['linkedin', 'indeed', 'glassdoor']): Promise<{ jobs: Job[], errors: string[] }> {
+  async searchJobs(params: JobSearchParams, platforms: string[] | string = ['linkedin']): Promise<{ jobs: Job[], errors: string[] }> {
     const results: RawJobListing[] = [];
     const errors: string[] = [];
 
@@ -90,9 +89,6 @@ export class JobAggregatorService {
         switch (platform.toLowerCase()) {
           case 'linkedin':
             platformResults = await this.searchLinkedIn(params);
-            break;
-          case 'indeed':
-            platformResults = await this.searchIndeed(params);
             break;
           case 'glassdoor':
             platformResults = await this.searchGlassdoor(params);
@@ -322,291 +318,6 @@ export class JobAggregatorService {
   }
 
   /**
-   * Search for jobs on Indeed
-   */
-  private async searchIndeed(params: JobSearchParams): Promise<RawJobListing[]> {
-    try {
-      // Check if we should use the RSS feed
-      const useRssFeed = process.env.INDEED_USE_RSS_FEED === 'true';
-      
-      if (useRssFeed) {
-        console.log('Using Indeed RSS feed for job search');
-        
-        // Convert our params to IndeedFeedParams
-        const feedParams = {
-          query: params.query || '',
-          location: params.location,
-          country: 'us', // Default to US, can be made configurable
-          jobType: params.jobType,
-          sort: 'date' as const, // Default to date sorting
-          fromage: 30, // Last 30 days
-        };
-        
-        // Get jobs from the RSS feed
-        const jobs = await this.indeedFeedService.getAllJobs(feedParams);
-        
-        // Convert to RawJobListing format
-        return jobs.map(job => ({
-          title: job.title,
-          company: job.company,
-          location: job.location || '',
-          description: job.description,
-          url: job.url,
-          salary: job.salary || '',
-          jobType: job.jobType || '',
-          datePosted: job.postedAt.toISOString(),
-          platform: 'Indeed',
-          externalId: job.externalId,
-          isExternal: true,
-        }));
-      }
-      
-      // Fall back to existing scraping methods if RSS feed is not enabled
-      console.log('Using Indeed scraping as RSS feed is not enabled');
-      
-      // Try to scrape Indeed, but don't fail the entire job search if it doesn't work
-      try {
-        // First try with direct HTTP request
-        return await this.searchIndeedScrape(params);
-      } catch (error) {
-        console.error('Indeed direct scraping failed:', error);
-        
-        // Check if Puppeteer fallback is enabled
-        const enablePuppeteer = process.env.INDEED_ENABLE_PUPPETEER !== 'false';
-        
-        if (enablePuppeteer) {
-          console.log('Trying fallback method with headless browser...');
-          try {
-            return await this.searchIndeedWithPuppeteer(params);
-          } catch (puppeteerError) {
-            console.error('Indeed puppeteer scraping failed:', puppeteerError);
-            console.log('Returning empty results for Indeed due to scraping restrictions');
-            return [];
-          }
-        } else {
-          console.log('Puppeteer fallback is disabled. Returning empty results for Indeed.');
-          return [];
-        }
-      }
-    } catch (error) {
-      console.error('Error searching Indeed:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Search Indeed using web scraping with direct HTTP request
-   */
-  private async searchIndeedScrape(params: JobSearchParams): Promise<RawJobListing[]> {
-    // Maximum number of retries from environment or default to 2
-    const MAX_RETRIES = parseInt(process.env.INDEED_MAX_RETRIES || '2', 10);
-    let retries = 0;
-    
-    while (retries <= MAX_RETRIES) {
-      try {
-        // Build search URL
-        const searchQuery = encodeURIComponent(params.query);
-        const searchLocation = params.location ? encodeURIComponent(params.location) : '';
-        const url = `https://www.indeed.com/jobs?q=${searchQuery}&l=${searchLocation}`;
-        
-        // Enhanced headers to mimic a real browser
-        const headers = {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1',
-          'Cache-Control': 'max-age=0',
-          'TE': 'Trailers'
-        };
-        
-        // Make request with enhanced options
-        const response = await axios.get(url, {
-          headers,
-          // Uncomment the following lines to use a proxy (requires setup)
-          // proxy: {
-          //   host: process.env.PROXY_HOST || 'localhost',
-          //   port: parseInt(process.env.PROXY_PORT || '8080'),
-          //   auth: process.env.PROXY_AUTH ? {
-          //     username: process.env.PROXY_USERNAME || '',
-          //     password: process.env.PROXY_PASSWORD || ''
-          //   } : undefined
-          // },
-          timeout: 10000, // 10 second timeout
-          maxRedirects: 5
-        });
-        
-        // Parse HTML
-        const $ = cheerio.load(response.data);
-        const jobs: RawJobListing[] = [];
-        
-        // Extract job listings
-        $('.job_seen_beacon').each((i: number, element: cheerio.Element) => {
-          const jobId = $(element).attr('data-jk') || `indeed-${Date.now()}-${i}`;
-          const title = $(element).find('.jobTitle span').text().trim();
-          const company = $(element).find('.companyName').text().trim();
-          const location = $(element).find('.companyLocation').text().trim();
-          const salary = $(element).find('.salary-snippet-container').text().trim();
-          const jobUrl = `https://www.indeed.com/viewjob?jk=${jobId}`;
-          
-          jobs.push({
-            title,
-            company,
-            location,
-            description: '', // Would need to fetch this separately
-            url: jobUrl,
-            salary,
-            platform: 'Indeed',
-            externalId: jobId
-          });
-        });
-        
-        console.log(`Successfully scraped ${jobs.length} jobs from Indeed`);
-        return jobs;
-      } catch (error) {
-        retries++;
-        
-        // Type assertion for error to access response property
-        const axiosError = error as { response?: { status: number } };
-        
-        if (axiosError.response && axiosError.response.status === 403) {
-          console.error(`Indeed blocking scraping attempt ${retries}/${MAX_RETRIES}`);
-          
-          if (retries <= MAX_RETRIES) {
-            // Exponential backoff: wait longer between each retry
-            const waitTime = Math.pow(2, retries) * 1000;
-            console.log(`Waiting ${waitTime}ms before retrying...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
-          } else {
-            console.error('Maximum retries reached for Indeed scraping');
-            return [];
-          }
-        } else {
-          console.error('Indeed scraping error:', error);
-          return [];
-        }
-      }
-    }
-    
-    return [];
-  }
-
-  /**
-   * Search Indeed using Puppeteer (headless browser)
-   * This is a fallback method when direct HTTP requests are blocked
-   */
-  private async searchIndeedWithPuppeteer(params: JobSearchParams): Promise<RawJobListing[]> {
-    console.log('Launching headless browser for Indeed scraping...');
-    const browser = await puppeteer.launch({
-      headless: true, // Use true instead of 'new' for compatibility
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--disable-gpu',
-        '--window-size=1920x1080',
-      ]
-    });
-
-    try {
-      const page = await browser.newPage();
-      
-      // Set a realistic user agent
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-      
-      // Set extra HTTP headers
-      await page.setExtraHTTPHeaders({
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-      });
-      
-      // Build search URL
-      const searchQuery = encodeURIComponent(params.query);
-      const searchLocation = params.location ? encodeURIComponent(params.location) : '';
-      const url = `https://www.indeed.com/jobs?q=${searchQuery}&l=${searchLocation}`;
-      
-      console.log(`Navigating to ${url}`);
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-      
-      // Wait for job listings to load
-      await page.waitForSelector('.job_seen_beacon', { timeout: 10000 }).catch(() => {
-        console.log('Could not find job listings, trying alternative selector');
-        return page.waitForSelector('.jobsearch-ResultsList', { timeout: 10000 });
-      });
-      
-      // Extract job data
-      console.log('Extracting job data from Indeed...');
-      const jobsData = await page.evaluate(() => {
-        const jobsArray: Array<{
-          jobId: string;
-          title: string;
-          company: string;
-          location: string;
-          salary: string;
-          jobUrl: string;
-        }> = [];
-        
-        const jobElements = document.querySelectorAll('.job_seen_beacon, .jobsearch-ResultsList > div');
-        
-        jobElements.forEach((element, index) => {
-          // Try to get job ID from data attribute
-          const jobId = element.getAttribute('data-jk') || `indeed-${Date.now()}-${index}`;
-          
-          // Extract job details
-          const titleElement = element.querySelector('.jobTitle span, .jcs-JobTitle span');
-          const companyElement = element.querySelector('.companyName, .companyOverviewLink');
-          const locationElement = element.querySelector('.companyLocation');
-          const salaryElement = element.querySelector('.salary-snippet-container, .salary-snippet');
-          
-          if (titleElement) {
-            const title = titleElement.textContent?.trim() || '';
-            const company = companyElement?.textContent?.trim() || '';
-            const location = locationElement?.textContent?.trim() || '';
-            const salary = salaryElement?.textContent?.trim() || '';
-            const jobUrl = `https://www.indeed.com/viewjob?jk=${jobId}`;
-            
-            if (title) {
-              jobsArray.push({
-                jobId,
-                title,
-                company,
-                location,
-                salary,
-                jobUrl
-              });
-            }
-          }
-        });
-        
-        return jobsArray;
-      });
-      
-      // Convert to RawJobListing format
-      const jobs: RawJobListing[] = jobsData.map(job => ({
-        title: job.title,
-        company: job.company,
-        location: job.location,
-        description: '', // Would need to fetch this separately
-        url: job.jobUrl,
-        salary: job.salary,
-        platform: 'Indeed',
-        externalId: job.jobId
-      }));
-      
-      console.log(`Successfully scraped ${jobs.length} jobs from Indeed using Puppeteer`);
-      return jobs;
-    } catch (error) {
-      console.error('Error scraping Indeed with Puppeteer:', error);
-      throw error; // Re-throw to be caught by the caller
-    } finally {
-      await browser.close();
-      console.log('Closed headless browser');
-    }
-  }
-
-  /**
    * Search for jobs on Glassdoor
    */
   private async searchGlassdoor(params: JobSearchParams): Promise<RawJobListing[]> {
@@ -804,17 +515,8 @@ export class JobAggregatorService {
         case 'linkedin':
           description = $('.description__text').text().trim();
           break;
-        case 'indeed':
-          description = $('#jobDescriptionText').text().trim();
-          break;
         case 'glassdoor':
           description = $('.jobDescriptionContent').text().trim();
-          break;
-        case 'ziprecruiter':
-          description = $('.job_description').text().trim();
-          break;
-        case 'monster':
-          description = $('.job-description').text().trim();
           break;
       }
       

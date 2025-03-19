@@ -29,7 +29,7 @@ export class JobService {
    * @param platforms Platforms to search (defaults to LinkedIn and Indeed)
    * @returns Jobs and any errors encountered
    */
-  async searchJobs(query: string, location?: string, jobType?: string, platforms: string[] | string = ['linkedin', 'indeed']): Promise<{ jobs: Job[], errors: string[] }> {
+  async searchJobs(query: string, location?: string, jobType?: string, platforms: string[] | string = ['linkedin']): Promise<{ jobs: Job[], errors: string[] }> {
     try {
       console.log(`Searching for jobs with query: "${query}", location: "${location || 'any'}", jobType: "${jobType || 'any'}", platforms:`, platforms);
       
