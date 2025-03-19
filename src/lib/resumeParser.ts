@@ -1,4 +1,9 @@
-import pdfParse from 'pdf-parse-fork';
+// Server-side only
+if (typeof window !== 'undefined') {
+  throw new Error('This module can only be used on the server side');
+}
+
+import pdfParse from 'pdf-parse';
 import OpenAI from 'openai';
 import crypto from 'crypto';
 
@@ -15,6 +20,9 @@ const parseCache = new Map<string, {
 
 // Cache expiration time (24 hours)
 const CACHE_EXPIRATION = 24 * 60 * 60 * 1000;
+
+// Maximum file size (10MB)
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 interface Publication {
   title: string;
@@ -157,17 +165,37 @@ function generateCacheKey(buffer: Buffer): string {
   return crypto.createHash('md5').update(buffer).digest('hex');
 }
 
+function cleanGluedWords(text: string): string {
+  // Optimized regex patterns
+  const patterns = [
+    /([a-z])([A-Z])/g,  // camelCase
+    /([a-zA-Z])(\d)/g,  // numbers
+    /([a-zA-Z])([^a-zA-Z\s])/g,  // special chars
+    /([a-zA-Z])([-_])/g,  // hyphens/underscores
+    /[\u2028\u2029]/g,  // line separators
+    /[^\x00-\x7F]/g,  // non-ASCII
+    /\s+/g  // multiple spaces
+  ];
+
+  return patterns.reduce((text, pattern) => 
+    text.replace(pattern, '$1 $2'), 
+    text
+  ).trim();
+}
+
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const data = await pdfParse(buffer, {
-    max: 0,
-    version: 'default'
-  });
-  
-  if (!data || !data.text) {
+  try {
+    const data = await pdfParse(buffer);
+    
+    if (!data || !data.text) {
+      throw new Error('Failed to extract text from PDF');
+    }
+
+    return cleanGluedWords(data.text);
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error);
     throw new Error('Failed to extract text from PDF');
   }
-  
-  return data.text;
 }
 
 async function parseWithAI(text: string): Promise<AIResponseData> {
@@ -222,42 +250,17 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
     }]
   };
 
-  const prompt = `Extract the following information from this resume and return it as a valid JSON object with no additional text or explanation.
-
-The response must follow this JSON template structure, but you can add more sections under additionalSections if you find any other sections in the resume:
-${JSON.stringify(template, null, 2)}
-
-For LinkedIn and GitHub URLs:
-1. Look for full URLs (e.g., "https://linkedin.com/in/username" or "https://github.com/username")
-2. Look for text mentions (e.g., "linkedin.com/in/username" or "github.com/username")
-3. Look for profile references (e.g., "LinkedIn: username" or "GitHub: username")
-4. For LinkedIn, convert all URLs to format: "https://linkedin.com/in/username"
-5. For GitHub, convert all URLs to format: "https://github.com/username"
-
-For degree names, standardize the following formats:
-1. Convert "MSc" or "M.Sc." to "Master of Science"
-2. Convert "BSc" or "B.Sc." to "Bachelor of Science"
-3. Convert "PhD" or "Ph.D." to "Doctor of Philosophy"
-4. Convert "BA" or "B.A." to "Bachelor of Arts"
-5. Convert "MA" or "M.A." to "Master of Arts"
-6. Keep the field of study separate from the degree name
-
-For any additional sections found in the resume:
-1. Create a new section under additionalSections
-2. Set an appropriate type (e.g., "publications", "certifications", "awards", etc.)
-3. Give it a descriptive title
-4. Extract all relevant information into the items array
-5. Include dates where available in YYYY-MM-DD format
-6. Include URLs if they exist
-
-Resume text:
-${text}`;
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4",
-    messages: [{
-      role: "system",
-      content: `You are a resume parser that extracts structured information from resumes. You must:
+  // Split text into chunks for parallel processing
+  const chunks = text.split(/\n{2,}/).filter(chunk => chunk.trim());
+  
+  // Process chunks in parallel
+  const chunkResults = await Promise.all(
+    chunks.map(async (chunk) => {
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [{
+          role: "system",
+          content: `You are a resume parser that extracts structured information from resumes. You must:
 1. Return ONLY valid JSON without any additional text, markdown formatting, or explanation
 2. Ensure the JSON structure exactly matches the provided template
 3. Pay special attention to standardizing degree names (e.g., 'MSc' should become 'Master of Science')
@@ -267,65 +270,80 @@ ${text}`;
 7. Ensure all JSON keys and values are properly quoted
 8. Include all required fields from the template, even if empty
 9. Use null for missing dates, empty string for missing text fields, and empty arrays for missing lists`
-    }, {
-      role: "user",
-      content: prompt
-    }],
-    temperature: 0.1
+        }, {
+          role: "user",
+          content: `Extract information from this resume section:
+${chunk}
+
+Return it as a valid JSON object following this template:
+${JSON.stringify(template, null, 2)}`
+        }],
+        temperature: 0.1
+      });
+
+      if (!completion.choices[0].message.content) {
+        throw new Error('No content in AI response');
+      }
+
+      return JSON.parse(completion.choices[0].message.content.trim());
+    })
+  );
+
+  // Merge results from all chunks
+  return mergeChunkResults(chunkResults);
+}
+
+function mergeChunkResults(chunks: AIResponseData[]): AIResponseData {
+  const merged: AIResponseData = {
+    contactInfo: {
+      name: '',
+      email: '',
+      phone: '',
+      location: '',
+      linkedInUrl: '',
+      githubUrl: ''
+    },
+    summary: '',
+    skills: [],
+    experience: [],
+    education: [],
+    publications: [],
+    certifications: [],
+    additionalSections: []
+  };
+
+  // Merge arrays and deduplicate
+  chunks.forEach(chunk => {
+    if (chunk.contactInfo) {
+      merged.contactInfo = {
+        ...merged.contactInfo,
+        ...chunk.contactInfo
+      };
+    }
+    if (chunk.summary) {
+      merged.summary += (merged.summary ? ' ' : '') + chunk.summary;
+    }
+    if (Array.isArray(chunk.skills)) {
+      merged.skills = [...new Set([...merged.skills, ...chunk.skills])];
+    }
+    if (Array.isArray(chunk.experience)) {
+      merged.experience = [...merged.experience, ...chunk.experience];
+    }
+    if (Array.isArray(chunk.education)) {
+      merged.education = [...merged.education, ...chunk.education];
+    }
+    if (Array.isArray(chunk.publications)) {
+      merged.publications = [...(merged.publications || []), ...chunk.publications];
+    }
+    if (Array.isArray(chunk.certifications)) {
+      merged.certifications = [...(merged.certifications || []), ...chunk.certifications];
+    }
+    if (Array.isArray(chunk.additionalSections)) {
+      merged.additionalSections = [...merged.additionalSections, ...chunk.additionalSections];
+    }
   });
 
-  if (!completion.choices[0].message.content) {
-    throw new Error('No content in AI response');
-  }
-
-  try {
-    const parsedData = JSON.parse(completion.choices[0].message.content.trim());
-    
-    // Validate the response structure
-    if (!parsedData || typeof parsedData !== 'object') {
-      throw new Error('Response is not an object');
-    }
-
-    if (!parsedData.contactInfo || typeof parsedData.contactInfo !== 'object') {
-      console.warn('Missing or invalid contactInfo, using empty object');
-      parsedData.contactInfo = template.contactInfo;
-    }
-
-    if (!Array.isArray(parsedData.skills)) {
-      console.warn('Missing or invalid skills array, using empty array');
-      parsedData.skills = [];
-    }
-
-    if (!Array.isArray(parsedData.experience)) {
-      console.warn('Missing or invalid experience array, using empty array');
-      parsedData.experience = [];
-    }
-
-    if (!Array.isArray(parsedData.education)) {
-      console.warn('Missing or invalid education array, using empty array');
-      parsedData.education = [];
-    }
-
-    if (!Array.isArray(parsedData.publications)) {
-      console.warn('Missing or invalid publications array, using empty array');
-      parsedData.publications = [];
-    }
-
-    if (!Array.isArray(parsedData.certifications)) {
-      console.warn('Missing or invalid certifications array, using empty array');
-      parsedData.certifications = [];
-    }
-
-    if (!Array.isArray(parsedData.additionalSections)) {
-      console.warn('Missing or invalid additionalSections array, using empty array');
-      parsedData.additionalSections = [];
-    }
-
-    return parsedData as AIResponseData;
-  } catch (error) {
-    console.error('Failed to parse AI response:', completion.choices[0].message.content);
-    throw new Error(`Invalid JSON response from AI: ${error instanceof Error ? error.message : 'Unknown parsing error'}`);
-  }
+  return merged;
 }
 
 export async function parseResume(pdfBuffer: Buffer | ArrayBuffer | Uint8Array): Promise<ParsedResume> {
@@ -334,6 +352,11 @@ export async function parseResume(pdfBuffer: Buffer | ArrayBuffer | Uint8Array):
     
     // Convert input to Buffer
     const buffer = ensureBuffer(pdfBuffer);
+    
+    // Validate file size
+    if (buffer.length > MAX_FILE_SIZE) {
+      throw new Error(`File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit`);
+    }
     
     // Generate cache key
     const cacheKey = generateCacheKey(buffer);
