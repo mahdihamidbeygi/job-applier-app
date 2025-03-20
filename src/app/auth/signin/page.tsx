@@ -1,6 +1,7 @@
 'use client';
 
 import { signIn } from 'next-auth/react';
+import { use } from 'react';
 
 interface SignInProps {
   searchParams?: { [key: string]: string | string[] | undefined };
@@ -20,8 +21,9 @@ const errorMessages = {
 };
 
 export default function SignIn({ searchParams }: SignInProps) {
-  const errorMessage = searchParams?.error 
-    ? errorMessages[searchParams.error as keyof typeof errorMessages] || errorMessages.default 
+  const params = use(Promise.resolve(searchParams));
+  const errorMessage = params?.error 
+    ? errorMessages[params.error as keyof typeof errorMessages] || errorMessages.default 
     : null;
 
   return (
