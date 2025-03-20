@@ -1,16 +1,9 @@
-import { auth } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
-import { PDFDocument, StandardFonts } from "pdf-lib";
-import { NextResponse } from "next/server";
-
-// Helper function to sanitize text for PDF
-function sanitizeText(text: string): string {
-  return text
-    .replace(/[\u2010-\u2015]/g, '-') // Replace various hyphens with simple hyphen
-    .replace(/[^\x00-\x7F]/g, '') // Remove non-ASCII characters
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .trim();
-}
+import { NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { convertMarkdownToPDF } from '@/lib/pdfConverter';
+import { ResumeData } from '@/types/resume';
+import { Skill, Experience, Education } from '@prisma/client';
 
 export async function GET(
   request: Request,
@@ -47,182 +40,47 @@ export async function GET(
       return new Response("User profile not found", { status: 404 });
     }
 
-    // Create PDF document
-    const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage();
-    const height = page.getHeight();
-    const margin = 50;
-    const lineHeight = 15;
-    let yOffset = height - margin;
-    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-    const fontSize = 12;
+    // Transform profile data to match ResumeData type
+    const resumeData: ResumeData = {
+      fullName: userProfile.name || '',
+      title: userProfile.experience[0]?.title || '',
+      email: userProfile.email || '',
+      phone: userProfile.phone || '',
+      location: userProfile.location || '',
+      linkedin: userProfile.linkedinUrl || '',
+      github: userProfile.githubUrl || '',
+      summary: userProfile.summary || '',
+      skills: {
+        technical: userProfile.skills.map((skill: Skill) => skill.name),
+        soft: [],
+      },
+      experience: userProfile.experience.map((exp: Experience) => ({
+        title: exp.title,
+        company: exp.company,
+        location: exp.location || '',
+        startDate: exp.startDate.toISOString(),
+        endDate: exp.endDate?.toISOString(),
+        achievements: exp.description ? exp.description.split('\n').filter((line: string) => line.trim()) : [],
+      })),
+      education: userProfile.education.map((edu: Education) => ({
+        degree: edu.degree,
+        school: edu.school,
+        location: '', // Education model doesn't have location
+        graduationYear: edu.endDate?.getFullYear().toString() || '',
+        major: edu.field || '',
+        description: edu.description || '',
+      })),
+      projects: [],
+      certifications: [],
+    };
 
-    // Header
-    page.drawText(sanitizeText(userProfile.name), {
-      x: 50,
-      y: yOffset,
-      size: 24,
-      font,
-    });
-    yOffset -= 30;
+    // Generate PDF using our template
+    const pdfBuffer = await convertMarkdownToPDF('', resumeData);
 
-    page.drawText(sanitizeText(userProfile.email), {
-      x: 50,
-      y: yOffset,
-      size: fontSize,
-      font,
-    });
-    yOffset -= lineHeight;
-
-    if (userProfile.phone) {
-      page.drawText(sanitizeText(userProfile.phone), {
-        x: 50,
-        y: yOffset,
-        size: fontSize,
-        font,
-      });
-      yOffset -= lineHeight;
-    }
-
-    if (userProfile.location) {
-      page.drawText(sanitizeText(userProfile.location), {
-        x: 50,
-        y: yOffset,
-        size: fontSize,
-        font,
-      });
-      yOffset -= lineHeight;
-    }
-
-    // Summary
-    if (userProfile.summary) {
-      yOffset -= lineHeight;
-      page.drawText("Professional Summary", {
-        x: 50,
-        y: yOffset,
-        size: 16,
-        font,
-      });
-      yOffset -= lineHeight;
-
-      const summaryLines = sanitizeText(userProfile.summary).split("\n");
-      for (const line of summaryLines) {
-        page.drawText(sanitizeText(line), {
-          x: 50,
-          y: yOffset,
-          size: fontSize,
-          font,
-        });
-        yOffset -= lineHeight;
-      }
-    }
-
-    // Experience
-    yOffset -= lineHeight;
-    page.drawText("Experience", {
-      x: 50,
-      y: yOffset,
-      size: 16,
-      font,
-    });
-    yOffset -= lineHeight;
-
-    for (const exp of userProfile.experience) {
-      page.drawText(sanitizeText(`${exp.title} at ${exp.company}`), {
-        x: 50,
-        y: yOffset,
-        size: fontSize + 2,
-        font,
-      });
-      yOffset -= lineHeight;
-
-      page.drawText(sanitizeText(exp.location), {
-        x: 50,
-        y: yOffset,
-        size: fontSize,
-        font,
-      });
-      yOffset -= lineHeight;
-
-      const descLines = sanitizeText(exp.description).split("\n");
-      for (const line of descLines) {
-        page.drawText(sanitizeText(line), {
-          x: 70,
-          y: yOffset,
-          size: fontSize,
-          font,
-        });
-        yOffset -= lineHeight;
-      }
-      yOffset -= lineHeight;
-    }
-
-    // Education
-    yOffset -= lineHeight;
-    page.drawText("Education", {
-      x: 50,
-      y: yOffset,
-      size: 16,
-      font,
-    });
-    yOffset -= lineHeight;
-
-    for (const edu of userProfile.education) {
-      page.drawText(sanitizeText(`${edu.degree} in ${edu.field}`), {
-        x: 50,
-        y: yOffset,
-        size: fontSize + 2,
-        font,
-      });
-      yOffset -= lineHeight;
-
-      page.drawText(sanitizeText(edu.school), {
-        x: 50,
-        y: yOffset,
-        size: fontSize,
-        font,
-      });
-      yOffset -= lineHeight;
-
-      if (edu.description) {
-        const descLines = sanitizeText(edu.description).split("\n");
-        for (const line of descLines) {
-          page.drawText(sanitizeText(line), {
-            x: 70,
-            y: yOffset,
-            size: fontSize,
-            font,
-          });
-          yOffset -= lineHeight;
-        }
-      }
-      yOffset -= lineHeight;
-    }
-
-    // Skills
-    yOffset -= lineHeight;
-    page.drawText("Skills", {
-      x: 50,
-      y: yOffset,
-      size: 16,
-      font,
-    });
-    yOffset -= lineHeight;
-
-    const skillsText = userProfile.skills.map(skill => sanitizeText(skill.name)).join(", ");
-    page.drawText(skillsText, {
-      x: 50,
-      y: yOffset,
-      size: fontSize,
-      font,
-    });
-
-    const pdfBytes = await pdfDoc.save();
-
-    return new NextResponse(pdfBytes, {
+    return new NextResponse(pdfBuffer, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="resume-${sanitizeText(job.company)}.pdf"`,
+        "Content-Disposition": `attachment; filename="resume-${job.company}.pdf"`,
       },
     });
   } catch (error) {

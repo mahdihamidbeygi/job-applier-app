@@ -4,6 +4,7 @@ import Image from "next/image";
 import { redirect } from "next/navigation";
 import ProfileForm from "@/components/ProfileForm";
 import ResumeUpload from "@/components/ResumeUpload";
+import { ResumeDownload } from "@/components/ResumeDownload";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -141,10 +142,41 @@ export default async function ProfilePage() {
 
       <div className="bg-slate-800 shadow rounded-lg p-6">
         <h2 className="text-xl font-semibold text-slate-100 mb-4">Resume</h2>
-        <ResumeUpload
-          currentResume={profile.resumeUrl}
-          lastUpdated={profile.updatedAt}
-        />
+        <div className="space-y-4">
+          <ResumeUpload
+            currentResume={profile.resumeUrl}
+            lastUpdated={profile.updatedAt}
+          />
+          <ResumeDownload 
+            profile={{
+              fullName: profile.name || '',
+              title: profile.experience[0]?.title || 'Software Engineer',
+              email: profile.email || '',
+              phone: profile.phone || '',
+              location: profile.location || null,
+              linkedinUrl: profile.linkedinUrl || null,
+              githubUrl: profile.githubUrl || null,
+              summary: profile.summary || '',
+              skills: profile.skills.map(skill => skill.name),
+              experience: profile.experience.map(exp => ({
+                company: exp.company,
+                position: exp.title,
+                startDate: exp.startDate,
+                endDate: exp.endDate || null,
+                description: exp.description || '',
+              })),
+              education: profile.education.map(edu => ({
+                institution: edu.school,
+                degree: edu.degree,
+                startDate: edu.startDate,
+                endDate: edu.endDate || null,
+                description: edu.field || '',
+              })),
+              projects: [],
+              certifications: [],
+            }} 
+          />
+        </div>
       </div>
 
       <div className="bg-slate-800 shadow rounded-lg p-6">

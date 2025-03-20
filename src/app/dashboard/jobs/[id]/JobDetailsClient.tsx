@@ -82,7 +82,30 @@ export default function JobDetailsClient({ job, userProfile }: JobDetailsClientP
   };
 
   const generateCoverLetter = async (): Promise<Blob> => {
-    const response = await fetch(`/api/download/cover-letter/${job.id}`, {
+    // First, try to find an existing job application
+    let jobApplication = await fetch(`/api/applications/job/${job.id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }).then(res => res.json()).catch(() => null);
+
+    // If no application exists, create one
+    if (!jobApplication) {
+      jobApplication = await fetch('/api/applications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jobId: job.id,
+          status: 'DRAFT'
+        }),
+      }).then(res => res.json());
+    }
+
+    // Now generate the cover letter using the application ID
+    const response = await fetch(`/api/download/cover-letter/${jobApplication.id}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

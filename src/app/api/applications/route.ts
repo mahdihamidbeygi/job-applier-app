@@ -1,23 +1,22 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { CoverLetterService } from "@/services/coverLetterService";
 
 export async function POST(request: Request) {
   const session = await auth();
 
   if (!session?.user?.id) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return new NextResponse("Unauthorized", { status: 401 });
   }
 
   try {
     const body = await request.json();
-    const { jobId } = body;
+    const { jobId, status } = body;
 
     if (!jobId) {
-      return NextResponse.json({ error: "Job ID is required" }, { status: 400 });
+      return new NextResponse("Job ID is required", { status: 400 });
     }
-
-    console.log(`Creating application for job ID: ${jobId} by user: ${session.user.id}`);
 
     // Check if job exists
     const job = await prisma.job.findUnique({
@@ -25,49 +24,90 @@ export async function POST(request: Request) {
     });
 
     if (!job) {
-      console.error(`Job not found with ID: ${jobId}`);
-      return NextResponse.json({ error: "Job not found" }, { status: 404 });
+      return new NextResponse("Job not found", { status: 404 });
     }
 
-    // Check if application already exists
-    const existingApplication = await prisma.jobApplication.findFirst({
-      where: {
-        userId: session.user.id,
-        jobId,
+    if (!job.description) {
+      return new NextResponse("Job description is required", { status: 400 });
+    }
+
+    // Get user profile
+    const profile = await prisma.userProfile.findUnique({
+      where: { userId: session.user.id },
+      include: {
+        skills: true,
+        experience: true,
+        education: true,
       },
     });
 
-    if (existingApplication) {
-      console.log(`Application already exists for job ID: ${jobId} by user: ${session.user.id}`);
-      return NextResponse.json(
-        { 
-          message: "Application already exists", 
-          applicationId: existingApplication.id 
-        }, 
-        { status: 200 }
-      );
+    if (!profile) {
+      return new NextResponse("Profile not found", { status: 404 });
     }
 
-    // Create the application
+    // Convert profile data to ResumeData format
+    const resumeData = {
+      fullName: profile.name,
+      title: profile.summary || '',
+      email: profile.email,
+      phone: profile.phone || '',
+      location: profile.location || '',
+      linkedin: profile.linkedinUrl || '',
+      github: profile.githubUrl || '',
+      summary: profile.summary || '',
+      skills: {
+        technical: profile.skills.map(skill => skill.name),
+        soft: []
+      },
+      experience: profile.experience.map(exp => ({
+        title: exp.title,
+        company: exp.company,
+        location: exp.location || '',
+        startDate: exp.startDate.toISOString(),
+        endDate: exp.endDate?.toISOString(),
+        achievements: (exp.description || '').split('\n')
+      })),
+      education: profile.education.map(edu => ({
+        degree: edu.degree,
+        major: edu.field,
+        school: edu.school,
+        location: '',
+        graduationYear: edu.endDate ? new Date(edu.endDate).getFullYear().toString() : ''
+      })),
+      projects: [],
+      certifications: []
+    };
+
+    // Generate cover letter
+    const coverLetterService = new CoverLetterService();
+    const coverLetter = await coverLetterService.generateCoverLetter(
+      resumeData,
+      job.title,
+      job.company,
+      job.description
+    );
+
+    if (!coverLetter) {
+      return new NextResponse("Failed to generate cover letter", { status: 500 });
+    }
+
+    // Create the application with the generated cover letter
     const application = await prisma.jobApplication.create({
       data: {
         userId: session.user.id,
         jobId,
-        status: "PENDING",
+        status: status || "DRAFT",
+        coverLetter,
       },
       include: {
         job: true,
       },
     });
 
-    console.log(`Application created successfully with ID: ${application.id}`);
     return NextResponse.json(application);
   } catch (error) {
     console.error("Error creating application:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error", details: error instanceof Error ? error.message : String(error) },
-      { status: 500 }
-    );
+    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
 
