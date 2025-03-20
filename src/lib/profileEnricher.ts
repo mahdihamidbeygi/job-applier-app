@@ -54,10 +54,15 @@ interface EnrichedProfile {
 }
 
 /**
- * Extract GitHub username from GitHub URL
+ * Extract GitHub username from GitHub URL or username
  */
 function extractGitHubUsername(url: string): string | null {
   if (!url) return null;
+  
+  // If it's just a username, return it directly
+  if (!url.includes('://')) {
+    return url;
+  }
   
   try {
     const parsedUrl = new URL(url);
