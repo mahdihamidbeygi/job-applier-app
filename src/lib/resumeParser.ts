@@ -254,12 +254,14 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
     }]
   };
 
-  // Split text into chunks for parallel processing
-  const chunks = text.split(/\n{2,}/).filter(chunk => chunk.trim());
+  // Split text into sections based on common resume section headers
+  const sections = text.split(/(?=^(?:Experience|Work Experience|Employment History|Professional Experience|Education|Skills|Summary|Objective|Certifications|Publications|Projects|Languages|Technical Skills|Core Competencies|Professional Summary))/m);
   
-  // Process chunks in parallel
-  const chunkResults = await Promise.all(
-    chunks.map(async (chunk) => {
+  // Process each section in parallel
+  const sectionResults = await Promise.all(
+    sections.map(async (section) => {
+      if (!section.trim()) return null;
+
       const completion = await openai.chat.completions.create({
         model: "gpt-4",
         messages: [{
@@ -273,11 +275,24 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
 6. Never include any text outside the JSON structure
 7. Ensure all JSON keys and values are properly quoted
 8. Include all required fields from the template, even if empty
-9. Use null for missing dates, empty string for missing text fields, and empty arrays for missing lists`
+9. Use null for missing dates, empty string for missing text fields, and empty arrays for missing lists
+10. For experience sections, extract ALL work experiences, not just the first one
+11. Preserve the chronological order of experiences
+12. If a section contains multiple experiences, parse each one separately
+13. For job descriptions:
+    - Preserve bullet points and their formatting
+    - Keep each bullet point as a separate line
+    - Maintain the original structure of the description
+    - Don't combine bullet points into paragraphs
+14. When you see bullet points in job descriptions:
+    - Keep the bullet point characters (•, -, *, etc.)
+    - Preserve the indentation and formatting
+    - Keep each point on its own line
+    - Don't merge them into paragraphs`
         }, {
           role: "user",
           content: `Extract information from this resume section:
-${chunk}
+${section}
 
 Return it as a valid JSON object following this template:
 ${JSON.stringify(template, null, 2)}`
@@ -293,8 +308,9 @@ ${JSON.stringify(template, null, 2)}`
     })
   );
 
-  // Merge results from all chunks
-  return mergeChunkResults(chunkResults);
+  // Filter out null results and merge
+  const validResults = sectionResults.filter((result): result is AIResponseData => result !== null);
+  return mergeChunkResults(validResults);
 }
 
 function mergeChunkResults(chunks: AIResponseData[]): AIResponseData {
@@ -331,7 +347,13 @@ function mergeChunkResults(chunks: AIResponseData[]): AIResponseData {
       merged.skills = [...new Set([...merged.skills, ...chunk.skills])];
     }
     if (Array.isArray(chunk.experience)) {
-      merged.experience = [...merged.experience, ...chunk.experience];
+      // Sort experiences by date and merge
+      const allExperiences = [...merged.experience, ...chunk.experience];
+      merged.experience = allExperiences.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return dateB - dateA; // Most recent first
+      });
     }
     if (Array.isArray(chunk.education)) {
       merged.education = [...merged.education, ...chunk.education];
@@ -440,13 +462,19 @@ function formatResponse(parsedData: AIResponseData): ParsedResume {
     },
     summary: parsedData?.summary || defaultData.summary,
     skills: Array.isArray(parsedData?.skills) ? parsedData.skills : defaultData.skills,
-    experience: Array.isArray(parsedData?.experience) ? parsedData.experience.map(exp => ({
-      title: exp?.title || 'Unknown Position',
-      company: exp?.company || 'Unknown Company',
-      startDate: processDate(exp?.startDate),
-      endDate: processDate(exp?.endDate),
-      description: exp?.description || ''
-    })) : defaultData.experience,
+    experience: Array.isArray(parsedData?.experience) ? parsedData.experience.map(exp => {
+      // Parse the job description to handle bullet points
+      const description = exp?.description || '';
+      const parsedDescription = parseJobDescription(description);
+      
+      return {
+        title: exp?.title || 'Unknown Position',
+        company: exp?.company || 'Unknown Company',
+        startDate: processDate(exp?.startDate),
+        endDate: processDate(exp?.endDate),
+        description: parsedDescription.join('\n') // Join bullet points with newlines
+      };
+    }) : defaultData.experience,
     education: Array.isArray(parsedData?.education) ? parsedData.education.map(edu => ({
       school: edu?.school || 'Unknown Institution',
       degree: edu?.degree || '',
@@ -496,5 +524,99 @@ function performQualityChecks(result: ParsedResume): void {
   }
   if (!result.contactInfo.linkedInUrl && !result.contactInfo.githubUrl) {
     console.warn('Warning: No LinkedIn or GitHub URLs were extracted from the resume');
+  }
+}
+
+export function parseBulletPoints(text: string): string[] {
+  // Remove any existing bullet points or numbers
+  text = text.replace(/^[\s•*\-–—]\s*/gm, '')  // Remove bullet points
+    .replace(/^\d+\.\s*/gm, '')  // Remove numbered lists
+    .replace(/^[a-z]\)\s*/gm, '')  // Remove lettered lists
+    .replace(/^\([a-z]\)\s*/gm, '')  // Remove parenthesized letters
+    .replace(/^\[[a-z]\]\s*/gm, '');  // Remove bracketed letters
+
+  // Split by common bullet point indicators
+  const lines = text.split(/\n/);
+  const bulletPoints: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Skip lines that are too short or look like headers
+    if (trimmed.length < 10 || /^[A-Z\s]{10,}$/.test(trimmed)) continue;
+
+    // Skip lines that are just punctuation or special characters
+    if (/^[\s\p{P}]+$/u.test(trimmed)) continue;
+
+    // Skip lines that are just numbers or dates
+    if (/^\d+$/.test(trimmed) || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmed)) continue;
+
+    // Clean up the bullet point
+    const cleaned = trimmed
+      .replace(/^[\s•*\-–—]\s*/, '')  // Remove leading bullet points
+      .replace(/^[\d\.\)\]]+\s*/, '')  // Remove leading numbers or letters
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .trim();
+
+    if (cleaned && cleaned.length >= 10) {
+      bulletPoints.push(cleaned);
+    }
+  }
+
+  return bulletPoints;
+}
+
+export function parseJobDescription(description: string): string[] {
+  if (!description) return [];
+
+  // First, try to detect if it's a bullet-pointed list
+  const hasBulletPoints = /^[\s•*\-–—]\s/m.test(description) || 
+                         /^\d+\.\s/m.test(description) || 
+                         /^[a-z]\)\s/m.test(description);
+
+  if (hasBulletPoints) {
+    // Split by bullet points and clean each point
+    return description
+      .split(/\n/)
+      .map(line => {
+        // Remove bullet points and numbers
+        const cleaned = line
+          .replace(/^[\s•*\-–—]\s*/, '')  // Remove bullet points
+          .replace(/^\d+\.\s*/, '')        // Remove numbered lists
+          .replace(/^[a-z]\)\s*/, '')      // Remove lettered lists
+          .replace(/^\([a-z]\)\s*/, '')    // Remove parenthesized letters
+          .replace(/^\[[a-z]\]\s*/, '')    // Remove bracketed letters
+          .replace(/\s+/g, ' ')            // Normalize whitespace
+          .trim();
+
+        // Skip empty lines, headers, and short lines
+        if (!cleaned || 
+            cleaned.length < 10 || 
+            /^[A-Z\s]{10,}$/.test(cleaned) || 
+            /^[\s\p{P}]+$/u.test(cleaned) || 
+            /^\d+$/.test(cleaned) || 
+            /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(cleaned)) {
+          return null;
+        }
+
+        return cleaned;
+      })
+      .filter((point): point is string => point !== null);
+  } else {
+    // If it's a paragraph, split by sentences and clean each one
+    return description
+      .split(/[.!?]+(?:\s+|$)/)  // Split by sentence endings
+      .map(sentence => {
+        const cleaned = sentence
+          .replace(/\s+/g, ' ')  // Normalize whitespace
+          .trim();
+
+        // Skip empty sentences and very short ones
+        if (!cleaned || cleaned.length < 10) return null;
+
+        return cleaned;
+      })
+      .filter((sentence): sentence is string => sentence !== null);
   }
 } 
