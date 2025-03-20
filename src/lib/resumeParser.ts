@@ -3,7 +3,7 @@ if (typeof window !== 'undefined') {
   throw new Error('This module can only be used on the server side');
 }
 
-import pdfParse from 'pdf-parse';
+import pdfParse from 'pdf-parse-fork';
 import OpenAI from 'openai';
 import crypto from 'crypto';
 
@@ -185,12 +185,16 @@ function cleanGluedWords(text: string): string {
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   try {
-    const data = await pdfParse(buffer);
+    // Parse PDF using pdf-parse-fork
+    const data = await pdfParse(buffer, {
+      max: 0, // no limit on pages
+      version: 'v2.0.550'
+    });
     
     if (!data || !data.text) {
       throw new Error('Failed to extract text from PDF');
     }
-
+    
     return cleanGluedWords(data.text);
   } catch (error) {
     console.error('Error extracting text from PDF:', error);
