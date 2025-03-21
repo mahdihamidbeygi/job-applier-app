@@ -255,7 +255,7 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
   };
 
   // Split text into sections based on common resume section headers
-  const sections = text.split(/(?=^(?:Experience|Work Experience|Employment History|Professional Experience|Education|Skills|Summary|Objective|Certifications|Publications|Projects|Languages|Technical Skills|Core Competencies|Professional Summary))/m);
+  const sections = text.split(/(?=^(?:\s*)(?:Experience|Work Experience|Employment History|Professional Experience|Education|Skills|Summary|Objective|Certifications?|Certificates?|Publications?|Published Works?|Projects|Languages|Technical Skills|Core Competencies|Professional Summary))/im);
   
   // Process each section in parallel
   const sectionResults = await Promise.all(

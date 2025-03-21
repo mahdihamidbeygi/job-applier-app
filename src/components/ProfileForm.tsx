@@ -736,6 +736,11 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
         additionalSections: formData.additionalSections.map(({ isEditing, isDirty, ...section }) => section)
       };
 
+      console.log('Sending data to API:', {
+        publications: cleanFormData.publications,
+        certifications: cleanFormData.certifications
+      });
+
       const response = await fetch('/api/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -1700,13 +1705,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`publication-${publication.id}-title`}
                     value={publication.title}
                     onChange={(e) => handleItemChange('publications', publication.id, 'title', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'title') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('publications', publication.id, 'title') && (
-                    <p className="mt-1 text-sm text-red-300">{getFieldError('publications', publication.id, 'title')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1718,13 +1718,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`publication-${publication.id}-publisher`}
                     value={publication.publisher}
                     onChange={(e) => handleItemChange('publications', publication.id, 'publisher', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'publisher') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('publications', publication.id, 'publisher') && (
-                    <p className="mt-1 text-sm text-red-300">{getFieldError('publications', publication.id, 'publisher')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1736,12 +1731,10 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`publication-${publication.id}-date`}
                     value={formatDate(publication.date)}
                     onChange={(e) => handleItemChange('publications', publication.id, 'date', new Date(e.target.value))}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'date') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor={`publication-${publication.id}-description`} className={labelClass}>
                     Description
@@ -1751,9 +1744,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     value={publication.description || ''}
                     onChange={(e) => handleItemChange('publications', publication.id, 'description', e.target.value)}
                     rows={3}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'description') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
                 
@@ -1777,7 +1768,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     onClick={() => handleDeleteItem('publications', publication.id)}
                     className={deleteButtonClass}
                   >
-                    <XMarkIcon className="h-4 w-4" />
+                    Delete
                   </button>
                 </div>
               </div>
@@ -1788,7 +1779,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     <h4 className={titleClass}>{publication.title}</h4>
                     <p className={subtitleClass}>{publication.publisher}</p>
                     {publication.date && (
-                      <p className={subtitleClass}>{format(publication.date, 'MMMM yyyy')}</p>
+                      <p className="text-sm text-slate-400">{format(publication.date, 'MMMM yyyy')}</p>
                     )}
                   </div>
                   <div className="flex space-x-2">
@@ -1844,13 +1835,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-name`}
                     value={certification.name}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'name', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'name') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('certifications', certification.id, 'name') && (
-                    <p className="mt-1 text-sm text-red-300">{getFieldError('certifications', certification.id, 'name')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1862,13 +1848,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-issuer`}
                     value={certification.issuer}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'issuer', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'issuer') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('certifications', certification.id, 'issuer') && (
-                    <p className="mt-1 text-sm text-red-300">{getFieldError('certifications', certification.id, 'issuer')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1880,12 +1861,10 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-date`}
                     value={formatDate(certification.date)}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'date', new Date(e.target.value))}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'date') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor={`certification-${certification.id}-url`} className={labelClass}>
                     URL
@@ -1895,13 +1874,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-url`}
                     value={certification.url || ''}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'url', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'url') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('certifications', certification.id, 'url') && (
-                    <p className="mt-1 text-sm text-red-300">{getFieldError('certifications', certification.id, 'url')}</p>
-                  )}
                 </div>
                 
                 <div className="flex justify-end space-x-2">
@@ -1924,7 +1898,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     onClick={() => handleDeleteItem('certifications', certification.id)}
                     className={deleteButtonClass}
                   >
-                    <XMarkIcon className="h-4 w-4" />
+                    Delete
                   </button>
                 </div>
               </div>
@@ -1935,7 +1909,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     <h4 className={titleClass}>{certification.name}</h4>
                     <p className={subtitleClass}>{certification.issuer}</p>
                     {certification.date && (
-                      <p className={subtitleClass}>{format(certification.date, 'MMMM yyyy')}</p>
+                      <p className="text-sm text-slate-400">{format(certification.date, 'MMMM yyyy')}</p>
                     )}
                   </div>
                   <div className="flex space-x-2">

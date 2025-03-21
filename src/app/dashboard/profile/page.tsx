@@ -48,7 +48,17 @@ export default async function ProfilePage() {
           startDate: 'desc'
         }
       },
-      skills: true
+      skills: true,
+      publications: {
+        orderBy: {
+          date: 'desc'
+        }
+      },
+      certifications: {
+        orderBy: {
+          date: 'desc'
+        }
+      }
     }
   });
 
@@ -73,7 +83,9 @@ export default async function ProfilePage() {
           },
           experience: true,
           education: true,
-          skills: true
+          skills: true,
+          publications: true,
+          certifications: true
         }
       });
     } catch (error) {
@@ -173,7 +185,19 @@ export default async function ProfilePage() {
                 description: edu.field || '',
               })),
               projects: [],
-              certifications: [],
+              certifications: profile.certifications.map(cert => ({
+                name: cert.name,
+                issuer: cert.issuer,
+                date: cert.date,
+                url: cert.url
+              })),
+              publications: profile.publications.map(pub => ({
+                title: pub.title,
+                publisher: pub.publisher,
+                date: pub.date,
+                description: pub.description,
+                url: pub.url
+              }))
             }} 
           />
         </div>
@@ -189,7 +213,19 @@ export default async function ProfilePage() {
             bio: profile.summary || "",
             skills: profile.skills.map(skill => skill.name),
             experience: formattedExperience,
-            education: formattedEducation
+            education: formattedEducation,
+            publications: profile.publications.map(pub => ({
+              ...pub,
+              profileId: profile.id,
+              isEditing: false,
+              isDirty: false
+            })),
+            certifications: profile.certifications.map(cert => ({
+              ...cert,
+              profileId: profile.id,
+              isEditing: false,
+              isDirty: false
+            }))
           }}
         />
       </div>

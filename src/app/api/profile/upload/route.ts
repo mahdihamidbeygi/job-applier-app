@@ -132,6 +132,25 @@ export async function POST(request: Request) {
               endDate: edu.endDate,
               description: null,
             })),
+          },
+          publications: {
+            deleteMany: {},
+            create: parsedResume.publications?.map(pub => ({
+              title: pub.title,
+              publisher: pub.publisher,
+              date: pub.date,
+              description: pub.description || '',
+              url: null,
+            })) || [],
+          },
+          certifications: {
+            deleteMany: {},
+            create: parsedResume.certifications?.map(cert => ({
+              name: cert.name,
+              issuer: cert.issuer,
+              date: cert.date,
+              url: cert.url || null,
+            })) || [],
           }
         }),
       },
@@ -147,6 +166,23 @@ export async function POST(request: Request) {
           create: parsedResume?.skills.map(skill => ({
             name: skill,
             level: null
+          })) || []
+        },
+        publications: {
+          create: parsedResume?.publications?.map(pub => ({
+            title: pub.title,
+            publisher: pub.publisher,
+            date: pub.date,
+            description: pub.description || '',
+            url: null,
+          })) || []
+        },
+        certifications: {
+          create: parsedResume?.certifications?.map(cert => ({
+            name: cert.name,
+            issuer: cert.issuer,
+            date: cert.date,
+            url: cert.url || null,
           })) || []
         }
       },

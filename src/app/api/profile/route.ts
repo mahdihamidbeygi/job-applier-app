@@ -57,6 +57,11 @@ export async function PUT(request: Request) {
       location
     } = data;
 
+    console.log('Received data in API:', {
+      publications,
+      certifications
+    });
+
     // Basic URL validation
     const urlFields = { linkedinUrl, githubUrl, portfolioUrl };
     for (const [field, url] of Object.entries(urlFields)) {
