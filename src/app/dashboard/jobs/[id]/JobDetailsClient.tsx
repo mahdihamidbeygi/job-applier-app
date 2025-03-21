@@ -4,7 +4,7 @@ import { UserProfile } from "@prisma/client";
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { formatDistanceToNow, format } from 'date-fns';
-import { Download, ExternalLink, MapPin, Clock, Building } from 'lucide-react';
+import { Download, ExternalLink, MapPin, Clock, Building, Loader2 } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { useState } from 'react';
 import { Separator } from "@/components/ui/separator";
@@ -237,48 +237,45 @@ export default function JobDetailsClient({ job, userProfile }: JobDetailsClientP
                 <CardHeader>
                   <CardTitle className="text-slate-100">Application Documents</CardTitle>
                   <CardDescription className="text-slate-300">
-                    Generate your tailored resume and cover letter for this position
+                    Download your tailored resume and cover letter for this position
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="bg-slate-700 border-slate-600">
-                      <CardHeader>
-                        <CardTitle className="text-lg text-slate-100">Resume</CardTitle>
-                        <CardDescription className="text-slate-300">
-                          Tailored to highlight relevant skills and experience
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <Button 
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-slate-100"
-                          onClick={handleGenerateResume}
-                          disabled={isGeneratingResume}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          {isGeneratingResume ? 'Generating...' : 'Download Resume'}
-                        </Button>
-                      </CardContent>
-                    </Card>
-
-                    <Card className="bg-slate-700 border-slate-600">
-                      <CardHeader>
-                        <CardTitle className="text-lg text-slate-100">Cover Letter</CardTitle>
-                        <CardDescription className="text-slate-300">
-                          Customized to address job requirements
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <Button 
-                          className="w-full bg-indigo-600 hover:bg-indigo-700 text-slate-100"
-                          onClick={handleGenerateCoverLetter}
-                          disabled={isGeneratingCoverLetter}
-                        >
-                          <Download className="w-4 h-4 mr-2" />
-                          {isGeneratingCoverLetter ? 'Generating...' : 'Download Cover Letter'}
-                        </Button>
-                      </CardContent>
-                    </Card>
+                  <div className="flex gap-4">
+                    <Button
+                      onClick={handleGenerateResume}
+                      disabled={isGeneratingResume}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {isGeneratingResume ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Generating Resume...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download Resume
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleGenerateCoverLetter}
+                      disabled={isGeneratingCoverLetter}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {isGeneratingCoverLetter ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Generating Cover Letter...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="mr-2 h-4 w-4" />
+                          Download Cover Letter
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>

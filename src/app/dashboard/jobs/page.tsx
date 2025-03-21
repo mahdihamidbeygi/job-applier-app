@@ -123,12 +123,7 @@ export default async function JobsPage({
                 jobType: job.jobType || null,
                 url: job.url,
                 postedAt: job.postedAt || new Date(),
-                isExternal: true,
-                user: {
-                  connect: {
-                    id: session.user.id
-                  }
-                }
+                isExternal: true
               }
             });
             console.log(`Stored new job in database: ${newJob.id}`);
