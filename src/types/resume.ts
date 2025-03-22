@@ -6,6 +6,7 @@ export interface ResumeData {
   location?: string;
   linkedin?: string;
   github?: string;
+  jobDescription?: string;
   skills: {
     technical: string[];
     soft: string[];
@@ -26,6 +27,17 @@ export interface ResumeData {
     startDate: Date;
     endDate: Date | null;
     description?: string;
+  }>;
+  projects?: Array<{
+    name: string;
+    description?: string;
+    url?: string;
+    technologies?: string[];
+  }>;
+  certifications?: Array<{
+    name: string;
+    issuer?: string;
+    issueDate?: Date;
   }>;
 }
 

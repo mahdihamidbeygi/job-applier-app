@@ -1174,7 +1174,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               <div className="border-b border-slate-700 pb-4 last:border-0">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className={labelClass}>Title</label>
                         <div className="relative">
@@ -1220,6 +1220,31 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                         {getFieldError('experience', exp.id, 'company') && (
                           <p className="mt-2 text-sm text-red-300">
                             {getFieldError('experience', exp.id, 'company')}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className={labelClass}>Location</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={exp.location || ''}
+                            onChange={e => handleItemChange('experience', exp.id, 'location', e.target.value)}
+                            placeholder="City, State, Country"
+                            className={`${inputClass} ${
+                              getFieldError('experience', exp.id, 'location') ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            readOnly={!exp.isEditing || isPreviewMode}
+                          />
+                          {getFieldError('experience', exp.id, 'location') && (
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                              <ExclamationCircleIcon className="h-5 w-5 text-red-500" />
+                            </div>
+                          )}
+                        </div>
+                        {getFieldError('experience', exp.id, 'location') && (
+                          <p className="mt-2 text-sm text-red-300">
+                            {getFieldError('experience', exp.id, 'location')}
                           </p>
                         )}
                       </div>
@@ -1450,7 +1475,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               type="url"
               id="linkedInUrl"
               name="linkedInUrl"
-              value={`https://www.linkedin.com/in/${formData.linkedInUrl}`}
+              value={`${formData.linkedInUrl}`}
               onChange={handleChange}
               placeholder="https://www.linkedin.com/in/johndoe-12345678"
               className={`${inputClass} ${
@@ -1468,7 +1493,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               type="url"
               id="githubUrl"
               name="githubUrl"
-              value={`https://github.com/${formData.githubUrl}`}
+              value={`${formData.githubUrl}`}
               onChange={handleChange}
               placeholder="https://github.com/johndoe"
               className={`${inputClass} ${

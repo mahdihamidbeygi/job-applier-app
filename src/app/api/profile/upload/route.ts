@@ -109,6 +109,8 @@ export async function POST(request: Request) {
               level: null
             }))
           },
+          phone: parsedResume.contactInfo.phone,
+          location:parsedResume.contactInfo.location,
           linkedinUrl: parsedResume.contactInfo.linkedInUrl || undefined,
           githubUrl: parsedResume.contactInfo.githubUrl || undefined,
           experience: {
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
             create: parsedResume.experience.map(exp => ({
               title: exp.title,
               company: exp.company,
-              location: parsedResume.contactInfo.location || '',
+              location: exp.location || '',
               startDate: exp.startDate || new Date(),
               endDate: exp.endDate,
               description: exp.description || '',
@@ -160,6 +162,8 @@ export async function POST(request: Request) {
         email: session.user.email || '',
         resumeUrl: fileUrl,
         summary: parsedResume?.summary,
+        phone: parsedResume?.contactInfo.phone,
+        location: parsedResume?.contactInfo.location,
         linkedinUrl: parsedResume?.contactInfo.linkedInUrl,
         githubUrl: parsedResume?.contactInfo.githubUrl,
         skills: {
@@ -205,6 +209,9 @@ export async function POST(request: Request) {
         contactInfo: {
           name: parsedResume.contactInfo.name,
           location: parsedResume.contactInfo.location,
+          phone: parsedResume.contactInfo.phone,
+          linkedInUrl: parsedResume.contactInfo.linkedInUrl,
+          githubUrl: parsedResume.contactInfo.githubUrl,
           // Don't send sensitive info like email/phone in response
         },
         summary: parsedResume.summary,

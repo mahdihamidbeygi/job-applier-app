@@ -14,6 +14,7 @@ interface ResumeInfo {
     title: string;
     startDate: string;
     endDate: string;
+    location?: string;
     achievements: string[];
   }>;
   education: Array<{

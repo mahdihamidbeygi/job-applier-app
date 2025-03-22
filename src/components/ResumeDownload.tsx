@@ -22,6 +22,7 @@ interface ResumeDownloadProps {
       startDate: Date;
       endDate: Date | null;
       description: string;
+      location?: string | null;
     }>;
     education: Array<{
       institution: string;
@@ -61,7 +62,7 @@ export function ResumeDownload({ profile }: ResumeDownloadProps) {
         location: profile.location || '',
         linkedin: profile.linkedinUrl || '',
         github: profile.githubUrl || '',
-        summary: profile.summary,
+        jobDescription: '', // Add empty job description
         skills: {
           technical: profile.skills,
           soft: [], // Add soft skills if available in profile
@@ -69,18 +70,19 @@ export function ResumeDownload({ profile }: ResumeDownloadProps) {
         experience: profile.experience.map(exp => ({
           title: exp.position,
           company: exp.company,
-          location: '', // Location not stored in experience table
-          startDate: exp.startDate.toISOString(),
-          endDate: exp.endDate?.toISOString(),
-          achievements: [exp.description],
+          location: exp.location || profile.location || '',
+          startDate: new Date(exp.startDate),
+          endDate: exp.endDate ? new Date(exp.endDate) : null,
+          description: exp.description || '',
+          achievements: exp.description ? [exp.description] : [],
         })),
         education: profile.education.map(edu => ({
-          degree: edu.degree,
           school: edu.institution,
-          location: '', // Location not stored in education table
-          graduationYear: edu.endDate?.getFullYear().toString() || '',
-          major: edu.degree, // Use degree as major since field is not stored
-          description: edu.description,
+          degree: edu.degree,
+          field: edu.description || '',
+          startDate: new Date(edu.startDate),
+          endDate: edu.endDate ? new Date(edu.endDate) : null,
+          description: edu.description || '',
         })),
         projects: profile.projects.map(proj => ({
           name: proj.name,
@@ -91,7 +93,7 @@ export function ResumeDownload({ profile }: ResumeDownloadProps) {
         certifications: profile.certifications.map(cert => ({
           name: cert.name,
           issuer: cert.issuer,
-          date: cert.date.toISOString(),
+          issueDate: cert.date,
         })),
       };
 

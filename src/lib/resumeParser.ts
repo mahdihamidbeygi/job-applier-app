@@ -68,6 +68,7 @@ interface ParsedResume {
   experience: {
     title: string;
     company: string;
+    location: string | null;
     startDate: Date | null;
     endDate: Date | null;
     description: string;
@@ -90,6 +91,7 @@ interface AIResponseExperience {
   startDate: string | null;
   endDate: string | null;
   description: string;
+  location: string | null;
 }
 
 interface AIResponseEducation {
@@ -219,7 +221,8 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
       company: "",
       startDate: null,
       endDate: null,
-      description: ""
+      description: "",
+      location: null,
     }],
     education: [{
       school: "",
@@ -372,6 +375,18 @@ function mergeChunkResults(chunks: AIResponseData[]): AIResponseData {
   return merged;
 }
 
+function validatePhoneNumber(phone: string | undefined): string {
+  if (!phone) return '';
+  
+  // Keep only digits, plus signs, parentheses, and dashes
+  const cleaned = phone.replace(/[^\d+()-\s]/g, '');
+  
+  // Ensure it looks like a phone number
+  if (cleaned.replace(/[^\d]/g, '').length < 7) return '';
+  
+  return cleaned;
+}
+
 export async function parseResume(pdfBuffer: Buffer | ArrayBuffer | Uint8Array): Promise<ParsedResume> {
   try {
     console.log('Starting resume parsing...');
@@ -455,10 +470,14 @@ function formatResponse(parsedData: AIResponseData): ParsedResume {
     contactInfo: {
       name: parsedData?.contactInfo?.name || defaultData.contactInfo.name,
       email: parsedData?.contactInfo?.email || defaultData.contactInfo.email,
-      phone: parsedData?.contactInfo?.phone || defaultData.contactInfo.phone,
+      phone: validatePhoneNumber(parsedData?.contactInfo?.phone) || defaultData.contactInfo.phone,
       location: parsedData?.contactInfo?.location || defaultData.contactInfo.location,
-      linkedInUrl: parsedData?.contactInfo?.linkedInUrl || defaultData.contactInfo.linkedInUrl,
-      githubUrl: parsedData?.contactInfo?.githubUrl || defaultData.contactInfo.githubUrl
+      linkedInUrl: parsedData?.contactInfo?.linkedInUrl ? 
+        (parsedData.contactInfo.linkedInUrl.includes('linkedin.com/') ? parsedData.contactInfo.linkedInUrl : `https://linkedin.com/in/${parsedData.contactInfo.linkedInUrl}`) : 
+        defaultData.contactInfo.linkedInUrl,
+      githubUrl: parsedData?.contactInfo?.githubUrl ? 
+      (parsedData.contactInfo.githubUrl.includes('github.com/') ? parsedData.contactInfo.githubUrl : `https://github.com/${parsedData.contactInfo.githubUrl}`) : 
+      defaultData.contactInfo.githubUrl,
     },
     summary: parsedData?.summary || defaultData.summary,
     skills: Array.isArray(parsedData?.skills) ? parsedData.skills : defaultData.skills,
@@ -472,6 +491,7 @@ function formatResponse(parsedData: AIResponseData): ParsedResume {
         company: exp?.company || 'Unknown Company',
         startDate: processDate(exp?.startDate),
         endDate: processDate(exp?.endDate),
+        location: exp?.location || null,
         description: parsedDescription.join('\n') // Join bullet points with newlines
       };
     }) : defaultData.experience,

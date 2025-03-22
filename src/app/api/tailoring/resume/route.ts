@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
     };
 
     // Generate PDF
-    const pdfBuffer = await convertMarkdownToPDF(template, resumeData, jobDescription);
+    const pdfBuffer = await convertMarkdownToPDF(template, resumeData);
     
     return new NextResponse(pdfBuffer, {
       headers: {

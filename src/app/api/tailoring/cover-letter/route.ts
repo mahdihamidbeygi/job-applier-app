@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { convertCoverLetterToPDF } from '@/lib/coverLetterConverter';
-import { ResumeData } from '@/types/resume';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { Skill, Experience, Education } from '@prisma/client';
 import OpenAI from 'openai';
 export async function POST(request: NextRequest) {
   try {
@@ -42,13 +40,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    // Get current date in a nice format
-    const currentDate = new Date().toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    });
 
     // Get the latest experience
     const latestExp = profile.experience && profile.experience.length > 0 
@@ -110,37 +101,6 @@ Thank you for considering my application. I look forward to the opportunity to d
 
 Sincerely,
 ${profile.name}`;
-
-    // Convert profile data to ResumeData format
-    const resumeData: ResumeData = {
-      fullName: profile.name,
-      title: profile.summary || '',
-      email: profile.email,
-      phone: profile.phone || '',
-      location: profile.location || '',
-      linkedin: profile.linkedinUrl || '',
-      github: profile.githubUrl || '',
-      skills: {
-        technical: profile.skills.map((skill: Skill) => skill.name),
-        soft: []
-      },
-      experience: profile.experience.map((exp: Experience) => ({
-        title: exp.title,
-        company: exp.company,
-        location: exp.location || '',
-        startDate: exp.startDate,
-        endDate: exp.endDate,
-        achievements: (exp.description || '').split('\n')
-      })),
-      education: profile.education.map((edu: Education) => ({
-        school: edu.school,
-        degree: edu.degree,
-        field: edu.field,
-        startDate: edu.startDate,
-        endDate: edu.endDate,
-        description: edu.description || undefined
-      }))
-    };
 
     // Generate PDF
     const pdfBuffer = await convertCoverLetterToPDF(coverLetterContent);

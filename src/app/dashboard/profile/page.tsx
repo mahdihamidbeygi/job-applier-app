@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import ProfileForm from "@/components/ProfileForm";
 import ResumeUpload from "@/components/ResumeUpload";
 import { ResumeDownload } from "@/components/ResumeDownload";
+import ContactForm from "@/components/ContactForm";
 
 export default async function ProfilePage() {
   const session = await auth();
@@ -153,6 +154,18 @@ export default async function ProfilePage() {
       </div>
 
       <div className="bg-slate-800 shadow rounded-lg p-6">
+        <h2 className="text-xl font-semibold text-slate-100 mb-4">Contact Information</h2>
+        <ContactForm
+          initialData={{
+            name: profile.name,
+            email: profile.email,
+            phone: profile.phone || '',
+            location: profile.location || '',
+          }}
+        />
+      </div>
+
+      <div className="bg-slate-800 shadow rounded-lg p-6">
         <h2 className="text-xl font-semibold text-slate-100 mb-4">Resume</h2>
         <div className="space-y-4">
           <ResumeUpload
@@ -162,7 +175,7 @@ export default async function ProfilePage() {
           <ResumeDownload 
             profile={{
               fullName: profile.name || '',
-              title: profile.experience[0]?.title || 'Software Engineer',
+              title: profile.experience[0]?.title || 'Data Scientist',
               email: profile.email || '',
               phone: profile.phone || '',
               location: profile.location || null,
@@ -176,6 +189,7 @@ export default async function ProfilePage() {
                 startDate: exp.startDate,
                 endDate: exp.endDate || null,
                 description: exp.description || '',
+                location: exp.location || null,
               })),
               education: profile.education.map(edu => ({
                 institution: edu.school,

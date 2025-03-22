@@ -2,7 +2,7 @@ import { jsPDF } from 'jspdf';
 import { ResumeData } from '@/types/resume';
 import OpenAI from 'openai';
 
-export async function convertMarkdownToPDF(markdown: string, data: ResumeData, jobDescription: string = ''): Promise<Buffer> {
+export async function convertMarkdownToPDF(markdown: string, data: ResumeData ): Promise<Buffer> {
   return new Promise(async (resolve, reject) => {
     try {
       const doc = new jsPDF({
@@ -98,10 +98,10 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData, j
       const skillsPrompt = `extract six keyword skills for a resume based on the following:
 
       Job Description:
-      ${jobDescription}
+      ${data.jobDescription}
       
       Candidate Information:
-      - Resume: ${data}
+      - Experience: ${data.experience}
       
       extract six keyword skills from the resume based on the job description`;
       
@@ -172,7 +172,7 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData, j
       const summaryPrompt = `Write a concise professional summary for a resume based on the following:
 
 Job Description:
-${jobDescription}
+${data.jobDescription}
 
 Candidate Information:
 - Resume: ${data}
@@ -224,7 +224,7 @@ Keep it to 1-2 sentences focused on relevant experience and skills for this role
         const dateRange = `${startDate} - ${endDate}`;
         y -= (12 / 2);
         addText(dateRange, 11, { rightAlign: true });
-        
+        console.log(exp.location);
         if (exp.location) {
           y = addText(exp.location, 11, { indent: 2 });
         }
@@ -247,10 +247,55 @@ Keep it to 1-2 sentences focused on relevant experience and skills for this role
         }
       });
 
-      // Skip projects section since it's not in the ResumeData interface
+      // Projects section (if exists in data)
+      if (data.projects && data.projects.length > 0) {
+        y = addSectionTitle('PROJECTS');
+        data.projects.forEach((project, index) => {
+          const projectTitle = project.name;
+          y = addText(projectTitle, 12, { isBold: true, maxWidth: contentWidth - 50 });
+          
+          if (project.url) {
+            y -= (12 / 2);
+            addText(project.url, 11, { rightAlign: true });
+          }
+          
+          if (project.description) {
+            y = addText(`• ${project.description.trim()}`, 11, { indent: 4, maxWidth: contentWidth - 6 });
+          }
+
+          if (project.technologies && project.technologies.length > 0) {
+            y = addText(`Technologies: ${project.technologies.join(', ')}`, 11, { indent: 4, maxWidth: contentWidth - 6 });
+          }
+
+          if (index < (data.projects?.length ?? 0) - 1) {
+            y += 2; // Space between projects
+          }
+        });
+      }
 
       // Skip certifications section since it's not in the ResumeData interface
+      // Certifications section (if exists in data)
+      if (data.certifications && data.certifications.length > 0) {
+        y = addSectionTitle('CERTIFICATIONS');
+        data.certifications.forEach((cert, index) => {
+          const certTitle = cert.name;
+          y = addText(certTitle, 12, { isBold: true, maxWidth: contentWidth - 50 });
+          
+          if (cert.issuer) {
+            y = addText(cert.issuer, 11, { indent: 2 });
+          }
 
+          if (cert.issueDate) {
+            const issueYear = new Date(cert.issueDate).getFullYear().toString();
+            y -= (12 / 2);
+            addText(issueYear, 11, { rightAlign: true });
+          }
+
+          if (index < (data.certifications?.length ?? 0) - 1) {
+            y += 2; // Space between certifications
+          }
+        });
+      }
       // Education (always last)
       y = addSectionTitle('EDUCATION');
       data.education.forEach((edu, index) => {
