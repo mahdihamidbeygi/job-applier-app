@@ -11,7 +11,7 @@ interface JobCardProps {
     id: string;
     title: string;
     company: string;
-    location: string;
+    location: string | null;
     description: string;
     salary?: string;
     jobType?: string;
