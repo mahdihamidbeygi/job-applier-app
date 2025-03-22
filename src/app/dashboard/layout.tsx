@@ -44,6 +44,12 @@ export default async function DashboardLayout({
                   Applications
                 </Link>
                 <Link
+                  href="/dashboard/tailoring"
+                  className="border-transparent text-slate-300 hover:border-slate-300 hover:text-slate-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                >
+                  Tailor Documents
+                </Link>
+                <Link
                   href="/dashboard/profile"
                   className="border-transparent text-slate-300 hover:border-slate-300 hover:text-slate-100 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >

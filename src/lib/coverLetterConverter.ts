@@ -1,9 +1,7 @@
 import { jsPDF } from 'jspdf';
-import { ResumeData } from '@/types/resume';
 
 export async function convertCoverLetterToPDF(
   coverLetter: string,
-  data: ResumeData
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     try {
@@ -18,12 +16,6 @@ export async function convertCoverLetterToPDF(
       const leftMargin = 25; // Wider margins for cover letter
       const rightMargin = 185;
       const contentWidth = rightMargin - leftMargin - 2;
-
-      // Helper function to format date
-      const formatDate = () => {
-        const date = new Date();
-        return date.toISOString().split('T')[0];
-      };
 
       // Helper function to add text and return new Y position
       const addText = (text: string, fontSize: number, options: {
@@ -105,24 +97,19 @@ export async function convertCoverLetterToPDF(
         return y;
       };
 
-      // Header with contact information
-      y = addText(data.fullName, 12, { isBold: true });
-      y = addText(data.email, 11);
-      y = addText(data.phone, 11);
-      y = addText(data.location, 11);
-
-      // Date
-      y = addText(formatDate(), 11);
-      y += 4;
-
-      // Cover letter content with justified paragraphs
+      // Cover letter content with properly formatted paragraphs
       const paragraphs = coverLetter.split('\n\n');
       paragraphs.forEach((paragraph, index) => {
         if (paragraph.trim()) {
+          // Don't justify bullet points - check if paragraph starts with • or -
+          const hasBulletPoints = paragraph.trim().startsWith('•') || paragraph.trim().startsWith('-');
+          
           y = addText(paragraph.trim(), 11, { 
-            justify: true, 
-            maxWidth: contentWidth 
+            justify: !hasBulletPoints, // Only justify if not a bullet point
+            maxWidth: contentWidth,
+            indent: hasBulletPoints ? 5 : 0 // Add indent for bullet points
           });
+          
           if (index < paragraphs.length - 1) {
             y += 2;
           }

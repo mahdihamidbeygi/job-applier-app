@@ -1,8 +1,9 @@
 import { jsPDF } from 'jspdf';
 import { ResumeData } from '@/types/resume';
+import OpenAI from 'openai';
 
-export async function convertMarkdownToPDF(markdown: string, data: ResumeData): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
+export async function convertMarkdownToPDF(markdown: string, data: ResumeData, jobDescription: string = ''): Promise<Buffer> {
+  return new Promise(async (resolve, reject) => {
     try {
       const doc = new jsPDF({
         orientation: 'portrait',
@@ -17,7 +18,7 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData): 
       const contentWidth = rightMargin - leftMargin - 2;
 
       // Helper function to format date
-      const formatDate = (dateString: string) => {
+      const formatDate = (dateString: string | Date) => {
         const date = new Date(dateString);
         return date.toISOString().substring(0, 7); // Gets YYYY-MM format
       };
@@ -87,50 +88,130 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData): 
         y += 1;
         return y;
       };
+      
+      // Initialize OpenAI at the beginning
+      const openai = new OpenAI({
+        apiKey: process.env.OPENAI_API_KEY,
+      });
+      
+      // Get skills from OpenAI
+      const skillsPrompt = `extract six keyword skills for a resume based on the following:
 
+      Job Description:
+      ${jobDescription}
+      
+      Candidate Information:
+      - Resume: ${data}
+      
+      extract six keyword skills from the resume based on the job description`;
+      
+      const skillsCompletion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "you are a perfect resume writer, extract six keyword skills from the resume based on the job description"
+          },
+          {
+            role: "user",
+            content: skillsPrompt
+          }
+        ],
+        temperature: 0.7,
+      });
+      
+      // Use skills from OpenAI or fallback to resume data
+      const skills = data.skills.technical.slice(0, 3).join(", ");
+      const extractedSkills = skillsCompletion.choices[0].message.content || '';
+      // Ensure skills are always in array format
+      const skillsArray: string[] = extractedSkills ? 
+        (typeof extractedSkills === 'string' ? extractedSkills.split(',').map((s: string) => s.trim()) : data.skills.technical) :
+        data.skills.technical;
+      
       // Header section
       y = addText(data.fullName, 24, { isBold: true, isCenter: true });
-      y = addText(data.title, 16, { isCenter: true });
+      
+      // Use just one professional title
+      let professionalTitle = data.title;
+      if (!professionalTitle || professionalTitle.trim() === '') {
+        if (data.experience && data.experience.length > 0) {
+          professionalTitle = data.experience[0].title;
+        } else {
+          professionalTitle = "Data Scientist";
+        }
+      }
+      // Only use the first part if there are multiple titles separated by |
+      if (professionalTitle.includes('|')) {
+        professionalTitle = professionalTitle.split('|')[0].trim();
+      }
+      // Only use the first part if there are multiple titles separated by &
+      if (professionalTitle.includes('&')) {
+        professionalTitle = professionalTitle.split('&')[0].trim();
+      }
+      
+      y = addText("Data Scientist", 16, { isCenter: true });
       y += 1;
       
       // Contact info - centered and compact
-      const contactInfo = `${data.email} | ${data.phone} | ${data.location}`;
-      const socialInfo = `${data.linkedin} | ${data.github}`;
+      const contactInfo = `${data.email} | ${data.phone || ''} | ${data.location || ''}`;
+      const socialInfo = `${data.linkedin || ''} | ${data.github || ''}`;
       y = addText(contactInfo, 10, { isCenter: true });
       y = addText(socialInfo, 10, { isCenter: true });
       y += 2; // Added space after header section
 
-      // Professional Summary
+      // Professional Summary - more concise version
+      const yearsOfExperience = data.experience && data.experience.length > 0 
+        ? Math.max(...data.experience.map(exp => {
+            const start = new Date(exp.startDate).getFullYear();
+            const end = exp.endDate ? new Date(exp.endDate).getFullYear() : new Date().getFullYear();
+            return end - start;
+          }))
+        : 5;
+      
+      // Generate summary using OpenAI
+      const summaryPrompt = `Write a concise professional summary for a resume based on the following:
+
+Job Description:
+${jobDescription}
+
+Candidate Information:
+- Resume: ${data}
+- Current Role: ${professionalTitle}
+- Key Skills: ${skills}
+
+Keep it to 1-2 sentences focused on relevant experience and skills for this role.`;
+
+      const summaryCompletion = await openai.chat.completions.create({
+        model: "gpt-4",
+        messages: [
+          {
+            role: "system",
+            content: "You are a professional resume writer who creates compelling, tailored summaries."
+          },
+          {
+            role: "user",
+            content: summaryPrompt
+          }
+        ],
+        temperature: 0.7,
+      });
+
+      const summary = summaryCompletion.choices[0].message.content?.replace(/^"|"$/g, '') || 
+        `${yearsOfExperience}+ years of experience as a ${professionalTitle} with expertise in ${skills}. Proven track record of delivering high-quality solutions while collaborating effectively across teams to solve complex problems.`;
+      
       y = addSectionTitle('PROFESSIONAL SUMMARY');
-      y = addText(data.summary, 11, { maxWidth: contentWidth, justify: true });
+      y = addText(summary, 11, { maxWidth: contentWidth, justify: true });
       
       // Skills in 3 columns with bullet points
       y = addSectionTitle('TECHNICAL SKILLS');
-      const skills = data.skills.technical;
-      const skillsPerColumn = Math.ceil(skills.length / 3);
-      const columnWidth = (contentWidth - 10) / 3;
       
-      const startY = y;
-      for (let col = 0; col < 3; col++) {
-        y = startY;
-        const startIndex = col * skillsPerColumn;
-        const endIndex = Math.min(startIndex + skillsPerColumn, skills.length);
-        const columnSkills = skills.slice(startIndex, endIndex);
-        
-        columnSkills.forEach((skill, index) => {
-          const x = leftMargin + (col * (columnWidth + 5));
-          y = addText(`• ${skill}`, 11, { 
-            x,
-            maxWidth: columnWidth 
-          });
-          if (index < columnSkills.length - 1) {
-            y += 0.3;
-          }
-        });
-      }
+      // Display all skills in a single line with comma separators
+      const skillsText = skillsArray.join(', ');
       
-      const maxY = y;
-      y = maxY;
+      y = addText(skillsText, 11, {
+        maxWidth: contentWidth,
+        justify: true
+      });
 
       // Experience
       y = addSectionTitle('PROFESSIONAL EXPERIENCE');
@@ -148,58 +229,42 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData): 
           y = addText(exp.location, 11, { indent: 2 });
         }
         
-        exp.achievements.forEach((achievement: string, i) => {
-          y = addText(`• ${achievement.trim()}`, 11, { indent: 4, maxWidth: contentWidth - 6 });
-          if (i < exp.achievements.length - 1) {
-            y += 0.3;
-          }
-        });
+        const achievements = exp.achievements || [];
+        if (achievements.length > 0) {
+          achievements.forEach((achievement: string, i) => {
+            y = addText(`• ${achievement.trim()}`, 11, { indent: 4, maxWidth: contentWidth - 6 });
+            if (i < achievements.length - 1) {
+              y += 0.3;
+            }
+          });
+        } else if (exp.description) {
+          // If there are no achievements but there is a description, use that
+          y = addText(`• ${exp.description.trim()}`, 11, { indent: 4, maxWidth: contentWidth - 6 });
+        }
         
         if (index < data.experience.length - 1) {
           y += 2; // Increased space between experiences
         }
       });
 
-      // Projects (if any)
-      if (data.projects.length > 0) {
-        y = addSectionTitle('PROJECTS');
-        data.projects.forEach((proj, index) => {
-          y = addText(proj.name, 12, { isBold: true });
-          y = addText(proj.description, 11, { indent: 2, maxWidth: contentWidth - 2, justify: true });
-          y = addText(`Technologies: ${proj.technologies.join(' • ')}`, 11, { indent: 2 });
-          if (proj.results) {
-            y = addText(`Results: ${proj.results}`, 11, { indent: 2, justify: true });
-          }
-          
-          if (index < data.projects.length - 1) {
-            y += 2;
-          }
-        });
-      }
+      // Skip projects section since it's not in the ResumeData interface
 
-      // Certifications (if any)
-      if (data.certifications.length > 0) {
-        y = addSectionTitle('CERTIFICATIONS');
-        data.certifications.forEach((cert, index) => {
-          const certTitle = `${cert.name} - ${cert.issuer}`;
-          y = addText(certTitle, 11, { isBold: true, maxWidth: contentWidth - 50 });
-          y -= (11 / 2);
-          const certDate = formatDate(cert.date);
-          addText(certDate, 11, { rightAlign: true });
-          
-          if (index < data.certifications.length - 1) {
-            y += 2; // Increased space between certifications
-          }
-        });
-      }
+      // Skip certifications section since it's not in the ResumeData interface
 
       // Education (always last)
       y = addSectionTitle('EDUCATION');
       data.education.forEach((edu, index) => {
-        const eduTitle = `${edu.degree} in ${edu.major}`;
+        // Use edu.field instead of edu.major
+        const eduTitle = `${edu.degree} in ${edu.field}`;
         y = addText(eduTitle, 12, { isBold: true, maxWidth: contentWidth - 50 });
         y -= (12 / 2);
-        addText(edu.graduationYear.toString(), 11, { rightAlign: true });
+        
+        // Extract year from endDate or use "Present"
+        const graduationYear = edu.endDate 
+          ? new Date(edu.endDate).getFullYear().toString() 
+          : "Present";
+          
+        addText(graduationYear, 11, { rightAlign: true });
         y = addText(`${edu.school}`, 11, { indent: 2 });
         
         if (index < data.education.length - 1) {
