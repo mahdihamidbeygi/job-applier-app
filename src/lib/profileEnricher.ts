@@ -54,14 +54,14 @@ interface EnrichedProfile {
 }
 
 /**
- * Extract GitHub username from GitHub URL or username
+ * Validates GitHub URL
  */
-function extractGitHubUsername(url: string): string | null {
+function validateGitHubUrl(url: string): string | null {
   if (!url) return null;
   
-  // If it's just a username, return it directly
+  // If it's just a username, convert it to a URL
   if (!url.includes('://')) {
-    return url;
+    return `https://github.com/${url}`;
   }
   
   try {
@@ -70,14 +70,10 @@ function extractGitHubUsername(url: string): string | null {
       return null;
     }
     
-    const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
-    if (pathParts.length > 0) {
-      return pathParts[0];
-    }
-    
-    return null;
+    // Return the full URL
+    return url;
   } catch (error) {
-    console.error('Error extracting GitHub username:', error);
+    console.error('Error validating GitHub URL:', error);
     return null;
   }
 }
@@ -144,15 +140,25 @@ function generateMockGitHubData(username: string): {
 /**
  * Fetch GitHub user data
  */
-async function fetchGitHubData(username: string): Promise<{
+async function fetchGitHubData(githubUrl: string): Promise<{
   user: GitHubUser | null;
   repos: GitHubRepo[];
 }> {
-  if (!username) {
+  if (!githubUrl) {
     return { user: null, repos: [] };
   }
   
   try {
+    // Extract username from URL for API calls
+    const parsedUrl = new URL(githubUrl);
+    const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+    const username = pathParts.length > 0 ? pathParts[0] : null;
+    
+    if (!username) {
+      console.error('Could not extract username from GitHub URL:', githubUrl);
+      return { user: null, repos: [] };
+    }
+    
     // Check if GitHub token is available
     const githubToken = process.env.GITHUB_TOKEN;
     if (!githubToken) {
@@ -185,8 +191,18 @@ async function fetchGitHubData(username: string): Promise<{
     };
   } catch (error) {
     console.error('Error fetching GitHub data:', error);
-    console.log('Falling back to mock GitHub data');
-    return generateMockGitHubData(username);
+    
+    // Try to extract username for mock data
+    try {
+      const parsedUrl = new URL(githubUrl);
+      const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+      const username = pathParts.length > 0 ? pathParts[0] : 'default';
+      console.log('Falling back to mock GitHub data for:', username);
+      return generateMockGitHubData(username);
+    } catch (parseError) {
+      console.error('Error parsing GitHub URL for mock data:', parseError);
+      return generateMockGitHubData('default');
+    }
   }
 }
 
@@ -241,9 +257,9 @@ export async function enrichProfileFromSocialMedia(
   
   // Process GitHub data
   if (githubUrl) {
-    const githubUsername = extractGitHubUsername(githubUrl);
-    if (githubUsername) {
-      const githubData = await fetchGitHubData(githubUsername);
+    const validatedGithubUrl = validateGitHubUrl(githubUrl);
+    if (validatedGithubUrl) {
+      const githubData = await fetchGitHubData(validatedGithubUrl);
       result.github = convertGitHubDataToProfile(githubData);
     }
   }

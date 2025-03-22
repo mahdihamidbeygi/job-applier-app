@@ -1450,9 +1450,9 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               type="url"
               id="linkedInUrl"
               name="linkedInUrl"
-              value={formData.linkedInUrl}
+              value={`https://www.linkedin.com/in/${formData.linkedInUrl}`}
               onChange={handleChange}
-              placeholder="https://linkedin.com/in/yourprofile"
+              placeholder="https://www.linkedin.com/in/johndoe-12345678"
               className={`${inputClass} ${
                 getFieldError('linkedInUrl', null, 'url') ? 'border-red-300' : 'border-slate-600'
               }`}
@@ -1468,9 +1468,9 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               type="url"
               id="githubUrl"
               name="githubUrl"
-              value={formData.githubUrl}
+              value={`https://github.com/${formData.githubUrl}`}
               onChange={handleChange}
-              placeholder="https://github.com/yourusername"
+              placeholder="https://github.com/johndoe"
               className={`${inputClass} ${
                 getFieldError('githubUrl', null, 'url') ? 'border-red-300' : 'border-slate-600'
               }`}
