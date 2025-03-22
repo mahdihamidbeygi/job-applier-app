@@ -42,6 +42,7 @@ export async function GET(
 
     // Transform profile data to match ResumeData type
     const resumeData: ResumeData = {
+      jobDescription: job.description || '',
       fullName: userProfile.name || '',
       title: userProfile.experience[0]?.title || '',
       email: userProfile.email || '',
@@ -49,7 +50,6 @@ export async function GET(
       location: userProfile.location || '',
       linkedin: userProfile.linkedinUrl || '',
       github: userProfile.githubUrl || '',
-      summary: userProfile.summary || '',
       skills: {
         technical: userProfile.skills.map((skill: Skill) => skill.name),
         soft: [],
@@ -58,16 +58,17 @@ export async function GET(
         title: exp.title,
         company: exp.company,
         location: exp.location || '',
-        startDate: exp.startDate.toISOString(),
-        endDate: exp.endDate?.toISOString(),
+        startDate: exp.startDate,
+        endDate: exp.endDate,
+        description: exp.description || '',
         achievements: exp.description ? exp.description.split('\n').filter((line: string) => line.trim()) : [],
       })),
       education: userProfile.education.map((edu: Education) => ({
-        degree: edu.degree,
         school: edu.school,
-        location: '', // Education model doesn't have location
-        graduationYear: edu.endDate?.getFullYear().toString() || '',
-        major: edu.field || '',
+        degree: edu.degree,
+        field: edu.field || '',
+        startDate: edu.startDate,
+        endDate: edu.endDate,
         description: edu.description || '',
       })),
       projects: [],

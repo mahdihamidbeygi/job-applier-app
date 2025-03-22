@@ -1,6 +1,7 @@
 import { jsPDF } from 'jspdf';
 import { ResumeData } from '@/types/resume';
-import OpenAI from 'openai';
+import { ChatOpenAI } from '@langchain/openai';
+import { SystemMessage, HumanMessage, BaseMessage } from '@langchain/core/messages';
 
 export async function convertMarkdownToPDF(markdown: string, data: ResumeData ): Promise<Buffer> {
   return new Promise(async (resolve, reject) => {
@@ -87,13 +88,7 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData ):
         y = addText(title.toUpperCase(), 14, { isBold: true });
         y += 1;
         return y;
-      };
-      
-      // Initialize OpenAI at the beginning
-      const openai = new OpenAI({
-        apiKey: process.env.OPENAI_API_KEY,
-      });
-      
+      };      
       // Get skills from OpenAI
       const skillsPrompt = `extract six keyword skills for a resume based on the following:
 
@@ -105,28 +100,31 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData ):
       
       extract six keyword skills from the resume based on the job description`;
       
-      const skillsCompletion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content: "you are a perfect resume writer, extract six keyword skills from the resume based on the job description"
-          },
-          {
-            role: "user",
-            content: skillsPrompt
-          }
-        ],
+      const llm = new ChatOpenAI({
+        modelName: 'gpt-4',
         temperature: 0.7,
       });
+
+      const messages: BaseMessage[] = [
+        new SystemMessage(
+          "you are a perfect resume writer, extract six keyword skills from the resume based on the job description, skills should be separated by comma."
+        ),
+        new HumanMessage(skillsPrompt)
+      ];
+
+      const skillsCompletion = await llm.invoke(messages);
+      
+      // Get the content as string and handle potential complex message content
+      const skillsContent = typeof skillsCompletion.content === 'string' 
+        ? skillsCompletion.content 
+        : '';
       
       // Use skills from OpenAI or fallback to resume data
       const skills = data.skills.technical.slice(0, 3).join(", ");
-      const extractedSkills = skillsCompletion.choices[0].message.content || '';
       // Ensure skills are always in array format
-      const skillsArray: string[] = extractedSkills ? 
-        (typeof extractedSkills === 'string' ? extractedSkills.split(',').map((s: string) => s.trim()) : data.skills.technical) :
-        data.skills.technical;
+      const skillsArray: string[] = skillsContent 
+        ? skillsContent.split(',').map((s: string) => s.trim()) 
+        : data.skills.technical;
       
       // Header section
       y = addText(data.fullName, 24, { isBold: true, isCenter: true });
@@ -181,22 +179,17 @@ Candidate Information:
 
 Keep it to 1-2 sentences focused on relevant experience and skills for this role.`;
 
-      const summaryCompletion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [
-          {
-            role: "system",
-            content: "You are a professional resume writer who creates compelling, tailored summaries."
-          },
-          {
-            role: "user",
-            content: summaryPrompt
-          }
-        ],
-        temperature: 0.7,
-      });
+      const summaryCompletion = await llm.invoke([
+        new SystemMessage("You are a professional resume writer who creates compelling, tailored summaries."),
+        new HumanMessage(summaryPrompt)
+      ]);
 
-      const summary = summaryCompletion.choices[0].message.content?.replace(/^"|"$/g, '') || 
+      // Get the content as string and handle potential complex message content
+      const summaryContent = typeof summaryCompletion.content === 'string' 
+        ? summaryCompletion.content 
+        : '';
+      
+      const summary = summaryContent.replace(/^"|"$/g, '') || 
         `${yearsOfExperience}+ years of experience as a ${professionalTitle} with expertise in ${skills}. Proven track record of delivering high-quality solutions while collaborating effectively across teams to solve complex problems.`;
       
       y = addSectionTitle('PROFESSIONAL SUMMARY');

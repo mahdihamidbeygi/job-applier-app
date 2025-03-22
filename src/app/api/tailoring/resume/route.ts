@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
 
     // Convert profile data to ResumeData format
     const resumeData: ResumeData = {
+      jobDescription: jobDescription,
       fullName: profile.name,
       title: profile.summary || '',
       email: profile.email,
