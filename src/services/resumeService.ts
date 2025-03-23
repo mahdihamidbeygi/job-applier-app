@@ -1,10 +1,10 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { PDFLoader } from '@langchain/community/document_loaders/fs/pdf';
 import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { HumanMessage, SystemMessage, BaseMessage } from '@langchain/core/messages';
+import { OllamaService } from './ollamaService';
 
-interface ResumeInfo {
+export interface ResumeInfo {
   skills: {
     technical: string[];
     soft: string[];
@@ -32,14 +32,11 @@ interface ResumeInfo {
 }
 
 export class ResumeService {
-  private llm: ChatOpenAI;
+  private llm: OllamaService;
   private embeddings: OpenAIEmbeddings;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      modelName: 'gpt-4',
-      temperature: 0.2,
-    });
+    this.llm = new OllamaService();
     this.embeddings = new OpenAIEmbeddings();
   }
 

@@ -1,7 +1,9 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { ChatOpenAI } from '@langchain/openai';
+import { OllamaService } from './ollamaService';
+import { OpenAIService } from './openAIService';
 import { IndeedFeedService } from './indeedFeedService';
+// import { ResumeInfo } from './resumeService';
 
 // Define interfaces
 export interface JobSearchParams {
@@ -42,7 +44,8 @@ interface RawJobListing {
 }
 
 export class JobAggregatorService {
-  private llm: ChatOpenAI;
+  private llm: OllamaService;
+  private openAI: OpenAIService;
   private apiKeys: {
     linkedin?: string;
     indeed?: string;
@@ -53,11 +56,11 @@ export class JobAggregatorService {
   private indeedFeedService: IndeedFeedService;
 
   constructor() {
-    // Initialize OpenAI for job description analysis
-    this.llm = new ChatOpenAI({
-      modelName: 'gpt-4',
-      temperature: 0.2,
-    });
+    // Initialize Ollama for general analysis
+    this.llm = new OllamaService();
+    
+    // Initialize OpenAI for specific tasks like selectors
+    this.openAI = new OpenAIService();
 
     // Initialize API keys
     this.apiKeys = {
@@ -228,38 +231,12 @@ export class JobAggregatorService {
       // Parse HTML
       const $ = cheerio.load(response.data);
       const jobs: RawJobListing[] = [];
-      
-      // Extract job listings
-      // Get all unique elements on the page
-      const uniqueElements = new Set<string>();
-      $('*').each((_, el) => {
-        // Get tag name using the node type from cheerio
-        if (el.type === 'tag') {
-          uniqueElements.add(el.name);
-        }
-        const classNames = $(el).attr('class')?.split(/\s+/) || [];
-        classNames.forEach(c => uniqueElements.add(`.${c}`));
-      });
 
-      // Ask LLM to identify relevant selectors
-      const elementsList = Array.from(uniqueElements).join('\n');
-      const prompt = `Given these HTML elements from a LinkedIn jobs page:
-${elementsList}
-
-Please identify the most relevant selectors for:
-1. Job card container
-2. Job title
-3. Company name
-4. Location
-5. Job URL/link
-6. Job description
-
-Return only the selectors, one per line. without numbers`;
-
-      const selectorResponse = await this.llm.invoke(prompt);
-      const selectorResponseText = selectorResponse.content as string;
-      const [cardSelector, titleSelector, companySelector, locationSelector, linkSelector] = 
-        selectorResponseText.split('\n').map((s: string) => s.trim()).filter(Boolean);
+      const cardSelector = ".job-search-card"
+      const titleSelector=".base-search-card__title"
+      const companySelector=".base-search-card__subtitle"
+      const locationSelector=".job-search-card__location"
+      const linkSelector=".base-card__full-link"
 
       $(cardSelector).each(async (i: number, element: cheerio.Element) => {
         // Get job URL
@@ -283,46 +260,14 @@ Return only the selectors, one per line. without numbers`;
                       jobLink.startsWith('/') ? 
                         `https://www.linkedin.com${jobLink}` : 
                         `https://www.linkedin.com/jobs/search/?keywords=${searchQuery}`;
-        // Get full job description from job URL
-        let description = '';
-        try {
-          const jobResponse = await axios.get(jobUrl);
-          const jobPage = cheerio.load(jobResponse.data);
-          
-          // Get unique elements from job page
-          const jobPageElements = new Set<string>();
-          jobPage('*').each((_, el) => {
-            if (el.type === 'tag') {
-              jobPageElements.add(el.name);
-            }
-            const classNames = jobPage(el).attr('class')?.split(/\s+/) || [];
-            classNames.forEach(c => jobPageElements.add(`.${c}`));
-          });
 
-          // Ask LLM to identify job description selector
-          const jobElementsList = Array.from(jobPageElements).join('\n');
-          const jobPrompt = `Given these HTML elements from a LinkedIn job details page:
-${jobElementsList}
-
-Please identify the most relevant selector for the full job description.
-Return only the selector without any other text.`;
-
-          const jobSelectorResponse = await this.llm.invoke(jobPrompt);
-          const jobDescriptionSelector = (jobSelectorResponse.content as string).trim();
-          
-          description = jobPage(jobDescriptionSelector).text().trim();
-        } catch (error) {
-          console.error('Error getting full job description:', error);
-          description = `${title} at ${company} in ${location}`;
-        }
-        // Log the extracted data for debugging
         console.log(`LinkedIn job ${i+1}: ID=${jobId}, Title=${title}, Company=${company}, URL=${jobUrl}`);
         
         jobs.push({
           title,
           company,
           location,
-          description,
+          description: '',
           url: jobUrl,
           platform: 'LinkedIn',
           externalId: jobId
@@ -539,7 +484,7 @@ Return only the selector without any other text.`;
     `;
 
     try {
-      const analysis = await this.llm.invoke(prompt);
+      const analysis = await this.llm.call(prompt);
       const analysisText = analysis.content as string;
       return JSON.parse(analysisText);
     } catch (error) {
@@ -613,7 +558,7 @@ Return only the selector without any other text.`;
         Provide a single number score and a brief explanation of why.
       `;
       
-      const analysis = await this.llm.invoke(prompt);
+      const analysis = await this.llm.call(prompt);
       const analysisText = analysis.content as string;
       
       // Extract score from response

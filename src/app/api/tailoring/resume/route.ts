@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename="tailored-resume.pdf"',
+        'Content-Disposition': `attachment; filename="${profile.name.replace(" ", "_")}-Resume.pdf"`,
       },
     });
   } catch (error) {

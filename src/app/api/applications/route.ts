@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { CoverLetterService } from "@/services/coverLetterService";
+import * as cheerio from 'cheerio';
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -63,20 +64,48 @@ export async function POST(request: Request) {
         title: exp.title,
         company: exp.company,
         location: exp.location || '',
-        startDate: exp.startDate.toISOString(),
-        endDate: exp.endDate?.toISOString(),
+        startDate: new Date(exp.startDate),
+        endDate: exp.endDate ? new Date(exp.endDate) : null,
         achievements: (exp.description || '').split('\n')
       })),
       education: profile.education.map(edu => ({
         degree: edu.degree,
-        major: edu.field,
+        field: edu.field,
         school: edu.school,
-        location: '',
-        graduationYear: edu.endDate ? new Date(edu.endDate).getFullYear().toString() : ''
+        startDate: edu.startDate ? new Date(edu.startDate) : new Date(),
+        endDate: edu.endDate ? new Date(edu.endDate) : null,
+        description: ''
       })),
       projects: [],
       certifications: []
     };
+
+    const jobResponse = await fetch(job.url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      }
+    });
+    const jobHtml = await jobResponse.text();
+    const $ = cheerio.load(jobHtml);
+
+    let jobDescription = '';
+
+    // LinkedIn specific selectors
+    if (job.url.includes('linkedin.com')) {
+      jobDescription = $('.jobs-description__content').text().trim() || 
+                      $('.description__text').text().trim() ||
+                      $('.show-more-less-html__markup').text().trim();
+    }
+    // Indeed specific selectors  
+    else if (job.url.includes('indeed.com')) {
+      jobDescription = $('#jobDescriptionText').text().trim();
+    }
+    // Glassdoor specific selectors
+    else if (job.url.includes('glassdoor.com')) {
+      jobDescription = $('.jobDescriptionContent').text().trim() ||
+                      $('.desc').text().trim();
+    }
+  job.description = jobDescription;
 
     // Generate cover letter
     const coverLetterService = new CoverLetterService();

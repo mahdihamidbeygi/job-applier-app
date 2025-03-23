@@ -13,8 +13,8 @@ interface JobCardProps {
     company: string;
     location: string | null;
     description: string;
-    salary?: string;
-    jobType?: string;
+    salary?: string | null;
+    jobType?: string | null;
     platform: string;
     url: string;
     postedAt: string;

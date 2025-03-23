@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { convertCoverLetterToPDF } from '@/lib/coverLetterConverter';
-import { Skill, Experience, Education } from '@prisma/client';
 
 export async function GET(
   request: NextRequest,
@@ -40,43 +39,9 @@ export async function GET(
       return new NextResponse('Job application not found', { status: 404 });
     }
 
-    // Convert profile data to ResumeData format
-    const resumeData = {
-      fullName: profile.name,
-      title: profile.summary || '',
-      email: profile.email,
-      phone: profile.phone || '',
-      location: profile.location || '',
-      linkedin: profile.linkedinUrl || '',
-      github: profile.githubUrl || '',
-      summary: profile.summary || '',
-      skills: {
-        technical: profile.skills.map((skill: Skill) => skill.name),
-        soft: []
-      },
-      experience: profile.experience.map((exp: Experience) => ({
-        title: exp.title,
-        company: exp.company,
-        location: exp.location || '',
-        startDate: exp.startDate.toISOString(),
-        endDate: exp.endDate?.toISOString(),
-        achievements: (exp.description || '').split('\n')
-      })),
-      education: profile.education.map((edu: Education) => ({
-        degree: edu.degree,
-        major: edu.field,
-        school: edu.school,
-        location: '',
-        graduationYear: edu.endDate ? new Date(edu.endDate).getFullYear().toString() : ''
-      })),
-      projects: [],
-      certifications: []
-    };
-
     // Generate PDF
     const pdfBuffer = await convertCoverLetterToPDF(
-      jobApplication.coverLetter || '',
-      resumeData
+      jobApplication.coverLetter || ''
     );
 
     // Return PDF with appropriate headers

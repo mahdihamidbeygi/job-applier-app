@@ -1,5 +1,5 @@
 import puppeteer from 'puppeteer';
-import { ChatOpenAI } from '@langchain/openai';
+import { OllamaService } from './ollamaService';
 import { JobAggregatorService, Job } from './jobAggregatorService';
 
 interface ApplicationResult {
@@ -10,14 +10,11 @@ interface ApplicationResult {
 }
 
 export class JobService {
-  private llm: ChatOpenAI;
+  private llm: OllamaService;
   private jobAggregator: JobAggregatorService;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      modelName: 'gpt-4',
-      temperature: 0.2,
-    });
+    this.llm = new OllamaService();
     this.jobAggregator = new JobAggregatorService();
   }
 

@@ -1,14 +1,3 @@
-[Your Name]  
-[Your Address]  
-[City, State ZIP Code]  
-[Your Email]  
-[Your Phone]  
-[Date]
-
-[Hiring Manager's Name]  
-[Company Name]  
-[Company Address]  
-[City, State ZIP Code]
 
 Dear [Hiring Manager's Name],
 

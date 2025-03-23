@@ -95,7 +95,7 @@ ${profile.name}`;
     return new NextResponse(pdfBuffer, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': 'attachment; filename="tailored-cover-letter.pdf"',
+        'Content-Disposition': `attachment; filename="${profile.name.replace(" ", "_")}-Coverletter-${latestExp?.company}.pdf"`,
       },
     });
   } catch (error) {

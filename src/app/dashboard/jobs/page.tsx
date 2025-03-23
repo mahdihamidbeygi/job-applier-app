@@ -233,7 +233,7 @@ export default async function JobsPage({
         {allJobs.length > 0 ? (
           allJobs.map((job) => (
             <JobCard
-              key={job.id}
+              key={`${job.platform}-${job.id}`}
               job={job}
               isSaved={savedJobIds.has(job.id)}
               userId={userId}

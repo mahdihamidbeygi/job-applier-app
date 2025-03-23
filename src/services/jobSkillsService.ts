@@ -1,6 +1,6 @@
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, BaseMessage } from '@langchain/core/messages';
 import { ResumeData } from '@/types/resume';
+import { OllamaService } from './ollamaService';
 
 interface JobSkills {
   technical: string[];
@@ -17,13 +17,10 @@ interface SkillMatch {
 }
 
 export class JobSkillsService {
-  private llm: ChatOpenAI;
+  private llm: OllamaService;
 
   constructor() {
-    this.llm = new ChatOpenAI({
-      modelName: 'gpt-4',
-      temperature: 0.2,
-    });
+    this.llm = new OllamaService();
   }
 
   async extractSkills(jobDescription: string): Promise<JobSkills> {
