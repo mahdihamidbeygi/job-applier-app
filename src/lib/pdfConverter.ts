@@ -217,7 +217,6 @@ Keep it to 1-2 sentences focused on relevant experience and skills for this role
         const dateRange = `${startDate} - ${endDate}`;
         y -= (12 / 2);
         addText(dateRange, 11, { rightAlign: true });
-        console.log(exp.location);
         if (exp.location) {
           y = addText(exp.location, 11, { indent: 2 });
         }

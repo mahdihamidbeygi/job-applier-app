@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { convertCoverLetterToPDF } from '@/lib/coverLetterConverter';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import OpenAI from 'openai';
+import { ChatOpenAI } from '@langchain/openai';
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
@@ -52,8 +52,9 @@ export async function POST(request: NextRequest) {
       : "relevant technical skills";
       
     // Generate cover letter using OpenAI
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
+    const llm = new ChatOpenAI({
+      modelName: 'gpt-4',
+      temperature: 0.5,
     });
     
     const prompt = `Write a professional cover letter for a job application. Use the following information:
@@ -69,22 +70,8 @@ Candidate Information:
 
 The cover letter should be personalized to the job description while highlighting the candidate's relevant experience and skills. Keep it concise, professional and compelling.`;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [
-        {
-          role: "system",
-          content: "You are a professional cover letter writer who creates compelling, tailored cover letters."
-        },
-        {
-          role: "user", 
-          content: prompt
-        }
-      ],
-      temperature: 0.7,
-    });
-
-    const coverLetterContent = completion.choices[0].message.content || `
+    const completion = await llm.invoke(prompt);
+    const coverLetterContent = completion.content as string || `
 Dear Hiring Manager,
 
 I am writing to express my interest in the open position at your company as detailed in the job description. With my background as a ${latestExp?.title || "professional"} and expertise in ${topSkills}, I believe I am well-positioned to make valuable contributions to your team.
