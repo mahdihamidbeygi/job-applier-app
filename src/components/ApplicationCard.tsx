@@ -55,17 +55,17 @@ export default function ApplicationCard({ application }: ApplicationCardProps) {
   };
 
   return (
-    <div className="bg-white shadow rounded-lg p-6">
+    <div className="bg-slate-800 shadow rounded-lg p-6">
       <div className="flex justify-between items-start">
         <div>
-          <h3 className="text-lg font-medium text-gray-900">
+          <h3 className="text-lg font-medium text-slate-100">
             {application.job.title}
           </h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-slate-300">
             {application.job.company}
           </p>
           <div className="mt-2 flex items-center space-x-4">
-            <span className="text-sm text-gray-500">
+            <span className="text-sm text-slate-300">
               Applied <DateFormatter date={application.appliedAt} />
             </span>
             <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[application.status]}`}>
@@ -77,7 +77,7 @@ export default function ApplicationCard({ application }: ApplicationCardProps) {
           value={application.status}
           onChange={(e) => handleStatusUpdate(e.target.value as keyof typeof statusColors)}
           disabled={isUpdating}
-          className="ml-4 block pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-black"
+          className="ml-4 block pl-3 pr-10 py-2 text-base border-slate-600 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md text-slate-100 bg-slate-700"
         >
           {(Object.keys(statusColors) as Array<keyof typeof statusColors>).map((status) => (
             <option key={status} value={status}>

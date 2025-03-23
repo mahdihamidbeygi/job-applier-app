@@ -1,10 +1,16 @@
+// Server-side only
+if (typeof window !== 'undefined') {
+  throw new Error('This module can only be used on the server side');
+}
+
 import pdfParse from 'pdf-parse-fork';
-import OpenAI from 'openai';
+import { ChatOpenAI } from '@langchain/openai';
 import crypto from 'crypto';
 
 // Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const llm = new ChatOpenAI({
+  modelName: 'gpt-4',
+  temperature: 0.1,
 });
 
 // Simple in-memory cache for parsed results
@@ -15,6 +21,9 @@ const parseCache = new Map<string, {
 
 // Cache expiration time (24 hours)
 const CACHE_EXPIRATION = 24 * 60 * 60 * 1000;
+
+// Maximum file size (10MB)
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 interface Publication {
   title: string;
@@ -60,6 +69,7 @@ interface ParsedResume {
   experience: {
     title: string;
     company: string;
+    location: string | null;
     startDate: Date | null;
     endDate: Date | null;
     description: string;
@@ -82,6 +92,7 @@ interface AIResponseExperience {
   startDate: string | null;
   endDate: string | null;
   description: string;
+  location: string | null;
 }
 
 interface AIResponseEducation {
@@ -157,17 +168,41 @@ function generateCacheKey(buffer: Buffer): string {
   return crypto.createHash('md5').update(buffer).digest('hex');
 }
 
+function cleanGluedWords(text: string): string {
+  // Optimized regex patterns
+  const patterns = [
+    /([a-z])([A-Z])/g,  // camelCase
+    /([a-zA-Z])(\d)/g,  // numbers
+    /([a-zA-Z])([^a-zA-Z\s])/g,  // special chars
+    /([a-zA-Z])([-_])/g,  // hyphens/underscores
+    /[\u2028\u2029]/g,  // line separators
+    /[^\x00-\x7F]/g,  // non-ASCII
+    /\s+/g  // multiple spaces
+  ];
+
+  return patterns.reduce((text, pattern) => 
+    text.replace(pattern, '$1 $2'), 
+    text
+  ).trim();
+}
+
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
-  const data = await pdfParse(buffer, {
-    max: 0,
-    version: 'default'
-  });
-  
-  if (!data || !data.text) {
+  try {
+    // Parse PDF using pdf-parse-fork
+    const data = await pdfParse(buffer, {
+      max: 0, // no limit on pages
+      version: 'v2.0.550'
+    });
+    
+    if (!data || !data.text) {
+      throw new Error('Failed to extract text from PDF');
+    }
+    
+    return cleanGluedWords(data.text);
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error);
     throw new Error('Failed to extract text from PDF');
   }
-  
-  return data.text;
 }
 
 async function parseWithAI(text: string): Promise<AIResponseData> {
@@ -187,7 +222,8 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
       company: "",
       startDate: null,
       endDate: null,
-      description: ""
+      description: "",
+      location: null,
     }],
     education: [{
       school: "",
@@ -222,110 +258,126 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
     }]
   };
 
-  const prompt = `Extract the following information from this resume and return it as a valid JSON object with no additional text or explanation.
+  // Split text into sections based on common resume section headers
+  const sections = text.split(/(?=^(?:\s*)(?:Experience|Work Experience|Employment History|Professional Experience|Education|Skills|Summary|Objective|Certifications?|Certificates?|Publications?|Published Works?|Projects|Languages|Technical Skills|Core Competencies|Professional Summary))/im);
+  
+  // Process each section in parallel
+  const sectionResults = await Promise.all(
+    sections.map(async (section) => {
+      if (!section.trim()) return null;
+      const prompt =  `You are a resume parser that extracts structured information from resumes. You must:
+      1. Return ONLY valid JSON without any additional text, markdown formatting, or explanation
+      2. Ensure the JSON structure exactly matches the provided template
+      3. Pay special attention to standardizing degree names (e.g., 'MSc' should become 'Master of Science')
+      4. Keep degree names separate from fields of study
+      5. Format all dates as YYYY-MM-DD
+      6. Never include any text outside the JSON structure
+      7. Ensure all JSON keys and values are properly quoted
+      8. Include all required fields from the template, even if empty
+      9. Use null for missing dates, empty string for missing text fields, and empty arrays for missing lists
+      10. For experience sections, extract ALL work experiences, not just the first one
+      11. Preserve the chronological order of experiences
+      12. If a section contains multiple experiences, parse each one separately
+      13. For job descriptions:
+          - Preserve bullet points and their formatting
+          - Keep each bullet point as a separate line
+          - Maintain the original structure of the description
+          - Don't combine bullet points into paragraphs
+      14. When you see bullet points in job descriptions:
+          - Keep the bullet point characters (•, -, *, etc.)
+          - Preserve the indentation and formatting
+          - Keep each point on its own line
+          - Don't merge them into paragraphs
+Extract information from this resume section:
+${section}
 
-The response must follow this JSON template structure, but you can add more sections under additionalSections if you find any other sections in the resume:
-${JSON.stringify(template, null, 2)}
+Return it as a valid JSON object following this template:
+${JSON.stringify(template, null, 2)}`          
 
-For LinkedIn and GitHub URLs:
-1. Look for full URLs (e.g., "https://linkedin.com/in/username" or "https://github.com/username")
-2. Look for text mentions (e.g., "linkedin.com/in/username" or "github.com/username")
-3. Look for profile references (e.g., "LinkedIn: username" or "GitHub: username")
-4. For LinkedIn, convert all URLs to format: "https://linkedin.com/in/username"
-5. For GitHub, convert all URLs to format: "https://github.com/username"
+      const completion = await llm.invoke(prompt);
 
-For degree names, standardize the following formats:
-1. Convert "MSc" or "M.Sc." to "Master of Science"
-2. Convert "BSc" or "B.Sc." to "Bachelor of Science"
-3. Convert "PhD" or "Ph.D." to "Doctor of Philosophy"
-4. Convert "BA" or "B.A." to "Bachelor of Arts"
-5. Convert "MA" or "M.A." to "Master of Arts"
-6. Keep the field of study separate from the degree name
+      if (!completion.content) {
+        throw new Error('No content in AI response');
+      }
 
-For any additional sections found in the resume:
-1. Create a new section under additionalSections
-2. Set an appropriate type (e.g., "publications", "certifications", "awards", etc.)
-3. Give it a descriptive title
-4. Extract all relevant information into the items array
-5. Include dates where available in YYYY-MM-DD format
-6. Include URLs if they exist
+      return JSON.parse(completion.content as string);
+    })
+  );
 
-Resume text:
-${text}`;
+  // Filter out null results and merge
+  const validResults = sectionResults.filter((result): result is AIResponseData => result !== null);
+  return mergeChunkResults(validResults);
+}
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4",
-    messages: [{
-      role: "system",
-      content: `You are a resume parser that extracts structured information from resumes. You must:
-1. Return ONLY valid JSON without any additional text, markdown formatting, or explanation
-2. Ensure the JSON structure exactly matches the provided template
-3. Pay special attention to standardizing degree names (e.g., 'MSc' should become 'Master of Science')
-4. Keep degree names separate from fields of study
-5. Format all dates as YYYY-MM-DD
-6. Never include any text outside the JSON structure
-7. Ensure all JSON keys and values are properly quoted
-8. Include all required fields from the template, even if empty
-9. Use null for missing dates, empty string for missing text fields, and empty arrays for missing lists`
-    }, {
-      role: "user",
-      content: prompt
-    }],
-    temperature: 0.1
+function mergeChunkResults(chunks: AIResponseData[]): AIResponseData {
+  const merged: AIResponseData = {
+    contactInfo: {
+      name: '',
+      email: '',
+      phone: '',
+      location: '',
+      linkedInUrl: '',
+      githubUrl: ''
+    },
+    summary: '',
+    skills: [],
+    experience: [],
+    education: [],
+    publications: [],
+    certifications: [],
+    additionalSections: []
+  };
+
+  // Merge arrays and deduplicate
+  chunks.forEach(chunk => {
+    if (chunk.contactInfo) {
+      merged.contactInfo = {
+        ...merged.contactInfo,
+        ...chunk.contactInfo
+      };
+    }
+    if (chunk.summary) {
+      merged.summary += (merged.summary ? ' ' : '') + chunk.summary;
+    }
+    if (Array.isArray(chunk.skills)) {
+      merged.skills = [...new Set([...merged.skills, ...chunk.skills])];
+    }
+    if (Array.isArray(chunk.experience)) {
+      // Sort experiences by date and merge
+      const allExperiences = [...merged.experience, ...chunk.experience];
+      merged.experience = allExperiences.sort((a, b) => {
+        const dateA = a.startDate ? new Date(a.startDate).getTime() : 0;
+        const dateB = b.startDate ? new Date(b.startDate).getTime() : 0;
+        return dateB - dateA; // Most recent first
+      });
+    }
+    if (Array.isArray(chunk.education)) {
+      merged.education = [...merged.education, ...chunk.education];
+    }
+    if (Array.isArray(chunk.publications)) {
+      merged.publications = [...(merged.publications || []), ...chunk.publications];
+    }
+    if (Array.isArray(chunk.certifications)) {
+      merged.certifications = [...(merged.certifications || []), ...chunk.certifications];
+    }
+    if (Array.isArray(chunk.additionalSections)) {
+      merged.additionalSections = [...merged.additionalSections, ...chunk.additionalSections];
+    }
   });
 
-  if (!completion.choices[0].message.content) {
-    throw new Error('No content in AI response');
-  }
+  return merged;
+}
 
-  try {
-    const parsedData = JSON.parse(completion.choices[0].message.content.trim());
-    
-    // Validate the response structure
-    if (!parsedData || typeof parsedData !== 'object') {
-      throw new Error('Response is not an object');
-    }
-
-    if (!parsedData.contactInfo || typeof parsedData.contactInfo !== 'object') {
-      console.warn('Missing or invalid contactInfo, using empty object');
-      parsedData.contactInfo = template.contactInfo;
-    }
-
-    if (!Array.isArray(parsedData.skills)) {
-      console.warn('Missing or invalid skills array, using empty array');
-      parsedData.skills = [];
-    }
-
-    if (!Array.isArray(parsedData.experience)) {
-      console.warn('Missing or invalid experience array, using empty array');
-      parsedData.experience = [];
-    }
-
-    if (!Array.isArray(parsedData.education)) {
-      console.warn('Missing or invalid education array, using empty array');
-      parsedData.education = [];
-    }
-
-    if (!Array.isArray(parsedData.publications)) {
-      console.warn('Missing or invalid publications array, using empty array');
-      parsedData.publications = [];
-    }
-
-    if (!Array.isArray(parsedData.certifications)) {
-      console.warn('Missing or invalid certifications array, using empty array');
-      parsedData.certifications = [];
-    }
-
-    if (!Array.isArray(parsedData.additionalSections)) {
-      console.warn('Missing or invalid additionalSections array, using empty array');
-      parsedData.additionalSections = [];
-    }
-
-    return parsedData as AIResponseData;
-  } catch (error) {
-    console.error('Failed to parse AI response:', completion.choices[0].message.content);
-    throw new Error(`Invalid JSON response from AI: ${error instanceof Error ? error.message : 'Unknown parsing error'}`);
-  }
+function validatePhoneNumber(phone: string | undefined): string {
+  if (!phone) return '';
+  
+  // Keep only digits, plus signs, parentheses, and dashes
+  const cleaned = phone.replace(/[^\d+()-\s]/g, '');
+  
+  // Ensure it looks like a phone number
+  if (cleaned.replace(/[^\d]/g, '').length < 7) return '';
+  
+  return cleaned;
 }
 
 export async function parseResume(pdfBuffer: Buffer | ArrayBuffer | Uint8Array): Promise<ParsedResume> {
@@ -334,6 +386,11 @@ export async function parseResume(pdfBuffer: Buffer | ArrayBuffer | Uint8Array):
     
     // Convert input to Buffer
     const buffer = ensureBuffer(pdfBuffer);
+    
+    // Validate file size
+    if (buffer.length > MAX_FILE_SIZE) {
+      throw new Error(`File size exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit`);
+    }
     
     // Generate cache key
     const cacheKey = generateCacheKey(buffer);
@@ -406,20 +463,31 @@ function formatResponse(parsedData: AIResponseData): ParsedResume {
     contactInfo: {
       name: parsedData?.contactInfo?.name || defaultData.contactInfo.name,
       email: parsedData?.contactInfo?.email || defaultData.contactInfo.email,
-      phone: parsedData?.contactInfo?.phone || defaultData.contactInfo.phone,
+      phone: validatePhoneNumber(parsedData?.contactInfo?.phone) || defaultData.contactInfo.phone,
       location: parsedData?.contactInfo?.location || defaultData.contactInfo.location,
-      linkedInUrl: parsedData?.contactInfo?.linkedInUrl || defaultData.contactInfo.linkedInUrl,
-      githubUrl: parsedData?.contactInfo?.githubUrl || defaultData.contactInfo.githubUrl
+      linkedInUrl: parsedData?.contactInfo?.linkedInUrl ? 
+        (parsedData.contactInfo.linkedInUrl.includes('linkedin.com/') ? parsedData.contactInfo.linkedInUrl : `https://linkedin.com/in/${parsedData.contactInfo.linkedInUrl}`) : 
+        defaultData.contactInfo.linkedInUrl,
+      githubUrl: parsedData?.contactInfo?.githubUrl ? 
+      (parsedData.contactInfo.githubUrl.includes('github.com/') ? parsedData.contactInfo.githubUrl : `https://github.com/${parsedData.contactInfo.githubUrl}`) : 
+      defaultData.contactInfo.githubUrl,
     },
     summary: parsedData?.summary || defaultData.summary,
     skills: Array.isArray(parsedData?.skills) ? parsedData.skills : defaultData.skills,
-    experience: Array.isArray(parsedData?.experience) ? parsedData.experience.map(exp => ({
-      title: exp?.title || 'Unknown Position',
-      company: exp?.company || 'Unknown Company',
-      startDate: processDate(exp?.startDate),
-      endDate: processDate(exp?.endDate),
-      description: exp?.description || ''
-    })) : defaultData.experience,
+    experience: Array.isArray(parsedData?.experience) ? parsedData.experience.map(exp => {
+      // Parse the job description to handle bullet points
+      const description = exp?.description || '';
+      const parsedDescription = parseJobDescription(description);
+      
+      return {
+        title: exp?.title || 'Unknown Position',
+        company: exp?.company || 'Unknown Company',
+        startDate: processDate(exp?.startDate),
+        endDate: processDate(exp?.endDate),
+        location: exp?.location || null,
+        description: parsedDescription.join('\n') // Join bullet points with newlines
+      };
+    }) : defaultData.experience,
     education: Array.isArray(parsedData?.education) ? parsedData.education.map(edu => ({
       school: edu?.school || 'Unknown Institution',
       degree: edu?.degree || '',
@@ -469,5 +537,99 @@ function performQualityChecks(result: ParsedResume): void {
   }
   if (!result.contactInfo.linkedInUrl && !result.contactInfo.githubUrl) {
     console.warn('Warning: No LinkedIn or GitHub URLs were extracted from the resume');
+  }
+}
+
+export function parseBulletPoints(text: string): string[] {
+  // Remove any existing bullet points or numbers
+  text = text.replace(/^[\s•*\-–—]\s*/gm, '')  // Remove bullet points
+    .replace(/^\d+\.\s*/gm, '')  // Remove numbered lists
+    .replace(/^[a-z]\)\s*/gm, '')  // Remove lettered lists
+    .replace(/^\([a-z]\)\s*/gm, '')  // Remove parenthesized letters
+    .replace(/^\[[a-z]\]\s*/gm, '');  // Remove bracketed letters
+
+  // Split by common bullet point indicators
+  const lines = text.split(/\n/);
+  const bulletPoints: string[] = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    // Skip lines that are too short or look like headers
+    if (trimmed.length < 10 || /^[A-Z\s]{10,}$/.test(trimmed)) continue;
+
+    // Skip lines that are just punctuation or special characters
+    if (/^[\s\p{P}]+$/u.test(trimmed)) continue;
+
+    // Skip lines that are just numbers or dates
+    if (/^\d+$/.test(trimmed) || /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(trimmed)) continue;
+
+    // Clean up the bullet point
+    const cleaned = trimmed
+      .replace(/^[\s•*\-–—]\s*/, '')  // Remove leading bullet points
+      .replace(/^[\d\.\)\]]+\s*/, '')  // Remove leading numbers or letters
+      .replace(/\s+/g, ' ')  // Normalize whitespace
+      .trim();
+
+    if (cleaned && cleaned.length >= 10) {
+      bulletPoints.push(cleaned);
+    }
+  }
+
+  return bulletPoints;
+}
+
+export function parseJobDescription(description: string): string[] {
+  if (!description) return [];
+
+  // First, try to detect if it's a bullet-pointed list
+  const hasBulletPoints = /^[\s•*\-–—]\s/m.test(description) || 
+                         /^\d+\.\s/m.test(description) || 
+                         /^[a-z]\)\s/m.test(description);
+
+  if (hasBulletPoints) {
+    // Split by bullet points and clean each point
+    return description
+      .split(/\n/)
+      .map(line => {
+        // Remove bullet points and numbers
+        const cleaned = line
+          .replace(/^[\s•*\-–—]\s*/, '')  // Remove bullet points
+          .replace(/^\d+\.\s*/, '')        // Remove numbered lists
+          .replace(/^[a-z]\)\s*/, '')      // Remove lettered lists
+          .replace(/^\([a-z]\)\s*/, '')    // Remove parenthesized letters
+          .replace(/^\[[a-z]\]\s*/, '')    // Remove bracketed letters
+          .replace(/\s+/g, ' ')            // Normalize whitespace
+          .trim();
+
+        // Skip empty lines, headers, and short lines
+        if (!cleaned || 
+            cleaned.length < 10 || 
+            /^[A-Z\s]{10,}$/.test(cleaned) || 
+            /^[\s\p{P}]+$/u.test(cleaned) || 
+            /^\d+$/.test(cleaned) || 
+            /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(cleaned)) {
+          return null;
+        }
+
+        return cleaned;
+      })
+      .filter((point): point is string => point !== null);
+  } else {
+    // If it's a paragraph, split by sentences and clean each one
+    return description
+      .split(/[.!?]+(?:\s+|$)/)  // Split by sentence endings
+      .map(sentence => {
+        const cleaned = sentence
+          .replace(/\s+/g, ' ')  // Normalize whitespace
+          .trim();
+
+        // Skip empty sentences and very short ones
+        if (!cleaned || cleaned.length < 10) return null;
+
+        return cleaned;
+      })
+      .filter((sentence): sentence is string => sentence !== null);
   }
 } 

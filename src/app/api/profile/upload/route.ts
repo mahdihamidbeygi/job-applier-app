@@ -109,6 +109,8 @@ export async function POST(request: Request) {
               level: null
             }))
           },
+          phone: parsedResume.contactInfo.phone,
+          location:parsedResume.contactInfo.location,
           linkedinUrl: parsedResume.contactInfo.linkedInUrl || undefined,
           githubUrl: parsedResume.contactInfo.githubUrl || undefined,
           experience: {
@@ -116,7 +118,7 @@ export async function POST(request: Request) {
             create: parsedResume.experience.map(exp => ({
               title: exp.title,
               company: exp.company,
-              location: parsedResume.contactInfo.location || '',
+              location: exp.location || '',
               startDate: exp.startDate || new Date(),
               endDate: exp.endDate,
               description: exp.description || '',
@@ -132,6 +134,25 @@ export async function POST(request: Request) {
               endDate: edu.endDate,
               description: null,
             })),
+          },
+          publications: {
+            deleteMany: {},
+            create: parsedResume.publications?.map(pub => ({
+              title: pub.title,
+              publisher: pub.publisher,
+              date: pub.date,
+              description: pub.description || '',
+              url: null,
+            })) || [],
+          },
+          certifications: {
+            deleteMany: {},
+            create: parsedResume.certifications?.map(cert => ({
+              name: cert.name,
+              issuer: cert.issuer,
+              date: cert.date,
+              url: cert.url || null,
+            })) || [],
           }
         }),
       },
@@ -141,12 +162,31 @@ export async function POST(request: Request) {
         email: session.user.email || '',
         resumeUrl: fileUrl,
         summary: parsedResume?.summary,
+        phone: parsedResume?.contactInfo.phone,
+        location: parsedResume?.contactInfo.location,
         linkedinUrl: parsedResume?.contactInfo.linkedInUrl,
         githubUrl: parsedResume?.contactInfo.githubUrl,
         skills: {
           create: parsedResume?.skills.map(skill => ({
             name: skill,
             level: null
+          })) || []
+        },
+        publications: {
+          create: parsedResume?.publications?.map(pub => ({
+            title: pub.title,
+            publisher: pub.publisher,
+            date: pub.date,
+            description: pub.description || '',
+            url: null,
+          })) || []
+        },
+        certifications: {
+          create: parsedResume?.certifications?.map(cert => ({
+            name: cert.name,
+            issuer: cert.issuer,
+            date: cert.date,
+            url: cert.url || null,
           })) || []
         }
       },
@@ -169,6 +209,9 @@ export async function POST(request: Request) {
         contactInfo: {
           name: parsedResume.contactInfo.name,
           location: parsedResume.contactInfo.location,
+          phone: parsedResume.contactInfo.phone,
+          linkedInUrl: parsedResume.contactInfo.linkedInUrl,
+          githubUrl: parsedResume.contactInfo.githubUrl,
           // Don't send sensitive info like email/phone in response
         },
         summary: parsedResume.summary,

@@ -18,7 +18,7 @@ model User {
   applications  JobApplication[]
   savedJobs     SavedJob[]
   profile       UserProfile?
-  oldProfile    Profile?        // Add relation to old Profile model
+  oldProfile    Profile?        @relation("oldProfile")
 }
 
 model Job {
@@ -98,10 +98,8 @@ model Experience {
   startDate   DateTime
   endDate     DateTime?
   description String      @db.Text
-  profileId   String
-  userId      String?     // New optional column
-  profile     Profile     @relation(fields: [profileId], references: [id])
-  userProfile UserProfile? @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId      String
+  userProfile UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
 model Education {
@@ -112,10 +110,8 @@ model Education {
   startDate   DateTime
   endDate     DateTime?
   description String?     @db.Text
-  profileId   String
-  userId      String?     // New optional column
-  profile     Profile     @relation(fields: [profileId], references: [id])
-  userProfile UserProfile? @relation(fields: [userId], references: [userId], onDelete: Cascade)
+  userId      String
+  userProfile UserProfile @relation(fields: [userId], references: [userId], onDelete: Cascade)
 }
 
 model Skill {
@@ -129,15 +125,13 @@ model Skill {
 model Profile {
   id                String          @id @default(cuid())
   userId            String          @unique
-  user              User            @relation(fields: [userId], references: [id], name: "oldProfile")
+  user              User            @relation("oldProfile", fields: [userId], references: [id])
   resume            String?   // URL to stored resume
   linkedInUrl       String?
   githubUrl         String?
   portfolioUrl      String?
   bio               String?   @db.Text
   skills            String[]
-  experience        Experience[]
-  education         Education[]
   resumeLastUpdated DateTime?
   isProfileComplete Boolean   @default(false)
 }

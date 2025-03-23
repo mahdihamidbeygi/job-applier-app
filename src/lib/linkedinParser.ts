@@ -1,11 +1,11 @@
 import { LinkedInProfile } from './linkedinParserLangChain';
 
 /**
- * Extract LinkedIn username from LinkedIn URL
+ * Validate LinkedIn URL
  * @param url The LinkedIn URL
- * @returns The LinkedIn username or null if not found
+ * @returns The validated LinkedIn URL or null if not valid
  */
-export function extractLinkedInUsername(url: string): string | null {
+export function validateLinkedInUrl(url: string): string | null {
   if (!url) return null;
   
   try {
@@ -14,18 +14,10 @@ export function extractLinkedInUsername(url: string): string | null {
       return null;
     }
     
-    const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
-    if (pathParts.length > 0) {
-      // Handle /in/username format
-      if (pathParts[0] === 'in' && pathParts.length > 1) {
-        return pathParts[1];
-      }
-      return pathParts[0];
-    }
-    
-    return null;
+    // Return the full URL
+    return url;
   } catch (error) {
-    console.error('Error extracting LinkedIn username:', error);
+    console.error('Error validating LinkedIn URL:', error);
     return null;
   }
 }
@@ -179,13 +171,29 @@ export async function fetchLinkedInProfileHTML(linkedInUrl: string): Promise<str
 }
 
 /**
- * Generate mock LinkedIn profile data based on the username
+ * Generate mock LinkedIn profile data based on the URL
  * @param linkedInUrl The LinkedIn profile URL
  * @returns Mock LinkedIn profile data
  */
 export function generateMockLinkedInData(linkedInUrl: string): LinkedInProfile {
-  const username = extractLinkedInUsername(linkedInUrl) || 'default';
-  const firstLetter = username.charAt(0).toLowerCase();
+  // Extract something from the URL to seed different mock profiles
+  let seed = 'default';
+  try {
+    const parsedUrl = new URL(linkedInUrl);
+    const pathParts = parsedUrl.pathname.split('/').filter(Boolean);
+    if (pathParts.length > 0) {
+      // Handle /in/username format
+      if (pathParts[0] === 'in' && pathParts.length > 1) {
+        seed = pathParts[1];
+      } else {
+        seed = pathParts[0];
+      }
+    }
+  } catch (error) {
+    console.error('Error parsing LinkedIn URL for mock data:', error);
+  }
+  
+  const firstLetter = seed.charAt(0).toLowerCase();
   
   // Generate different mock data based on the first letter of the username
   if (firstLetter >= 'a' && firstLetter <= 'm') {

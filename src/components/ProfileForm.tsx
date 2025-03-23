@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, type FC } from 'react';
+import { useState, useEffect, useCallback, type FC } from 'react';
 import { useRouter } from 'next/navigation';
 import { Transition } from '@headlessui/react';
 import { PencilIcon, CheckIcon, XMarkIcon, EyeIcon, EyeSlashIcon, PlusIcon, ExclamationCircleIcon, ArrowTopRightOnSquareIcon, CloudArrowDownIcon } from '@heroicons/react/24/outline';
@@ -184,15 +184,21 @@ interface ProfileFormProps {
 }
 
 // Define consistent color classes
-const buttonPrimaryClass = "inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500";
-const buttonSecondaryClass = "inline-flex items-center px-3 py-1 border border-gray-300 text-sm font-medium rounded-md text-black bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500";
-const sectionClass = "bg-white rounded-lg p-6 shadow-sm border border-gray-200";
-const sectionHeaderClass = "text-lg font-semibold text-black mb-4";
-const cardClass = "bg-white shadow rounded-lg p-4 border border-gray-100";
-const titleClass = "text-lg font-medium text-black";
-const labelClass = "block text-sm font-medium text-black";
-const inputClass = "mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black placeholder-black";
-const subtitleClass = "text-sm text-black";
+const buttonPrimaryClass = "inline-flex items-center px-3 py-1 border border-slate-600 text-sm font-medium rounded-md text-slate-100 bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500";
+const buttonSecondaryClass = "inline-flex items-center px-3 py-1 border border-slate-600 text-sm font-medium rounded-md text-slate-300 bg-slate-800 hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-slate-500";
+const sectionClass = "bg-slate-800 rounded-lg p-6 shadow-sm border border-slate-700";
+const sectionHeaderClass = "text-lg font-semibold text-slate-100 mb-4";
+const cardClass = "bg-slate-800 shadow rounded-lg p-4 border border-slate-700";
+const titleClass = "text-lg font-medium text-slate-100";
+const labelClass = "block text-sm font-medium text-slate-200";
+const inputClass = "mt-1 block w-full rounded-md border-slate-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-slate-100 bg-slate-700 placeholder-slate-400";
+const subtitleClass = "text-sm text-slate-300";
+
+// Update delete button styles
+const deleteButtonClass = "inline-flex items-center px-3 py-1 border border-red-900 text-sm font-medium rounded-md text-red-200 bg-red-900/50 hover:bg-red-900 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500";
+const linkClass = "inline-flex items-center text-sm text-slate-300 hover:text-slate-100";
+const skillTagClass = "inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-slate-700 text-slate-200 group";
+const skillTagButtonClass = "ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-slate-300 hover:text-slate-100 focus:outline-none";
 
 // Helper function to check if two projects are duplicates
 const areProjectsDuplicate = (proj1: Project, proj2: Project): boolean => {
@@ -701,7 +707,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
     });
   };
 
-  const handleSubmit = async (e?: React.FormEvent, isAutoSave = false) => {
+  const handleSubmit = useCallback(async (e?: React.FormEvent, isAutoSave = false) => {
     if (e) {
       e.preventDefault();
     }
@@ -729,6 +735,11 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         additionalSections: formData.additionalSections.map(({ isEditing, isDirty, ...section }) => section)
       };
+
+      console.log('Sending data to API:', {
+        publications: cleanFormData.publications,
+        certifications: cleanFormData.certifications
+      });
 
       const response = await fetch('/api/profile', {
         method: 'PUT',
@@ -758,7 +769,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
     } finally {
       setIsSubmitting(false);
     }
-  };
+  }, [formData, router]);
 
   const getFieldError = (type: string, id: string | null, field: string) => {
     return id ? validationErrors[`${type}-${id}-${field}`] : validationErrors[field];
@@ -1084,7 +1095,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
           )}
         </div>
         {validationErrors.bio && (
-          <p className="mt-2 text-sm text-red-600">{validationErrors.bio}</p>
+          <p className="mt-2 text-sm text-red-300">{validationErrors.bio}</p>
         )}
       </div>
 
@@ -1107,26 +1118,28 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
             value={formData.skills.join(', ')}
             onChange={handleSkillsChange}
             placeholder="React, TypeScript, Node.js"
-            className={inputClass}
+            className={`${inputClass} ${
+              validationErrors.skills ? 'border-red-300' : 'border-slate-600'
+            }`}
           />
         )}
         <div className="mt-2 flex flex-wrap gap-2">
           {formData.skills.map((skill, index) => (
-            <span
+            <div
               key={index}
-              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-sm font-medium bg-blue-100 text-blue-800 group"
+              className={skillTagClass}
             >
               {skill}
               {!isPreviewMode && (
                 <button
                   type="button"
                   onClick={() => removeSkill(skill)}
-                  className="ml-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full text-blue-400 hover:text-blue-600 focus:outline-none"
+                  className={skillTagButtonClass}
                 >
                   <XMarkIcon className="w-3 h-3" />
                 </button>
               )}
-            </span>
+            </div>
           ))}
         </div>
       </div>
@@ -1158,10 +1171,10 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-1"
             >
-              <div className="border-b border-gray-200 pb-4 last:border-0">
+              <div className="border-b border-slate-700 pb-4 last:border-0">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <label className={labelClass}>Title</label>
                         <div className="relative">
@@ -1170,7 +1183,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                             value={exp.title}
                             onChange={e => handleItemChange('experience', exp.id, 'title', e.target.value)}
                             className={`${inputClass} ${
-                              getFieldError('experience', exp.id, 'title') ? 'border-red-300' : 'border-gray-300'
+                              getFieldError('experience', exp.id, 'title') ? 'border-red-300' : 'border-slate-600'
                             }`}
                             readOnly={!exp.isEditing || isPreviewMode}
                           />
@@ -1181,7 +1194,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                           )}
                         </div>
                         {getFieldError('experience', exp.id, 'title') && (
-                          <p className="mt-2 text-sm text-red-600">
+                          <p className="mt-2 text-sm text-red-300">
                             {getFieldError('experience', exp.id, 'title')}
                           </p>
                         )}
@@ -1205,8 +1218,33 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                           )}
                         </div>
                         {getFieldError('experience', exp.id, 'company') && (
-                          <p className="mt-2 text-sm text-red-600">
+                          <p className="mt-2 text-sm text-red-300">
                             {getFieldError('experience', exp.id, 'company')}
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <label className={labelClass}>Location</label>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            value={exp.location || ''}
+                            onChange={e => handleItemChange('experience', exp.id, 'location', e.target.value)}
+                            placeholder="City, State, Country"
+                            className={`${inputClass} ${
+                              getFieldError('experience', exp.id, 'location') ? 'border-red-300' : 'border-gray-300'
+                            }`}
+                            readOnly={!exp.isEditing || isPreviewMode}
+                          />
+                          {getFieldError('experience', exp.id, 'location') && (
+                            <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                              <ExclamationCircleIcon className="h-5 w-5 text-red-500" />
+                            </div>
+                          )}
+                        </div>
+                        {getFieldError('experience', exp.id, 'location') && (
+                          <p className="mt-2 text-sm text-red-300">
+                            {getFieldError('experience', exp.id, 'location')}
                           </p>
                         )}
                       </div>
@@ -1229,7 +1267,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                           )}
                         </div>
                         {getFieldError('experience', exp.id, 'startDate') && (
-                          <p className="mt-2 text-sm text-red-600">
+                          <p className="mt-2 text-sm text-red-300">
                             {getFieldError('experience', exp.id, 'startDate')}
                           </p>
                         )}
@@ -1253,7 +1291,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                           )}
                         </div>
                         {getFieldError('experience', exp.id, 'endDate') && (
-                          <p className="mt-2 text-sm text-red-600">
+                          <p className="mt-2 text-sm text-red-300">
                             {getFieldError('experience', exp.id, 'endDate')}
                           </p>
                         )}
@@ -1278,7 +1316,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                         )}
                       </div>
                       {getFieldError('experience', exp.id, 'description') && (
-                        <p className="mt-2 text-sm text-red-600">
+                        <p className="mt-2 text-sm text-red-300">
                           {getFieldError('experience', exp.id, 'description')}
                         </p>
                       )}
@@ -1300,7 +1338,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                       <button
                         type="button"
                         onClick={() => handleDeleteItem('experience', exp.id)}
-                        className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        className={deleteButtonClass}
                       >
                         <XMarkIcon className="h-4 w-4" />
                       </button>
@@ -1340,7 +1378,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               leaveFrom="opacity-100 translate-y-0"
               leaveTo="opacity-0 translate-y-1"
             >
-              <div className="border-b border-gray-200 pb-4 last:border-0">
+              <div className="border-b border-slate-700 pb-4 last:border-0">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1412,7 +1450,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                       <button
                         type="button"
                         onClick={() => handleDeleteItem('education', edu.id)}
-                        className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                        className={deleteButtonClass}
                       >
                         <XMarkIcon className="h-4 w-4" />
                       </button>
@@ -1437,11 +1475,11 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               type="url"
               id="linkedInUrl"
               name="linkedInUrl"
-              value={formData.linkedInUrl}
+              value={`${formData.linkedInUrl}`}
               onChange={handleChange}
-              placeholder="https://linkedin.com/in/yourprofile"
+              placeholder="https://www.linkedin.com/in/johndoe-12345678"
               className={`${inputClass} ${
-                getFieldError('linkedInUrl', null, 'url') ? 'border-red-300' : 'border-gray-300'
+                getFieldError('linkedInUrl', null, 'url') ? 'border-red-300' : 'border-slate-600'
               }`}
               readOnly={isPreviewMode}
             />
@@ -1455,11 +1493,11 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               type="url"
               id="githubUrl"
               name="githubUrl"
-              value={formData.githubUrl}
+              value={`${formData.githubUrl}`}
               onChange={handleChange}
-              placeholder="https://github.com/yourusername"
+              placeholder="https://github.com/johndoe"
               className={`${inputClass} ${
-                getFieldError('githubUrl', null, 'url') ? 'border-red-300' : 'border-gray-300'
+                getFieldError('githubUrl', null, 'url') ? 'border-red-300' : 'border-slate-600'
               }`}
               readOnly={isPreviewMode}
             />
@@ -1477,7 +1515,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               onChange={handleChange}
               placeholder="https://yourportfolio.com"
               className={`${inputClass} ${
-                getFieldError('portfolioUrl', null, 'url') ? 'border-red-300' : 'border-gray-300'
+                getFieldError('portfolioUrl', null, 'url') ? 'border-red-300' : 'border-slate-600'
               }`}
               readOnly={isPreviewMode}
             />
@@ -1493,7 +1531,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
           disabled={isImporting || !formData.githubUrl}
           className={`${buttonPrimaryClass} px-4 py-2 ${
             isImporting || !formData.githubUrl 
-              ? 'bg-gray-300 text-black cursor-not-allowed' 
+              ? 'opacity-50 cursor-not-allowed' 
               : ''
           }`}
         >
@@ -1514,18 +1552,18 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
         </button>
         
         {importError && (
-          <p className="mt-2 text-sm text-red-600">
-            <ExclamationCircleIcon className="h-5 w-5 text-red-500 inline mr-1" />
+          <p className="mt-2 text-sm text-red-300">
+            <ExclamationCircleIcon className="h-5 w-5 text-red-400 inline mr-1" />
             {importError}
           </p>
         )}
         
-        <div className="mt-2 text-xs text-black space-y-1">
+        <div className="mt-2 text-xs text-slate-300 space-y-1">
           <p>
             Add your GitHub URL above and click this button to automatically import your repositories, 
             skills, and other information.
           </p>
-          <p className="text-black italic">
+          <p className="text-slate-400 italic">
             Note: LinkedIn integration is currently disabled. Please manually add your professional experience, 
             education, and other information using the forms below.
           </p>
@@ -1564,7 +1602,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     }`}
                   />
                   {getFieldError('projects', project.id, 'title') && (
-                    <p className="mt-1 text-sm text-red-600">{getFieldError('projects', project.id, 'title')}</p>
+                    <p className="mt-1 text-sm text-red-300">{getFieldError('projects', project.id, 'title')}</p>
                   )}
                 </div>
                 
@@ -1616,7 +1654,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                   <button
                     type="button"
                     onClick={() => handleDeleteItem('projects', project.id)}
-                    className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    className={deleteButtonClass}
                   >
                     Delete
                   </button>
@@ -1639,21 +1677,21 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     <button
                       type="button"
                       onClick={() => handleDeleteItem('projects', project.id)}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      className={deleteButtonClass}
                     >
                       <XMarkIcon className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
                 {project.description && (
-                  <p className="mt-2 text-sm text-black">{project.description}</p>
+                  <p className="mt-2 text-sm text-slate-300">{project.description}</p>
                 )}
                 {project.url && (
                   <a
                     href={project.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500"
+                    className={linkClass}
                   >
                     View Project
                     <ArrowTopRightOnSquareIcon className="ml-1 h-4 w-4" />
@@ -1692,13 +1730,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`publication-${publication.id}-title`}
                     value={publication.title}
                     onChange={(e) => handleItemChange('publications', publication.id, 'title', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'title') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('publications', publication.id, 'title') && (
-                    <p className="mt-1 text-sm text-red-600">{getFieldError('publications', publication.id, 'title')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1710,13 +1743,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`publication-${publication.id}-publisher`}
                     value={publication.publisher}
                     onChange={(e) => handleItemChange('publications', publication.id, 'publisher', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'publisher') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('publications', publication.id, 'publisher') && (
-                    <p className="mt-1 text-sm text-red-600">{getFieldError('publications', publication.id, 'publisher')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1728,12 +1756,10 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`publication-${publication.id}-date`}
                     value={formatDate(publication.date)}
                     onChange={(e) => handleItemChange('publications', publication.id, 'date', new Date(e.target.value))}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'date') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor={`publication-${publication.id}-description`} className={labelClass}>
                     Description
@@ -1743,9 +1769,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     value={publication.description || ''}
                     onChange={(e) => handleItemChange('publications', publication.id, 'description', e.target.value)}
                     rows={3}
-                    className={`${inputClass} ${
-                      getFieldError('publications', publication.id, 'description') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
                 
@@ -1767,7 +1791,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                   <button
                     type="button"
                     onClick={() => handleDeleteItem('publications', publication.id)}
-                    className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    className={deleteButtonClass}
                   >
                     Delete
                   </button>
@@ -1780,7 +1804,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     <h4 className={titleClass}>{publication.title}</h4>
                     <p className={subtitleClass}>{publication.publisher}</p>
                     {publication.date && (
-                      <p className={subtitleClass}>{format(publication.date, 'MMMM yyyy')}</p>
+                      <p className="text-sm text-slate-400">{format(publication.date, 'MMMM yyyy')}</p>
                     )}
                   </div>
                   <div className="flex space-x-2">
@@ -1794,14 +1818,14 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     <button
                       type="button"
                       onClick={() => handleDeleteItem('publications', publication.id)}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      className={deleteButtonClass}
                     >
                       <XMarkIcon className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
                 {publication.description && (
-                  <p className="mt-2 text-sm text-black">{publication.description}</p>
+                  <p className="mt-2 text-sm text-slate-300">{publication.description}</p>
                 )}
               </div>
             )}
@@ -1836,13 +1860,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-name`}
                     value={certification.name}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'name', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'name') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('certifications', certification.id, 'name') && (
-                    <p className="mt-1 text-sm text-red-600">{getFieldError('certifications', certification.id, 'name')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1854,13 +1873,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-issuer`}
                     value={certification.issuer}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'issuer', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'issuer') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('certifications', certification.id, 'issuer') && (
-                    <p className="mt-1 text-sm text-red-600">{getFieldError('certifications', certification.id, 'issuer')}</p>
-                  )}
                 </div>
                 
                 <div>
@@ -1872,12 +1886,10 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-date`}
                     value={formatDate(certification.date)}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'date', new Date(e.target.value))}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'date') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
                 </div>
-                
+
                 <div>
                   <label htmlFor={`certification-${certification.id}-url`} className={labelClass}>
                     URL
@@ -1887,13 +1899,8 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     id={`certification-${certification.id}-url`}
                     value={certification.url || ''}
                     onChange={(e) => handleItemChange('certifications', certification.id, 'url', e.target.value)}
-                    className={`${inputClass} ${
-                      getFieldError('certifications', certification.id, 'url') ? 'border-red-300' : 'border-gray-300'
-                    }`}
+                    className={inputClass}
                   />
-                  {getFieldError('certifications', certification.id, 'url') && (
-                    <p className="mt-1 text-sm text-red-600">{getFieldError('certifications', certification.id, 'url')}</p>
-                  )}
                 </div>
                 
                 <div className="flex justify-end space-x-2">
@@ -1914,7 +1921,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                   <button
                     type="button"
                     onClick={() => handleDeleteItem('certifications', certification.id)}
-                    className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    className={deleteButtonClass}
                   >
                     Delete
                   </button>
@@ -1927,7 +1934,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     <h4 className={titleClass}>{certification.name}</h4>
                     <p className={subtitleClass}>{certification.issuer}</p>
                     {certification.date && (
-                      <p className={subtitleClass}>{format(certification.date, 'MMMM yyyy')}</p>
+                      <p className="text-sm text-slate-400">{format(certification.date, 'MMMM yyyy')}</p>
                     )}
                   </div>
                   <div className="flex space-x-2">
@@ -1941,7 +1948,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     <button
                       type="button"
                       onClick={() => handleDeleteItem('certifications', certification.id)}
-                      className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                      className={deleteButtonClass}
                     >
                       <XMarkIcon className="h-4 w-4" />
                     </button>
@@ -1952,7 +1959,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                     href={certification.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 inline-flex items-center text-sm text-indigo-600 hover:text-indigo-500"
+                    className={linkClass}
                   >
                     View Certificate
                     <ArrowTopRightOnSquareIcon className="ml-1 h-4 w-4" />
@@ -1981,7 +1988,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               <button
                 type="button"
                 onClick={() => handleDeleteItem('additionalSections', section.id)}
-                className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                className={deleteButtonClass}
               >
                 <XMarkIcon className="h-4 w-4 mr-1" />
                 Delete Section
@@ -2001,7 +2008,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
               <div className="space-y-4">
                 {section.items.map((item) => (
                   <SortableItem key={item.id} id={item.id}>
-                    <div className="bg-white shadow rounded-lg p-4">
+                    <div className="bg-slate-800 shadow rounded-lg p-4 border border-slate-700">
                       {item.isEditing ? (
                         <div className="space-y-4">
                           <div>
@@ -2013,7 +2020,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                               value={item.title || ''}
                               onChange={(e) => handleDynamicItemChange(section.id, item.id, 'title', e.target.value)}
                               className={`${inputClass} ${
-                                getFieldError('additionalSections', `${section.id}-${item.id}-title`, 'title') ? 'border-red-300' : 'border-gray-300'
+                                getFieldError('additionalSections', `${section.id}-${item.id}-title`, 'title') ? 'border-red-300' : 'border-slate-600'
                               }`}
                             />
                           </div>
@@ -2027,7 +2034,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                               onChange={(e) => handleDynamicItemChange(section.id, item.id, 'description', e.target.value)}
                               rows={3}
                               className={`${inputClass} ${
-                                getFieldError('additionalSections', `${section.id}-${item.id}-description`, 'description') ? 'border-red-300' : 'border-gray-300'
+                                getFieldError('additionalSections', `${section.id}-${item.id}-description`, 'description') ? 'border-red-300' : 'border-slate-600'
                               }`}
                             />
                           </div>
@@ -2041,7 +2048,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                               value={item.url || ''}
                               onChange={(e) => handleDynamicItemChange(section.id, item.id, 'url', e.target.value)}
                               className={`${inputClass} ${
-                                getFieldError('additionalSections', `${section.id}-${item.id}-url`, 'url') ? 'border-red-300' : 'border-gray-300'
+                                getFieldError('additionalSections', `${section.id}-${item.id}-url`, 'url') ? 'border-red-300' : 'border-slate-600'
                               }`}
                             />
                           </div>
@@ -2064,7 +2071,7 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                             <button
                               type="button"
                               onClick={() => handleDeleteDynamicItem(section.id, item.id)}
-                              className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                              className={deleteButtonClass}
                             >
                               Delete
                             </button>
@@ -2087,14 +2094,25 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
                               <button
                                 type="button"
                                 onClick={() => handleDeleteDynamicItem(section.id, item.id)}
-                                className="inline-flex items-center px-3 py-1 border border-transparent text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                                className={deleteButtonClass}
                               >
                                 <XMarkIcon className="h-4 w-4" />
                               </button>
                             </div>
                           </div>
                           {item.description && (
-                            <p className="mt-2 text-sm text-black">{item.description}</p>
+                            <p className="mt-2 text-sm text-slate-300">{item.description}</p>
+                          )}
+                          {item.url && (
+                            <a
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className={linkClass}
+                            >
+                              View Link
+                              <ArrowTopRightOnSquareIcon className="ml-1 h-4 w-4" />
+                            </a>
                           )}
                         </div>
                       )}
@@ -2108,13 +2126,13 @@ const ProfileForm: FC<ProfileFormProps> = ({ initialData }) => {
       ))}
 
       {error && (
-        <div className="rounded-md bg-red-50 p-4">
+        <div className="rounded-md bg-red-900 p-4">
           <div className="flex">
             <div className="flex-shrink-0">
-              <ExclamationCircleIcon className="h-5 w-5 text-red-400" aria-hidden="true" />
+              <ExclamationCircleIcon className="h-5 w-5 text-red-300" aria-hidden="true" />
             </div>
             <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">{error}</h3>
+              <h3 className="text-sm font-medium text-red-200">{error}</h3>
             </div>
           </div>
         </div>

@@ -52,18 +52,18 @@ export default async function ApplicationsPage({
 
   return (
     <div className="space-y-6">
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-slate-800 shadow rounded-lg p-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Job Applications</h1>
+          <h1 className="text-2xl font-bold text-slate-100">Job Applications</h1>
           <ApplicationFilters />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           {applicationStatuses.map((status) => (
-            <div key={status} className="bg-gray-50 p-4 rounded-lg">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex justify-between items-center">
+            <div key={status} className="bg-slate-700 p-4 rounded-lg">
+              <h2 className="text-lg font-semibold text-slate-100 mb-4 flex justify-between items-center">
                 {status.charAt(0) + status.slice(1).toLowerCase()}
-                <span className="text-sm font-normal text-gray-500">
+                <span className="text-sm font-normal text-slate-300">
                   {groupedApplications[status].length}
                 </span>
               </h2>
@@ -75,7 +75,7 @@ export default async function ApplicationsPage({
                   />
                 ))}
                 {groupedApplications[status].length === 0 && (
-                  <p className="text-sm text-gray-500 text-center py-4">
+                  <p className="text-sm text-slate-400 text-center py-4">
                     No applications in this status
                   </p>
                 )}

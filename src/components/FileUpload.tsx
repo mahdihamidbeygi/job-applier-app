@@ -78,14 +78,14 @@ export default function FileUpload({
             href={file}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-sm text-indigo-600 hover:text-indigo-500"
+            className="text-sm text-slate-300 hover:text-slate-100"
           >
             View {type === 'resume' ? 'Resume' : 'Cover Letter'}
           </a>
           <button
             onClick={handleRemove}
             disabled={isUploading}
-            className="text-sm text-red-600 hover:text-red-500"
+            className="text-sm text-red-400 hover:text-red-300"
           >
             Remove
           </button>
@@ -99,16 +99,10 @@ export default function FileUpload({
               accept=".pdf,.doc,.docx"
               onChange={handleFileChange}
               disabled={isUploading}
-              className="block w-full text-sm text-black
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-md file:border-0
-                file:text-sm file:font-medium
-                file:bg-indigo-50 file:text-indigo-700
-                hover:file:bg-indigo-100
-              "
+              className="block w-full text-sm"
             />
           </label>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-slate-400">
             PDF, DOC, or DOCX up to 10MB
           </p>
         </div>
