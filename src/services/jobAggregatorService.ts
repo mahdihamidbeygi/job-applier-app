@@ -252,6 +252,7 @@ Please identify the most relevant selectors for:
 3. Company name
 4. Location
 5. Job URL/link
+6. Job description
 
 Return only the selectors, one per line. without numbers`;
 
@@ -260,7 +261,7 @@ Return only the selectors, one per line. without numbers`;
       const [cardSelector, titleSelector, companySelector, locationSelector, linkSelector] = 
         selectorResponseText.split('\n').map((s: string) => s.trim()).filter(Boolean);
 
-        $(cardSelector).each((i: number, element: cheerio.Element) => {
+      $(cardSelector).each(async (i: number, element: cheerio.Element) => {
         // Get job URL
         const jobLink = $(element).find(linkSelector).attr('href') || '';
         
@@ -276,14 +277,44 @@ Return only the selectors, one per line. without numbers`;
         const title = $(element).find(titleSelector).text().trim() || `${params.query} Job ${i+1}`;
         const company = $(element).find(companySelector).text().trim() || 'LinkedIn Company';
         const location = $(element).find(locationSelector).text().trim() || params.location || 'Unknown Location';
-        
         // Use the actual job URL if available, otherwise construct a search URL
         const jobUrl = jobLink.startsWith('http') ? 
                       jobLink : 
                       jobLink.startsWith('/') ? 
                         `https://www.linkedin.com${jobLink}` : 
                         `https://www.linkedin.com/jobs/search/?keywords=${searchQuery}`;
-        
+        // Get full job description from job URL
+        let description = '';
+        try {
+          const jobResponse = await axios.get(jobUrl);
+          const jobPage = cheerio.load(jobResponse.data);
+          
+          // Get unique elements from job page
+          const jobPageElements = new Set<string>();
+          jobPage('*').each((_, el) => {
+            if (el.type === 'tag') {
+              jobPageElements.add(el.name);
+            }
+            const classNames = jobPage(el).attr('class')?.split(/\s+/) || [];
+            classNames.forEach(c => jobPageElements.add(`.${c}`));
+          });
+
+          // Ask LLM to identify job description selector
+          const jobElementsList = Array.from(jobPageElements).join('\n');
+          const jobPrompt = `Given these HTML elements from a LinkedIn job details page:
+${jobElementsList}
+
+Please identify the most relevant selector for the full job description.
+Return only the selector without any other text.`;
+
+          const jobSelectorResponse = await this.llm.invoke(jobPrompt);
+          const jobDescriptionSelector = (jobSelectorResponse.content as string).trim();
+          
+          description = jobPage(jobDescriptionSelector).text().trim();
+        } catch (error) {
+          console.error('Error getting full job description:', error);
+          description = `${title} at ${company} in ${location}`;
+        }
         // Log the extracted data for debugging
         console.log(`LinkedIn job ${i+1}: ID=${jobId}, Title=${title}, Company=${company}, URL=${jobUrl}`);
         
@@ -291,7 +322,7 @@ Return only the selectors, one per line. without numbers`;
           title,
           company,
           location,
-          description: `${title} at ${company} in ${location}`, // Add a default description
+          description,
           url: jobUrl,
           platform: 'LinkedIn',
           externalId: jobId
