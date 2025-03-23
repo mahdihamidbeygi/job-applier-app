@@ -4,12 +4,13 @@ if (typeof window !== 'undefined') {
 }
 
 import pdfParse from 'pdf-parse-fork';
-import OpenAI from 'openai';
+import { ChatOpenAI } from '@langchain/openai';
 import crypto from 'crypto';
 
 // Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const llm = new ChatOpenAI({
+  modelName: 'gpt-4',
+  temperature: 0.1,
 });
 
 // Simple in-memory cache for parsed results
@@ -264,50 +265,42 @@ async function parseWithAI(text: string): Promise<AIResponseData> {
   const sectionResults = await Promise.all(
     sections.map(async (section) => {
       if (!section.trim()) return null;
-
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4",
-        messages: [{
-          role: "system",
-          content: `You are a resume parser that extracts structured information from resumes. You must:
-1. Return ONLY valid JSON without any additional text, markdown formatting, or explanation
-2. Ensure the JSON structure exactly matches the provided template
-3. Pay special attention to standardizing degree names (e.g., 'MSc' should become 'Master of Science')
-4. Keep degree names separate from fields of study
-5. Format all dates as YYYY-MM-DD
-6. Never include any text outside the JSON structure
-7. Ensure all JSON keys and values are properly quoted
-8. Include all required fields from the template, even if empty
-9. Use null for missing dates, empty string for missing text fields, and empty arrays for missing lists
-10. For experience sections, extract ALL work experiences, not just the first one
-11. Preserve the chronological order of experiences
-12. If a section contains multiple experiences, parse each one separately
-13. For job descriptions:
-    - Preserve bullet points and their formatting
-    - Keep each bullet point as a separate line
-    - Maintain the original structure of the description
-    - Don't combine bullet points into paragraphs
-14. When you see bullet points in job descriptions:
-    - Keep the bullet point characters (•, -, *, etc.)
-    - Preserve the indentation and formatting
-    - Keep each point on its own line
-    - Don't merge them into paragraphs`
-        }, {
-          role: "user",
-          content: `Extract information from this resume section:
+      const prompt =  `You are a resume parser that extracts structured information from resumes. You must:
+      1. Return ONLY valid JSON without any additional text, markdown formatting, or explanation
+      2. Ensure the JSON structure exactly matches the provided template
+      3. Pay special attention to standardizing degree names (e.g., 'MSc' should become 'Master of Science')
+      4. Keep degree names separate from fields of study
+      5. Format all dates as YYYY-MM-DD
+      6. Never include any text outside the JSON structure
+      7. Ensure all JSON keys and values are properly quoted
+      8. Include all required fields from the template, even if empty
+      9. Use null for missing dates, empty string for missing text fields, and empty arrays for missing lists
+      10. For experience sections, extract ALL work experiences, not just the first one
+      11. Preserve the chronological order of experiences
+      12. If a section contains multiple experiences, parse each one separately
+      13. For job descriptions:
+          - Preserve bullet points and their formatting
+          - Keep each bullet point as a separate line
+          - Maintain the original structure of the description
+          - Don't combine bullet points into paragraphs
+      14. When you see bullet points in job descriptions:
+          - Keep the bullet point characters (•, -, *, etc.)
+          - Preserve the indentation and formatting
+          - Keep each point on its own line
+          - Don't merge them into paragraphs
+Extract information from this resume section:
 ${section}
 
 Return it as a valid JSON object following this template:
-${JSON.stringify(template, null, 2)}`
-        }],
-        temperature: 0.1
-      });
+${JSON.stringify(template, null, 2)}`          
 
-      if (!completion.choices[0].message.content) {
+      const completion = await llm.invoke(prompt);
+
+      if (!completion.content) {
         throw new Error('No content in AI response');
       }
 
-      return JSON.parse(completion.choices[0].message.content.trim());
+      return JSON.parse(completion.content as string);
     })
   );
 
