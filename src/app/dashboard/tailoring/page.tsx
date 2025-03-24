@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -8,8 +8,25 @@ import { Separator } from "@/components/ui/separator";
 export default function TailoringDocumentsPage() {
   const [jobDescription, setJobDescription] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [resumeUrl, setResumeUrl] = useState<string | null>(null);
-  const [coverLetterUrl, setCoverLetterUrl] = useState<string | null>(null);
+  const [resumeBlob, setResumeBlob] = useState<Blob | null>(null);
+  const [coverLetterBlob, setCoverLetterBlob] = useState<Blob | null>(null);
+  const [jobTitle, setJobTitle] = useState<string>("");
+  const [userName, setUserName] = useState<string>("");
+
+  useEffect(() => {
+    const fetchUserName = async () => {
+      try {
+        const response = await fetch("/api/user/profile");
+        if (response.ok) {
+          const data = await response.json();
+          setUserName(data.user.name || "");
+        }
+      } catch (error) {
+        console.error("Error fetching user name:", error);
+      }
+    };
+    fetchUserName();
+  }, []);
 
   const handleGenerateDocuments = async () => {
     if (!jobDescription.trim()) {
@@ -17,10 +34,15 @@ export default function TailoringDocumentsPage() {
     }
 
     setIsLoading(true);
-    setResumeUrl(null);
-    setCoverLetterUrl(null);
+    setResumeBlob(null);
+    setCoverLetterBlob(null);
     
     try {
+      // Extract job title from description (first line or first sentence)
+      const titleMatch = jobDescription.match(/^([^\n]+)/);
+      const extractedTitle = titleMatch ? titleMatch[1].replace(/[^a-zA-Z0-9\s-]/g, '').trim() : 'position';
+      setJobTitle(extractedTitle);
+      
       // Generate resume
       const resumeResponse = await fetch("/api/tailoring/resume", {
         method: "POST",
@@ -33,7 +55,7 @@ export default function TailoringDocumentsPage() {
       }
       
       const resumeBlob = await resumeResponse.blob();
-      setResumeUrl(URL.createObjectURL(resumeBlob));
+      setResumeBlob(resumeBlob);
       
       // Generate cover letter
       const coverLetterResponse = await fetch("/api/tailoring/cover-letter", {
@@ -47,13 +69,28 @@ export default function TailoringDocumentsPage() {
       }
       
       const coverLetterBlob = await coverLetterResponse.blob();
-      setCoverLetterUrl(URL.createObjectURL(coverLetterBlob));
+      setCoverLetterBlob(coverLetterBlob);
     } catch (error) {
       console.error("Error generating tailored documents:", error);
       alert("Failed to generate tailored documents. Please try again.");
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleDownload = (blob: Blob | null, type: 'resume' | 'coverletter') => {
+    if (!blob) return;
+    
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const sanitizedName = userName.toLowerCase().replace(/\s+/g, '_');
+    console.log(sanitizedName);
+    a.download = `${sanitizedName}_${type}_${jobTitle.toLowerCase().replace(/\s+/g, '_')}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
   };
 
   return (
@@ -99,8 +136,8 @@ export default function TailoringDocumentsPage() {
             Your tailored resume will highlight skills and experiences most relevant to this job position.
           </p>
           <Button 
-            onClick={() => resumeUrl && window.open(resumeUrl, "_blank")}
-            disabled={!resumeUrl}
+            onClick={() => handleDownload(resumeBlob, 'resume')}
+            disabled={!resumeBlob}
             variant="outline"
             className="w-full"
           >
@@ -115,8 +152,8 @@ export default function TailoringDocumentsPage() {
             based on the job requirements.
           </p>
           <Button 
-            onClick={() => coverLetterUrl && window.open(coverLetterUrl, "_blank")}
-            disabled={!coverLetterUrl}
+            onClick={() => handleDownload(coverLetterBlob, 'coverletter')}
+            disabled={!coverLetterBlob}
             variant="outline"
             className="w-full"
           >

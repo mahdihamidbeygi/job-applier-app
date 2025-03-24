@@ -35,6 +35,13 @@ interface Certification {
   url: string | null;
 }
 
+interface Project {
+  title: string;
+  description: string | null;
+  url: string | null;
+  date: Date | null;
+}
+
 export async function PUT(request: Request) {
   try {
     const session = await auth();
@@ -53,13 +60,15 @@ export async function PUT(request: Request) {
       education,
       publications,
       certifications,
+      projects,
       phone,
       location
     } = data;
 
     console.log('Received data in API:', {
       publications,
-      certifications
+      certifications,
+      projects
     });
 
     // Basic URL validation
@@ -140,6 +149,17 @@ export async function PUT(request: Request) {
             })),
           },
         }),
+        ...(projects && {
+          projects: {
+            deleteMany: {},
+            create: projects.map((proj: Project) => ({
+              title: proj.title,
+              description: proj.description || '',
+              url: proj.url || '',
+              date: proj.date || null,
+            })),
+          },
+        }),
       },
       create: {
         userId: session.user.id,
@@ -201,6 +221,16 @@ export async function PUT(request: Request) {
               issuer: cert.issuer,
               date: cert.date,
               url: cert.url,
+            })),
+          },
+        }),
+        ...(projects && {
+          projects: {
+            create: projects.map((proj: Project) => ({
+              title: proj.title,
+              description: proj.description || '',
+              url: proj.url || '',
+              date: proj.date || null,
             })),
           },
         }),
