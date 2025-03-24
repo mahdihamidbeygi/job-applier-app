@@ -1,6 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { ResumeData } from '@/types/resume';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatOllama } from '@langchain/community/chat_models/ollama';
 import { SystemMessage, HumanMessage, BaseMessage } from '@langchain/core/messages';
 
 export async function convertMarkdownToPDF(markdown: string, data: ResumeData ): Promise<Buffer> {
@@ -89,22 +89,34 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData ):
         y += 1;
         return y;
       };      
-      // Get skills from OpenAI
-      const skillsPrompt = `extract six keyword skills for a resume based on the following:
-
-      Job Description:
-      ${data.jobDescription}
-      
-      Candidate Information:
-      - Experience: ${data.experience}
-      
-      extract six keyword skills from the resume based on the job description`;
-      
-      const llm = new ChatOpenAI({
-        modelName: 'gpt-4',
-        temperature: 0.7,
+      // Get skills from Ollama
+      const llm = new ChatOllama({
+        model: "phi4",
+        temperature: 0.6,
       });
 
+      const skillsPrompt = `Extract exactly 6 most relevant technical skills following these rules:
+
+1. Skills must be:
+   - Technical and specific (e.g., "Python" not "Programming")
+   - Found in both job description and candidate experience
+   - Current and in-demand
+   - Single words or short phrases (max 2 words)
+
+2. Format:
+   - Return ONLY the skills
+   - Separate with commas
+   - No numbering or bullets
+   - No explanations
+
+Job Description:
+${data.jobDescription}
+
+Candidate Experience:
+${data.experience.map(exp => exp.title + ': ' + exp.description).join('\n')}
+
+Return exactly 6 skills that best match the job requirements.`;
+      
       const messages: BaseMessage[] = [
         new SystemMessage(
           "you are a perfect resume writer, extract six keyword skills from the resume based on the job description, skills should be separated by comma."
@@ -119,7 +131,7 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData ):
         ? skillsCompletion.content 
         : '';
       
-      // Use skills from OpenAI or fallback to resume data
+      // Use skills from Ollama or fallback to resume data
       const skills = data.skills.technical.slice(0, 3).join(", ");
       // Ensure skills are always in array format
       const skillsArray: string[] = skillsContent 
@@ -166,18 +178,26 @@ export async function convertMarkdownToPDF(markdown: string, data: ResumeData ):
           }))
         : 5;
       
-      // Generate summary using OpenAI
-      const summaryPrompt = `Write a concise professional summary for a resume based on the following:
+      // Generate summary using Ollama
+      const summaryPrompt = `Write a professional summary for a resume. Return ONLY the summary text, no explanations.
 
-Job Description:
+Rules:
+1. Length: 2-3 sentences only
+2. Format: Start with role and years of experience
+3. Content:
+   - Include key skills from job description
+   - Match experience level from job requirements
+   - Use action verbs (leverage, drive, contribute)
+   - Focus on relevance to the role
+
+   Job Description:
 ${data.jobDescription}
 
 Candidate Information:
-- Resume: ${data}
 - Current Role: ${professionalTitle}
 - Key Skills: ${skills}
 
-Keep it to 1-2 sentences focused on relevant experience and skills for this role.`;
+Return only the summary text.`;
 
       const summaryCompletion = await llm.invoke([
         new SystemMessage("You are a professional resume writer who creates compelling, tailored summaries."),

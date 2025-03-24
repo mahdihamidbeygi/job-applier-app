@@ -97,22 +97,23 @@ export async function convertCoverLetterToPDF(
         return y;
       };
 
-      // Cover letter content with properly formatted paragraphs
-      const paragraphs = coverLetter.split('\n\n');
+      // Process the cover letter text
+      const paragraphs = coverLetter.split('\n\n').filter(p => p.trim());
+      
+      // Add each paragraph with proper justification
       paragraphs.forEach((paragraph, index) => {
-        if (paragraph.trim()) {
-          // Don't justify bullet points - check if paragraph starts with • or -
-          const hasBulletPoints = paragraph.trim().startsWith('•') || paragraph.trim().startsWith('-');
-          
-          y = addText(paragraph.trim(), 11, { 
-            justify: !hasBulletPoints, // Only justify if not a bullet point
-            maxWidth: contentWidth,
-            indent: hasBulletPoints ? 5 : 0 // Add indent for bullet points
-          });
-          
-          if (index < paragraphs.length - 1) {
-            y += 2;
-          }
+        // Skip empty paragraphs
+        if (!paragraph.trim()) return;
+        
+        // Add the paragraph with justification
+        y = addText(paragraph.trim(), 11, {
+          maxWidth: contentWidth,
+          justify: true
+        });
+        
+        // Add small space between paragraphs
+        if (index < paragraphs.length - 1) {
+          y += 2;
         }
       });
 

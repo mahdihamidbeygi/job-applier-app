@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { convertCoverLetterToPDF } from '@/lib/coverLetterConverter';
 import { auth } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatOllama } from '@langchain/community/chat_models/ollama';
+
 export async function POST(request: NextRequest) {
   try {
     // Check authentication
@@ -51,24 +52,50 @@ export async function POST(request: NextRequest) {
       ? profile.skills.slice(0, 3).map(skill => skill.name).join(", ")
       : "relevant technical skills";
       
-    // Generate cover letter using OpenAI
-    const llm = new ChatOpenAI({
-      modelName: 'gpt-4',
+    // Generate cover letter using Ollama
+    const llm = new ChatOllama({
+      model: "phi4",
       temperature: 0.5,
     });
     
-    const prompt = `Write a professional cover letter for a job application. Use the following information:
+    const prompt = `Write a professional cover letter following these rules:
+
+1. Content:
+   - Start directly with "Dear Hiring Manager"
+   - No headers, no date, no address blocks
+   - 3-4 paragraphs only
+   - Focus on relevant experience and skills
+   - Include specific examples from experience
+   - Show enthusiasm for the role
+   - End with "Sincerely, [Name]"
+
+2. Format:
+   - Justify all paragraphs
+   - No bullet points
+   - No numbering
+   - No extra spacing between paragraphs
+   - No questions or answers section
+
+3. Style:
+   - Professional tone
+   - Action verbs
+   - Specific achievements
+   - Clear connection to job requirements
 
 Job Description:
 ${jobDescription}
 
 Candidate Information:
-- Current/Recent Role: ${latestExp?.title || "professional"}
-- Current/Recent Company: ${latestExp?.company || "various organizations"} 
-- Top Skills: ${topSkills}
-- Full Name: ${profile.name}
+- Current Role: ${latestExp?.title || "professional"}
+- Company: ${latestExp?.company || "various organizations"} 
+- Key Skills: ${topSkills}
+- Name: ${profile.name}
 
-The cover letter should be personalized to the job description while highlighting the candidate's relevant experience and skills. Keep it concise, professional and compelling.`;
+Write a compelling cover letter that immediately connects the candidate's experience to the job requirements.
+if there are any questions in the job description, please answer them at the last paragraph of the cover letter.
+Do not make any assumptions about the candidate's citizenship or residency situation until they mention it in the job description.
+`;
+
 
     const completion = await llm.invoke(prompt);
     const coverLetterContent = completion.content as string || `
