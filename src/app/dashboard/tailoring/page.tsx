@@ -19,7 +19,7 @@ export default function TailoringDocumentsPage() {
         const response = await fetch("/api/user/profile");
         if (response.ok) {
           const data = await response.json();
-          setUserName(data.name || "");
+          setUserName(data.user.name || "");
         }
       } catch (error) {
         console.error("Error fetching user name:", error);
