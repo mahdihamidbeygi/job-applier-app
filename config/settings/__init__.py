@@ -1,0 +1,3 @@
+"""
+Django settings module initialization
+""" 

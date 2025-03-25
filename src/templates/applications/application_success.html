@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Application Submitted - Job Applier{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+                        <i class="fas fa-check text-green-600 text-xl"></i>
+                    </div>
+                    <h1 class="mt-4 text-2xl font-bold text-gray-900">Application Submitted Successfully!</h1>
+                    <p class="mt-2 text-sm text-gray-500">
+                        Your application for the {{ application.job.title }} position at {{ application.job.company }} has been submitted.
+                    </p>
+                </div>
+
+                <div class="mt-8">
+                    <h2 class="text-lg font-medium text-gray-900">Next Steps</h2>
+                    <div class="mt-4 space-y-4">
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-calendar-check text-blue-500"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-gray-900">Track Your Application</h3>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    You can track the status of your application and any updates in your applications dashboard.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-bell text-blue-500"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-gray-900">Stay Updated</h3>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    You'll receive email notifications about any updates to your application status.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-start">
+                            <div class="flex-shrink-0">
+                                <i class="fas fa-search text-blue-500"></i>
+                            </div>
+                            <div class="ml-3">
+                                <h3 class="text-sm font-medium text-gray-900">Keep Searching</h3>
+                                <p class="mt-1 text-sm text-gray-500">
+                                    While waiting for a response, you can continue searching for other job opportunities.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-8 flex justify-center space-x-4">
+                    <a href="{% url 'applications:application_detail' application.id %}"
+                       class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        View Application
+                    </a>
+                    <a href="{% url 'jobs:job_list' %}"
+                       class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Find More Jobs
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

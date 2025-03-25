@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "job-applier"
+version = "0.1.0"
+description = "AI-powered job application system"
+requires-python = ">=3.9"
+dependencies = [
+    "Django>=4.2,<5.0",
+    "djangorestframework==3.14.0",
+    "django-cors-headers==4.3.1",
+    "django-environ==0.11.2",
+    "playwright>=1.40.0",
+    "beautifulsoup4==4.12.0",
+    "openai==1.12.0",
+    "celery==5.3.0",
+    "django-celery-beat==2.5.0",
+    "redis==5.0.0",
+    "python-dotenv==1.0.0",
+    "requests==2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "isort",
+    "flake8",
+    "mypy",
+    "pytest",
+    "pytest-django",
+]
+
+[tool.black]
+line-length = 88
+target-version = ['py39']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true 

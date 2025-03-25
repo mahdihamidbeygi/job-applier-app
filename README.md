@@ -1,122 +1,134 @@
-# AI-Powered Job Application Assistant
+# AI-Powered Job Application System
 
-An intelligent job application automation system that helps streamline your job search process using AI and automation.
+An intelligent job application automation system that helps users find and apply for jobs using AI.
 
 ## Features
 
-- **Smart Resume Management**
-  - PDF resume parsing and analysis
-  - Automatic resume tailoring for specific jobs
-  - Skills and experience extraction
-  - Vector storage for efficient matching
-
-- **Multi-Platform Job Search**
-  - Integration with LinkedIn, Indeed (RSS feed and scraping), and other platforms
-  - Automated job matching based on your profile
-  - Smart filtering and ranking of opportunities
-  - Both internal and external application support
-
-- **AI-Powered Features**
-  - Resume-job matching analysis
-  - Automatic cover letter generation
-  - Job description analysis
-  - Application success prediction
-
-- **Automated Application Process**
-  - One-click applications for supported platforms
-  - Automated form filling for external applications
-  - Application tracking and status monitoring
-  - Smart duplicate detection
+- Profile analysis from LinkedIn and GitHub
+- Automated job search across multiple platforms
+- AI-powered resume and cover letter generation
+- Automated job application submission
+- Job matching and recommendation system
+- Pydantic-powered data validation and AI integration
 
 ## Technology Stack
 
-- **Frontend**: Next.js, TypeScript, Tailwind CSS
-- **Backend**: Node.js, Prisma
-- **AI/ML**: OpenAI GPT-4, LangChain
-- **Vector Database**: Pinecone
-- **Web Automation**: Puppeteer
-- **Job Data Sources**: Indeed RSS feed, web scraping
-- **Other Tools**: PDF parsing, form automation
+- Django 5.0+
+- PostgreSQL
+- Redis
+- Celery
+- OpenAI GPT-4
+- Playwright
+- BeautifulSoup4
+- Pydantic & Pydantic AI
 
-## Getting Started
+## Prerequisites
+
+- Python 3.9+
+- pip (Python package manager)
+- PostgreSQL
+- Redis
+- OpenAI API key
+
+## Setup
 
 1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/job-applier-app.git
-   cd job-applier-app
-   ```
+```bash
+git clone https://github.com/yourusername/job-applier.git
+cd job-applier
+```
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+# On Windows:
+venv\Scripts\activate
+# On Unix or MacOS:
+source venv/bin/activate
+```
 
-3. Set up environment variables:
-   ```bash
-   cp .env.example .env
-   ```
-   Fill in your API keys and configuration values in the `.env` file.
+3. Install dependencies:
+```bash
+# Install main dependencies
+pip install -e .
 
-4. Initialize the database:
-   ```bash
-   npx prisma generate
-   npx prisma db push
-   ```
+# Install development dependencies (optional)
+pip install -e ".[dev]"
+```
 
-5. Run the development server:
-   ```bash
-   npm run dev
-   ```
+4. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your configuration
+```
 
-6. Open [http://localhost:3000](http://localhost:3000) in your browser.
+5. Set up the database:
+```bash
+python manage.py migrate
+```
 
-## Configuration
+6. Install Playwright browsers:
+```bash
+playwright install
+```
 
-The application requires several API keys and configurations to work properly:
+7. Run the development server:
+```bash
+python manage.py runserver
+```
 
-- OpenAI API key for AI features
-- Pinecone API key for vector storage
-- LinkedIn API credentials (optional)
-- Indeed configuration:
-  - RSS feed (enabled by default, no API key required)
-  - Scraping fallback (with Puppeteer support)
-- PostgreSQL database connection
+8. Start Celery worker:
+```bash
+celery -A config worker -l info
+```
 
-Refer to `.env.example` for all required environment variables.
+9. Start Celery beat for scheduled tasks:
+```bash
+celery -A config beat -l info
+```
 
-## Indeed Integration
+## Project Structure
 
-The application supports two methods for fetching Indeed job listings:
+```
+job_applier/
+├── apps/
+│   ├── users/          # User management
+│   ├── profiles/       # Profile management
+│   ├── jobs/          # Job search and management
+│   └── applications/  # Application handling
+├── services/
+│   ├── ai/           # AI services
+│   ├── scraping/     # Web scraping
+│   └── automation/   # Form automation
+├── config/           # Project configuration
+└── tests/           # Test files
+```
 
-1. **RSS Feed** (Recommended): Uses Indeed's public RSS feed to fetch job listings without requiring an API key. This method is more reliable and less likely to be blocked.
-   - Enable with `INDEED_USE_RSS_FEED=true` in your `.env` file
-   - Supports pagination to fetch more than the default 25 results per request
-   - Provides structured job data with minimal processing
+## Development
 
-2. **Web Scraping** (Fallback): Uses direct HTTP requests and Puppeteer for headless browsing when the RSS feed is not available.
-   - Configure with `INDEED_ENABLE_PUPPETEER` and `INDEED_MAX_RETRIES` in your `.env` file
-   - Used automatically if RSS feed is disabled or fails
+1. Run tests:
+```bash
+pytest
+```
 
-## Usage
+2. Format code:
+```bash
+black .
+isort .
+```
 
-1. **Profile Setup**
-   - Upload your resume
-   - Connect your LinkedIn profile (optional)
-   - Set your job preferences
-
-2. **Job Search**
-   - Select target platforms
-   - Set search criteria
-   - Review matched opportunities
-
-3. **Application Process**
-   - Review job-specific resume suggestions
-   - Generate tailored cover letters
-   - Submit applications automatically
+3. Type checking:
+```bash
+mypy .
+```
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 

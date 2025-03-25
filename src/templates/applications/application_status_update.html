@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Update Application Status - Job Applier{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="max-w-3xl mx-auto">
+        <div class="bg-white shadow sm:rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
+                        <i class="fas fa-sync text-blue-600 text-xl"></i>
+                    </div>
+                    <h1 class="mt-4 text-2xl font-bold text-gray-900">Update Application Status</h1>
+                    <p class="mt-2 text-sm text-gray-500">
+                        Update the status of your application for the {{ application.job.title }} position at {{ application.job.company }}.
+                    </p>
+                </div>
+
+                <div class="mt-8">
+                    <h2 class="text-lg font-medium text-gray-900">Current Status</h2>
+                    <div class="mt-4">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                            {% if application.status == 'applied' %}bg-blue-100 text-blue-800
+                            {% elif application.status == 'interviewing' %}bg-yellow-100 text-yellow-800
+                            {% elif application.status == 'rejected' %}bg-red-100 text-red-800
+                            {% elif application.status == 'accepted' %}bg-green-100 text-green-800
+                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                            {{ application.get_status_display }}
+                        </span>
+                    </div>
+                </div>
+
+                <form method="post" class="mt-8">
+                    {% csrf_token %}
+                    <div>
+                        <label for="status" class="block text-sm font-medium text-gray-700">New Status</label>
+                        <select name="status" id="status"
+                                class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                            {% for status_value, status_label in status_choices %}
+                            <option value="{{ status_value }}" {% if application.status == status_value %}selected{% endif %}>
+                                {{ status_label }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                        {% if form.status.errors %}
+                        <p class="mt-1 text-sm text-red-600">{{ form.status.errors.0 }}</p>
+                        {% endif %}
+                    </div>
+
+                    <div class="mt-8">
+                        <h2 class="text-lg font-medium text-gray-900">Status History</h2>
+                        <div class="mt-4 flow-root">
+                            <ul role="list" class="-mb-8">
+                                {% for status_update in application.status_updates.all %}
+                                <li>
+                                    <div class="relative pb-8">
+                                        {% if not forloop.last %}
+                                        <span class="absolute top-4 left-4 -ml-px h-full w-0.5 bg-gray-200" aria-hidden="true"></span>
+                                        {% endif %}
+                                        <div class="relative flex space-x-3">
+                                            <div>
+                                                <span class="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center ring-8 ring-white">
+                                                    <i class="fas fa-check text-white text-sm"></i>
+                                                </span>
+                                            </div>
+                                            <div class="min-w-0 flex-1 pt-1.5 flex justify-between space-x-4">
+                                                <div>
+                                                    <p class="text-sm text-gray-500">
+                                                        Status changed to
+                                                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium 
+                                                            {% if status_update.status == 'applied' %}bg-blue-100 text-blue-800
+                                                            {% elif status_update.status == 'interviewing' %}bg-yellow-100 text-yellow-800
+                                                            {% elif status_update.status == 'rejected' %}bg-red-100 text-red-800
+                                                            {% elif status_update.status == 'accepted' %}bg-green-100 text-green-800
+                                                            {% else %}bg-gray-100 text-gray-800{% endif %}">
+                                                            {{ status_update.get_status_display }}
+                                                        </span>
+                                                    </p>
+                                                    <p class="text-sm text-gray-500">
+                                                        {{ status_update.created_at|date:"F j, Y g:i A" }}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 flex justify-center space-x-4">
+                        <a href="{% url 'applications:application_detail' application.id %}"
+                           class="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Cancel
+                        </a>
+                        <button type="submit"
+                                class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            Update Status
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 

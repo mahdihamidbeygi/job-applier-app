@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}Edit Profile - Job Applier{% endblock %}
+
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="md:grid md:grid-cols-3 md:gap-6">
+        <div class="md:col-span-1">
+            <div class="px-4 sm:px-0">
+                <h3 class="text-lg font-medium leading-6 text-gray-900">Profile Information</h3>
+                <p class="mt-1 text-sm text-gray-600">
+                    Update your profile information to help us match you with the best job opportunities.
+                </p>
+            </div>
+        </div>
+
+        <div class="mt-5 md:mt-0 md:col-span-2">
+            <form method="post" enctype="multipart/form-data" class="space-y-6">
+                {% csrf_token %}
+                
+                <!-- Personal Information -->
+                <div class="bg-white shadow sm:rounded-lg">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h4 class="text-lg font-medium text-gray-900">Personal Information</h4>
+                        <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+                            <div class="sm:col-span-3">
+                                <label for="first_name" class="block text-sm font-medium text-gray-700">First name</label>
+                                <input type="text" name="first_name" id="first_name" value="{{ form.first_name.value|default:'' }}"
+                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                {% if form.first_name.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.first_name.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="sm:col-span-3">
+                                <label for="last_name" class="block text-sm font-medium text-gray-700">Last name</label>
+                                <input type="text" name="last_name" id="last_name" value="{{ form.last_name.value|default:'' }}"
+                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                {% if form.last_name.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.last_name.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="sm:col-span-4">
+                                <label for="email" class="block text-sm font-medium text-gray-700">Email address</label>
+                                <input type="email" name="email" id="email" value="{{ form.email.value|default:'' }}"
+                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                {% if form.email.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.email.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="sm:col-span-4">
+                                <label for="phone" class="block text-sm font-medium text-gray-700">Phone number</label>
+                                <input type="tel" name="phone" id="phone" value="{{ form.phone.value|default:'' }}"
+                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                {% if form.phone.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.phone.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Professional Information -->
+                <div class="bg-white shadow sm:rounded-lg">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h4 class="text-lg font-medium text-gray-900">Professional Information</h4>
+                        <div class="mt-6 grid grid-cols-1 gap-y-6 gap-x-4 sm:grid-cols-6">
+                            <div class="sm:col-span-4">
+                                <label for="title" class="block text-sm font-medium text-gray-700">Professional Title</label>
+                                <input type="text" name="title" id="title" value="{{ form.title.value|default:'' }}"
+                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                {% if form.title.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.title.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="sm:col-span-4">
+                                <label for="location" class="block text-sm font-medium text-gray-700">Location</label>
+                                <input type="text" name="location" id="location" value="{{ form.location.value|default:'' }}"
+                                       class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                {% if form.location.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.location.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="sm:col-span-6">
+                                <label for="bio" class="block text-sm font-medium text-gray-700">Professional Summary</label>
+                                <textarea name="bio" id="bio" rows="4"
+                                          class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">{{ form.bio.value|default:'' }}</textarea>
+                                {% if form.bio.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.bio.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+
+                            <div class="sm:col-span-6">
+                                <label for="skills" class="block text-sm font-medium text-gray-700">Skills</label>
+                                <select name="skills" id="skills" multiple
+                                        class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm">
+                                    {% for skill in form.skills.field.choices %}
+                                    <option value="{{ skill.0 }}" {% if skill.0 in form.skills.value %}selected{% endif %}>
+                                        {{ skill.1 }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                                {% if form.skills.errors %}
+                                <p class="mt-2 text-sm text-red-600">{{ form.skills.errors.0 }}</p>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Resume -->
+                <div class="bg-white shadow sm:rounded-lg">
+                    <div class="px-4 py-5 sm:p-6">
+                        <h4 class="text-lg font-medium text-gray-900">Resume</h4>
+                        <div class="mt-6">
+                            <div class="flex items-center">
+                                <div class="flex-shrink-0">
+                                    {% if form.resume.value %}
+                                    <i class="fas fa-file-pdf text-gray-400 text-3xl"></i>
+                                    {% else %}
+                                    <i class="fas fa-file-upload text-gray-400 text-3xl"></i>
+                                    {% endif %}
+                                </div>
+                                <div class="ml-5">
+                                    <label for="resume" class="block text-sm font-medium text-gray-700">
+                                        {% if form.resume.value %}
+                                        Current Resume: {{ form.resume.value.name }}
+                                        {% else %}
+                                        Upload Resume
+                                        {% endif %}
+                                    </label>
+                                    <input type="file" name="resume" id="resume" accept=".pdf"
+                                           class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                                    {% if form.resume.errors %}
+                                    <p class="mt-2 text-sm text-red-600">{{ form.resume.errors.0 }}</p>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="flex justify-end">
+                    <button type="submit" class="ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        Save Profile
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+    $(document).ready(function() {
+        $('#skills').select2({
+            placeholder: 'Select your skills',
+            allowClear: true,
+            tags: true
+        });
+    });
+</script>
+{% endblock %} 

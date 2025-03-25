@@ -1,0 +1,59 @@
+{% extends 'base/base.html' %}
+
+{% block title %}{{ title }} - Job Applier App{% endblock %}
+
+{% block content %}
+<div class="bg-white shadow overflow-hidden sm:rounded-lg">
+    <div class="px-4 py-5 sm:px-6">
+        <h1 class="text-2xl font-bold text-gray-900">{{ title }}</h1>
+    </div>
+    <div class="border-t border-gray-200 px-4 py-5 sm:px-6">
+        <form method="post" class="space-y-6">
+            {% csrf_token %}
+            {% for field in form %}
+                <div>
+                    <label for="{{ field.id_for_label }}" class="block text-sm font-medium text-gray-700">
+                        {{ field.label }}
+                    </label>
+                    <div class="mt-1">
+                        {% if field.field.widget.input_type == 'textarea' %}
+                            <textarea
+                                name="{{ field.name }}"
+                                id="{{ field.id_for_label }}"
+                                class="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md {% if field.errors %}border-red-300{% endif %}"
+                                rows="4"
+                            >{{ field.value|default:'' }}</textarea>
+                        {% else %}
+                            <input
+                                type="{{ field.field.widget.input_type }}"
+                                name="{{ field.name }}"
+                                id="{{ field.id_for_label }}"
+                                value="{{ field.value|default:'' }}"
+                                class="shadow-sm focus:ring-blue-500 focus:border-blue-500 block w-full sm:text-sm border-gray-300 rounded-md {% if field.errors %}border-red-300{% endif %}"
+                            >
+                        {% endif %}
+                        {% if field.errors %}
+                            <div class="mt-1">
+                                {% for error in field.errors %}
+                                    <p class="text-red-600 text-sm">{{ error }}</p>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                        {% if field.help_text %}
+                            <p class="mt-1 text-sm text-gray-500">{{ field.help_text }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            {% endfor %}
+            <div class="flex justify-end space-x-4">
+                <a href="{% url 'job_list' %}" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded">
+                    Cancel
+                </a>
+                <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    Save Job
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %} 

@@ -1,0 +1,130 @@
+{% extends 'base.html' %}
+
+{% block title %}My Applications{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="bg-white shadow rounded-lg">
+        <div class="px-4 py-5 sm:p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold text-gray-900">My Applications</h1>
+                {% if user.profile.is_employer %}
+                    <a href="{% url 'job_create' %}"
+                       class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                        <i class="fas fa-plus mr-2"></i> Post New Job
+                    </a>
+                {% endif %}
+            </div>
+
+            {% if applications %}
+                <div class="space-y-6">
+                    {% for application in applications %}
+                        <div class="border rounded-lg p-6 hover:bg-gray-50">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-gray-900">
+                                        <a href="{% url 'job_detail' application.job.id %}" class="hover:text-blue-600">
+                                            {{ application.job.title }}
+                                        </a>
+                                    </h2>
+                                    <p class="mt-1 text-sm text-gray-500">{{ application.job.company }}</p>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
+                                        {% if application.status == 'pending' %}
+                                            bg-yellow-100 text-yellow-800
+                                        {% elif application.status == 'reviewed' %}
+                                            bg-blue-100 text-blue-800
+                                        {% elif application.status == 'accepted' %}
+                                            bg-green-100 text-green-800
+                                        {% else %}
+                                            bg-red-100 text-red-800
+                                        {% endif %}">
+                                        {{ application.get_status_display }}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <div class="text-sm text-gray-500">
+                                    <i class="fas fa-calendar-alt mr-2"></i>
+                                    Applied {{ application.created_at|date:"F j, Y" }}
+                                </div>
+                                <div class="text-sm text-gray-500">
+                                    <i class="fas fa-map-marker-alt mr-2"></i>
+                                    {{ application.job.location }}
+                                </div>
+                            </div>
+                            <div class="mt-4">
+                                <h3 class="text-sm font-medium text-gray-900">Cover Letter Preview</h3>
+                                <p class="mt-1 text-sm text-gray-500 line-clamp-3">
+                                    {{ application.cover_letter }}
+                                </p>
+                            </div>
+                            <div class="mt-4 flex justify-end space-x-3">
+                                <a href="{% url 'job_detail' application.job.id %}"
+                                   class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                    <i class="fas fa-eye mr-2"></i> View Job
+                                </a>
+                                {% if application.status == 'pending' %}
+                                    <a href="{% url 'application_edit' application.id %}"
+                                       class="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                                        <i class="fas fa-edit mr-2"></i> Edit Application
+                                    </a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Pagination -->
+                {% if is_paginated %}
+                    <div class="mt-6 flex justify-center">
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                            {% if page_obj.has_previous %}
+                                <a href="?page={{ page_obj.previous_page_number }}"
+                                   class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                    <span class="sr-only">Previous</span>
+                                    <i class="fas fa-chevron-left"></i>
+                                </a>
+                            {% endif %}
+
+                            {% for num in page_obj.paginator.page_range %}
+                                {% if page_obj.number == num %}
+                                    <span class="relative inline-flex items-center px-4 py-2 border border-blue-500 bg-blue-50 text-sm font-medium text-blue-600">
+                                        {{ num }}
+                                    </span>
+                                {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                                    <a href="?page={{ num }}"
+                                       class="relative inline-flex items-center px-4 py-2 border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+                                        {{ num }}
+                                    </a>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if page_obj.has_next %}
+                                <a href="?page={{ page_obj.next_page_number }}"
+                                   class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50">
+                                    <span class="sr-only">Next</span>
+                                    <i class="fas fa-chevron-right"></i>
+                                </a>
+                            {% endif %}
+                        </nav>
+                    </div>
+                {% endif %}
+            {% else %}
+                <div class="text-center py-12">
+                    <i class="fas fa-file-alt text-gray-400 text-4xl mb-4"></i>
+                    <h3 class="text-lg font-medium text-gray-900">No applications yet</h3>
+                    <p class="mt-1 text-sm text-gray-500">Start applying for jobs to see your applications here.</p>
+                    <div class="mt-6">
+                        <a href="{% url 'job_list' %}"
+                           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+                            <i class="fas fa-search mr-2"></i> Browse Jobs
+                        </a>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 
