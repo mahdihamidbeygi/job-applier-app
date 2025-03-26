@@ -6,13 +6,7 @@ import sys
 
 def main():
     """Run administrative tasks."""
-    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'src.settings')
-
-    # Add the project root directory to the Python path
-    current_path = os.path.dirname(os.path.abspath(__file__))
-    sys.path.insert(0, current_path)
-    sys.path.insert(0, os.path.join(current_path, 'job_applier'))
-
+    os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'job_applier.settings')
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:
@@ -25,4 +19,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main() 
+    main()

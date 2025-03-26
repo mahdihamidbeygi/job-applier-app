@@ -1,0 +1,49 @@
+{% extends 'core/base.html' %}
+
+{% block title %}Login - Job Applier{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-md-6 col-lg-5">
+            <div class="card shadow-sm">
+                <div class="card-body p-5">
+                    <div class="text-center mb-4">
+                        <i class="fas fa-user-circle fa-3x text-primary mb-3"></i>
+                        <h2 class="card-title mb-3">Welcome Back</h2>
+                        <p class="text-muted">Please login to access your profile</p>
+                    </div>
+
+                    <form method="post">
+                        {% csrf_token %}
+                        
+                        {% if form.errors %}
+                            <div class="alert alert-danger">
+                                <small>Your username and password didn't match. Please try again.</small>
+                            </div>
+                        {% endif %}
+
+                        <div class="mb-3">
+                            <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
+                            {{ form.username|addclass:"form-control" }}
+                        </div>
+
+                        <div class="mb-4">
+                            <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
+                            {{ form.password|addclass:"form-control" }}
+                        </div>
+
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg">Login</button>
+                        </div>
+                    </form>
+
+                    <div class="text-center mt-4">
+                        <p class="mb-0">Don't have an account? <a href="{% url 'core:register' %}" class="text-primary">Sign up</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %} 
