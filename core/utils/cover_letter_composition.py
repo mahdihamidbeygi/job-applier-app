@@ -80,8 +80,17 @@ class CoverLetterComposition:
         elements = []
         
         try:
-            hiring_manager = self.ollama_client.generate(f"if name of hiring manager is mentioned in the job description: {self.job_description}, return the name, otherwise return 'Hiring Manager'")
-            salutation = f"Dear {hiring_manager},"
+            # Generate hiring manager name
+            response = self.ollama_client.generate(
+                "Return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description or 'Hiring Manager' if no name is found. Do not include any explanatory text."
+            )
+            # Clean the response to ensure it's valid JSON
+            response = response.strip()
+            if response.startswith('{') and response.endswith('}'):
+                hiring_manager = json.loads(response)
+                salutation = f"Dear {hiring_manager.get('hiring_manager_name', 'Hiring Manager')},"
+            else:
+                salutation = "Dear Hiring Manager,"
         except Exception as e:
             logger.info(f"Error generating hiring manager: {str(e)}")
             salutation = "Dear Hiring Manager,"
@@ -228,15 +237,7 @@ class CoverLetterComposition:
         generated_content = self.ollama_client.generate(prompt)
         # Parse the generated content as JSON
         content = json.loads(generated_content)
-        # except Exception as e:
-        #     logger.error(f"Error generating cover letter content: {str(e)}")
-        #     # Fallback to default content if generation fails
-        #     content = {
-        #         'opening': f"I am writing to express my strong interest in the {self.company_info.get('position', '')} position at {self.company_info.get('company_name', '')}. With my background and experience, I am confident in my ability to contribute effectively to your team.",
-        #         'main_content': f"I am particularly drawn to {self.company_info.get('company_name', '')} because of its innovative approach and industry leadership. My experience aligns well with the requirements outlined in the job description, particularly in areas such as {', '.join(self.company_info.get('job_description', '').split()[:5])}.",
-        #         'closing': "I would welcome the opportunity to discuss how my skills and experience could benefit your team. Thank you for considering my application."
-        #     }
-        
+                
         # Add body
         story.extend(self._create_body(content))
         

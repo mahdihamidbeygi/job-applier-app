@@ -23,17 +23,26 @@
               <button
                 type="button"
                 class="btn btn-primary"
-                onclick="generateDocuments('resume')"
+                id="generateResumeBtn"
+                onclick="generateDocuments('resume', this)"
               >
                 Generate Tailored Resume
               </button>
               <button
                 type="button"
                 class="btn btn-primary"
-                onclick="generateDocuments('cover_letter')"
+                id="generateCoverLetterBtn"
+                onclick="generateDocuments('cover_letter', this)"
               >
                 Generate Cover Letter
               </button>
+            </div>
+            <!-- Loading spinner -->
+            <div id="loadingSpinner" class="text-center mt-3 d-none">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <p class="mt-2">Generating your document...</p>
             </div>
           </form>
         </div>
@@ -43,13 +52,18 @@
 </div>
 
 <script>
-  async function generateDocuments(type) {
+  async function generateDocuments(type, button) {
     const jobDescription = document.getElementById("jobDescription").value;
+    const loadingSpinner = document.getElementById("loadingSpinner");
 
     if (!jobDescription) {
       alert("Please fill in the job description.");
       return;
     }
+
+    // Disable the button and show loading spinner
+    button.disabled = true;
+    loadingSpinner.classList.remove("d-none");
 
     try {
       const response = await fetch("/api/generate-documents/", {
@@ -84,6 +98,10 @@
     } catch (error) {
       alert("Error generating document: " + error.message);
       console.error("Error:", error);
+    } finally {
+      // Re-enable the button and hide loading spinner
+      button.disabled = false;
+      loadingSpinner.classList.add("d-none");
     }
   }
 

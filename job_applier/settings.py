@@ -198,3 +198,5 @@ SPECTACULAR_SETTINGS = {
         'filter': True,
     },
 }
+
+temperature = 0.3

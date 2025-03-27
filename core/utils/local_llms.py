@@ -1,6 +1,7 @@
 import requests
 import json
 import re
+from django.conf import settings
 
 class OllamaClient:
     """Client for interacting with Ollama API."""
@@ -27,7 +28,7 @@ class OllamaClient:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": 0.1,  # Lower temperature for more focused output
+                        "temperature": settings.temperature,  # Lower temperature for more focused output
                         "num_predict": 2048,  # Increased token limit
                         "top_k": 40,  # Limit token selection
                         "top_p": 0.9,  # Nucleus sampling
@@ -52,7 +53,6 @@ class OllamaClient:
                 
             # Clean the response to ensure it's valid JSON
             response_text = result["response"]
-            print(response_text)
             # Remove any markdown code block markers
             response_text = response_text.replace('```json', '').replace('```', '').strip()
             
