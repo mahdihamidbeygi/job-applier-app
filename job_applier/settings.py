@@ -199,4 +199,4 @@ SPECTACULAR_SETTINGS = {
     },
 }
 
-temperature = 0.3
+TEMPERATURE = 0.3

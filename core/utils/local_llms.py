@@ -28,7 +28,7 @@ class OllamaClient:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": settings.temperature,  # Lower temperature for more focused output
+                        "temperature": settings.TEMPERATURE,  # Lower temperature for more focused output
                         "num_predict": 2048,  # Increased token limit
                         "top_k": 40,  # Limit token selection
                         "top_p": 0.9,  # Nucleus sampling
