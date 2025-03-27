@@ -1,0 +1,105 @@
+{% extends 'core/base.html' %} {% load static %} {% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-8">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="text-center">Manual Job Application Submission</h2>
+        </div>
+        <div class="card-body">
+          <form id="manualSubmissionForm">
+            <div class="form-group mb-4">
+              <label for="jobDescription" class="form-label"
+                >Job Description</label
+              >
+              <textarea
+                class="form-control"
+                id="jobDescription"
+                rows="10"
+                placeholder="Paste the job description here..."
+              ></textarea>
+            </div>
+            <div class="d-grid gap-2">
+              <button
+                type="button"
+                class="btn btn-primary"
+                onclick="generateDocuments('resume')"
+              >
+                Generate Tailored Resume
+              </button>
+              <button
+                type="button"
+                class="btn btn-primary"
+                onclick="generateDocuments('cover_letter')"
+              >
+                Generate Cover Letter
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function generateDocuments(type) {
+    const jobDescription = document.getElementById("jobDescription").value;
+
+    if (!jobDescription) {
+      alert("Please fill in the job description.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/generate-documents/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken"),
+        },
+        body: JSON.stringify({
+          job_description: jobDescription,
+          document_type: type,
+        }),
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const fileName = `${type === "resume" ? "resume" : "cover_letter"}_${
+          new Date().toISOString().split("T")[0]
+        }.pdf`;
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate document");
+      }
+    } catch (error) {
+      alert("Error generating document: " + error.message);
+      console.error("Error:", error);
+    }
+  }
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+</script>
+{% endblock %}

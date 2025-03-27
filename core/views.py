@@ -6,9 +6,10 @@ from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST, require_http_methods
+from django.utils.decorators import method_decorator
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -17,6 +18,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
 from datetime import datetime
+from django.views.generic import TemplateView
+from django.http import FileResponse
+from django.views.decorators.csrf import csrf_exempt
+import json
+from datetime import date
+from io import BytesIO
 
 from .models import (
     UserProfile, WorkExperience, Project, Education,
@@ -32,7 +39,8 @@ from .serializers import (
     SkillSerializer, ProfileSerializer
 )
 from .utils.profile_importers import GitHubProfileImporter, ResumeImporter, LinkedInImporter
-import json
+from .utils.resume_composition import ResumeComposition
+from .utils.cover_letter_composition import CoverLetterComposition
 
 logger = logging.getLogger(__name__)
 
@@ -791,3 +799,67 @@ def get_profile_stats(request):
         'years_of_experience': profile.years_of_experience
     }
     return JsonResponse(stats)
+
+@method_decorator(login_required, name='dispatch')
+class ManualSubmissionView(TemplateView):
+    template_name = 'core/manual_submission.html'
+
+@login_required
+@require_http_methods(["POST"])
+def generate_documents(request):
+    try:
+        data = json.loads(request.body)
+        job_description = data.get('job_description')
+        document_type = data.get('document_type')
+        
+        if not job_description or not document_type:
+            return JsonResponse({'error': 'Missing required fields'}, status=400)
+            
+        if document_type not in ['resume', 'cover_letter']:
+            return JsonResponse({'error': 'Invalid document type'}, status=400)
+            
+        # Create a buffer to store the PDF
+        buffer = BytesIO()
+        
+        try:
+            if document_type == 'resume': 
+                # Create resume composition with user data
+                resume = ResumeComposition(request.user.userprofile)
+                # Build the resume
+                resume.build(buffer, job_description)
+                
+                # Get the value of the BytesIO buffer and write it to the response
+                pdf = buffer.getvalue()
+                buffer.close()
+                
+                # Create response
+                response = HttpResponse(pdf, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename="{request.user.username}_resume_{date.today().strftime("%Y%m%d")}.pdf"'
+                return response
+                
+            elif document_type == 'cover_letter':
+                # Create cover letter composition with user data and company info
+                cover_letter = CoverLetterComposition(
+                    user_info=request.user.userprofile,
+                    job_desc=job_description
+                )
+                # Build the cover letter
+                buffer = cover_letter.build()
+                
+                # Get the value of the BytesIO buffer and write it to the response
+                pdf = buffer.getvalue()
+                buffer.close()
+                
+                # Create response
+                response = HttpResponse(pdf, content_type='application/pdf')
+                response['Content-Disposition'] = f'attachment; filename="{request.user.username}_cover_letter_{date.today().strftime("%Y%m%d")}.pdf"'
+                return response
+        except Exception as e:
+            logger.error(f"Error generating {document_type}: {str(e)}")
+            return JsonResponse({'error': f'Error generating {document_type}: {str(e)}'}, status=500)
+            
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        logger.error(f"Unexpected error in generate_documents: {str(e)}")
+        return JsonResponse({'error': f'Unexpected error: {str(e)}'}, status=500)

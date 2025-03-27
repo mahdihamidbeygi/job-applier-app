@@ -993,14 +993,14 @@
             
             {% for experience in work_experiences %}
             <div class="experience-item" data-record-id="{{ experience.id }}">
-                <div class="record-actions">
+                        <div class="record-actions">
                     <button onclick="editRecord('work_experience', {{ experience.id }})" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
+                                <i class="fas fa-edit"></i>
+                            </button>
                     <button onclick="deleteRecord('work_experience', {{ experience.id }})" class="delete-btn" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                 <h3>{{ experience.position }}</h3>
                 <div class="date-range">{{ experience.start_date|date:"M Y" }} - {{ experience.end_date|date:"M Y" }}</div>
                 <div class="location">{{ experience.company }}</div>
@@ -1011,7 +1011,7 @@
                 {% if experience.technologies %}
                 <div class="technologies">{{ experience.technologies }}</div>
                 {% endif %}
-            </div>
+                        </div>
             {% empty %}
             <p>No work experience added yet.</p>
             {% endfor %}
@@ -1019,43 +1019,43 @@
 
         <!-- Projects Section -->
         <section id="projects" class="section">
-            <div class="section-header">
-                <h2>Projects</h2>
-                <button class="add-record-btn" onclick="toggleForm('project-form')">
-                    <i class="fas fa-plus"></i> Add Project
-                </button>
-            </div>
-            <form id="project-form" class="add-record-form" method="post" action="{% url 'core:add_project' %}">
-                {% csrf_token %}
+        <div class="section-header">
+            <h2>Projects</h2>
+            <button class="add-record-btn" onclick="toggleForm('project-form')">
+                <i class="fas fa-plus"></i> Add Project
+            </button>
+        </div>
+        <form id="project-form" class="add-record-form" method="post" action="{% url 'core:add_project' %}">
+            {% csrf_token %}
                 {{ project_form.as_p }}
-                <button type="submit" class="retry-button">Add Project</button>
-            </form>
+            <button type="submit" class="retry-button">Add Project</button>
+        </form>
             
             {% for project in projects %}
             <div class="project-item" data-record-id="{{ project.id }}">
-                <div class="record-actions">
+                    <div class="record-actions">
                     <button onclick="editRecord('project', {{ project.id }})" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
+                            <i class="fas fa-edit"></i>
+                        </button>
                     <button onclick="deleteRecord('project', {{ project.id }})" class="delete-btn" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 <h3>{{ project.title }}</h3>
                 <div class="date-range">{{ project.start_date|date:"M Y" }} - {{ project.end_date|date:"M Y" }}</div>
                 <p class="description">{{ project.description }}</p>
                 {% if project.technologies %}
                 <div class="technologies">{{ project.technologies }}</div>
                 {% endif %}
-                <div class="project-links">
+                    <div class="project-links">
                     {% if project.github_url %}
                     <a href="{{ project.github_url }}" target="_blank">GitHub</a>
                     {% endif %}
                     {% if project.live_url %}
                     <a href="{{ project.live_url }}" target="_blank">Live Demo</a>
                     {% endif %}
+                    </div>
                 </div>
-            </div>
             {% empty %}
             <p>No projects added yet.</p>
             {% endfor %}
@@ -1063,28 +1063,28 @@
 
         <!-- Education Section -->
         <section id="education" class="section">
-            <div class="section-header">
-                <h2>Education</h2>
-                <button class="add-record-btn" onclick="toggleForm('education-form')">
-                    <i class="fas fa-plus"></i> Add Education
-                </button>
-            </div>
-            <form id="education-form" class="add-record-form" method="post" action="{% url 'core:add_education' %}">
-                {% csrf_token %}
+        <div class="section-header">
+            <h2>Education</h2>
+            <button class="add-record-btn" onclick="toggleForm('education-form')">
+                <i class="fas fa-plus"></i> Add Education
+            </button>
+        </div>
+        <form id="education-form" class="add-record-form" method="post" action="{% url 'core:add_education' %}">
+            {% csrf_token %}
                 {{ education_form.as_p }}
-                <button type="submit" class="retry-button">Add Education</button>
-            </form>
+            <button type="submit" class="retry-button">Add Education</button>
+        </form>
             
             {% for edu in education %}
             <div class="education-item" data-record-id="{{ edu.id }}">
-                <div class="record-actions">
+                    <div class="record-actions">
                     <button onclick="editRecord('education', {{ edu.id }})" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
+                            <i class="fas fa-edit"></i>
+                        </button>
                     <button onclick="deleteRecord('education', {{ edu.id }})" class="delete-btn" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 <div class="degree">{{ edu.degree }}</div>
                 <div class="location">{{ edu.institution }}</div>
                 <div class="date-range">{{ edu.start_date|date:"M Y" }} - {{ edu.end_date|date:"M Y" }}</div>
@@ -1095,7 +1095,7 @@
                 {% if edu.achievements %}
                 <div class="achievements">{{ edu.achievements }}</div>
                 {% endif %}
-            </div>
+                </div>
             {% empty %}
             <p>No education added yet.</p>
             {% endfor %}
@@ -1103,28 +1103,28 @@
 
         <!-- Certifications Section -->
         <section id="certifications" class="section">
-            <div class="section-header">
-                <h2>Certifications</h2>
-                <button class="add-record-btn" onclick="toggleForm('certification-form')">
-                    <i class="fas fa-plus"></i> Add Certification
-                </button>
-            </div>
-            <form id="certification-form" class="add-record-form" method="post" action="{% url 'core:add_certification' %}">
-                {% csrf_token %}
+        <div class="section-header">
+            <h2>Certifications</h2>
+            <button class="add-record-btn" onclick="toggleForm('certification-form')">
+                <i class="fas fa-plus"></i> Add Certification
+            </button>
+        </div>
+        <form id="certification-form" class="add-record-form" method="post" action="{% url 'core:add_certification' %}">
+            {% csrf_token %}
                 {{ certification_form.as_p }}
-                <button type="submit" class="retry-button">Add Certification</button>
-            </form>
+            <button type="submit" class="retry-button">Add Certification</button>
+        </form>
             
             {% for cert in certifications %}
             <div class="certification-item" data-record-id="{{ cert.id }}">
-                <div class="record-actions">
+                    <div class="record-actions">
                     <button onclick="editRecord('certification', {{ cert.id }})" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
+                            <i class="fas fa-edit"></i>
+                        </button>
                     <button onclick="deleteRecord('certification', {{ cert.id }})" class="delete-btn" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 <h3>{{ cert.name }}</h3>
                 <div class="location">{{ cert.issuer }}</div>
                 <div class="date-range">Issued: {{ cert.issue_date|date:"M Y" }}</div>
@@ -1137,7 +1137,7 @@
                 {% if cert.credential_url %}
                 <a href="{{ cert.credential_url }}" target="_blank">View Credential</a>
                 {% endif %}
-            </div>
+                </div>
             {% empty %}
             <p>No certifications added yet.</p>
             {% endfor %}
@@ -1145,28 +1145,28 @@
 
         <!-- Publications Section -->
         <section id="publications" class="section">
-            <div class="section-header">
-                <h2>Publications</h2>
-                <button class="add-record-btn" onclick="toggleForm('publication-form')">
-                    <i class="fas fa-plus"></i> Add Publication
-                </button>
-            </div>
-            <form id="publication-form" class="add-record-form" method="post" action="{% url 'core:add_publication' %}">
-                {% csrf_token %}
+        <div class="section-header">
+            <h2>Publications</h2>
+            <button class="add-record-btn" onclick="toggleForm('publication-form')">
+                <i class="fas fa-plus"></i> Add Publication
+            </button>
+        </div>
+        <form id="publication-form" class="add-record-form" method="post" action="{% url 'core:add_publication' %}">
+            {% csrf_token %}
                 {{ publication_form.as_p }}
-                <button type="submit" class="retry-button">Add Publication</button>
-            </form>
+            <button type="submit" class="retry-button">Add Publication</button>
+        </form>
             
             {% for pub in publications %}
             <div class="publication-item" data-record-id="{{ pub.id }}">
-                <div class="record-actions">
+                    <div class="record-actions">
                     <button onclick="editRecord('publication', {{ pub.id }})" title="Edit">
-                        <i class="fas fa-edit"></i>
-                    </button>
+                            <i class="fas fa-edit"></i>
+                        </button>
                     <button onclick="deleteRecord('publication', {{ pub.id }})" class="delete-btn" title="Delete">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 <h3>{{ pub.title }}</h3>
                 <p class="description">{{ pub.authors }}</p>
                 <div class="date-range">{{ pub.publication_date|date:"M Y" }}</div>
@@ -1185,7 +1185,7 @@
                 {% if pub.url %}
                 <a href="{{ pub.url }}" target="_blank">View Publication</a>
                 {% endif %}
-            </div>
+                </div>
             {% empty %}
             <p>No publications added yet.</p>
             {% endfor %}
@@ -1193,17 +1193,17 @@
 
         <!-- Skills Section -->
         <section id="skills" class="section">
-            <div class="section-header">
-                <h2>Skills</h2>
-                <button class="add-record-btn" onclick="toggleForm('skill-form')">
-                    <i class="fas fa-plus"></i> Add Skill
-                </button>
-            </div>
-            <form id="skill-form" class="add-record-form" method="post" action="{% url 'core:add_skill' %}">
-                {% csrf_token %}
+        <div class="section-header">
+            <h2>Skills</h2>
+            <button class="add-record-btn" onclick="toggleForm('skill-form')">
+                <i class="fas fa-plus"></i> Add Skill
+            </button>
+        </div>
+        <form id="skill-form" class="add-record-form" method="post" action="{% url 'core:add_skill' %}">
+            {% csrf_token %}
                 {{ skill_form.as_p }}
-                <button type="submit" class="retry-button">Add Skill</button>
-            </form>
+            <button type="submit" class="retry-button">Add Skill</button>
+        </form>
             
             <div class="skills-grid">
                 {% for skill in skills %}
