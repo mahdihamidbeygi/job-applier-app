@@ -12,7 +12,6 @@ from collections import Counter
 class ResumeComposition:
     def __init__(self, user_data):
         self.user_data = self._convert_to_dict(user_data)
-        print(self.user_data['phone'])
         self.styles = getSampleStyleSheet()
         self._setup_styles()
         self.elements = []
