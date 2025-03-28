@@ -37,6 +37,31 @@
                 Generate Cover Letter
               </button>
             </div>
+            <!-- Application Questions Section -->
+            <div class="form-group mb-4 mt-4">
+              <label for="applicationQuestions" class="form-label"
+                >Application Questions</label
+              >
+              <textarea
+                class="form-control"
+                id="applicationQuestions"
+                rows="5"
+                placeholder="Enter your application questions here..."
+              ></textarea>
+              <button
+                type="button"
+                class="btn btn-primary mt-2"
+                id="generateAnswersBtn"
+                onclick="generateAnswers(this)"
+              >
+                Generate Answers
+              </button>
+            </div>
+            <!-- Answers Section -->
+            <div id="answersSection" class="mt-4 d-none">
+              <h4>Generated Answers</h4>
+              <div id="answersContent" class="border p-3 rounded"></div>
+            </div>
             <!-- Loading spinner -->
             <div id="loadingSpinner" class="text-center mt-3 d-none">
               <div class="spinner-border text-primary" role="status">
@@ -102,6 +127,68 @@
       // Re-enable the button and hide loading spinner
       button.disabled = false;
       loadingSpinner.classList.add("d-none");
+    }
+  }
+
+  async function generateAnswers(button) {
+    const jobDescription = document.getElementById("jobDescription").value;
+    const questions = document.getElementById("applicationQuestions").value;
+    const loadingSpinner = document.getElementById("loadingSpinner");
+    const answersSection = document.getElementById("answersSection");
+    const answersContent = document.getElementById("answersContent");
+
+    if (!jobDescription) {
+      alert("Please fill in the job description.");
+      return;
+    }
+
+    if (!questions) {
+      alert("Please enter your application questions.");
+      return;
+    }
+
+    // Disable the button and show loading spinner
+    button.disabled = true;
+    loadingSpinner.classList.remove("d-none");
+    loadingSpinner.querySelector("p").textContent = "Generating answers...";
+
+    try {
+      const response = await fetch("/api/generate-answers/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken"),
+        },
+        body: JSON.stringify({
+          job_description: jobDescription,
+          questions: questions,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Parse the answers string into a JSON object
+        const answers = JSON.parse(data.answers);
+
+        // Clear previous content and display the response
+        answersContent.innerHTML = answers.response.replace(/\n/g, "<br>");
+
+        // Show the answers section
+        answersSection.classList.remove("d-none");
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to generate answers");
+      }
+    } catch (error) {
+      alert("Error generating answers: " + error.message);
+      console.error("Error:", error);
+    } finally {
+      // Re-enable the button and hide loading spinner
+      button.disabled = false;
+      loadingSpinner.classList.add("d-none");
+      loadingSpinner.querySelector("p").textContent =
+        "Generating your document...";
     }
   }
 

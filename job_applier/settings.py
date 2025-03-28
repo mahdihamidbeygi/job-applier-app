@@ -165,6 +165,10 @@ DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4-turbo-preview')
 
+# Grok API Settings
+GROK_API_KEY = os.getenv('GROK_API_KEY')
+GROK_MODEL = os.getenv('GROK_MODEL', 'grok-1')
+
 # REST Framework settings
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [

@@ -1,13 +1,11 @@
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, Spacer, SimpleDocTemplate, Table, TableStyle
-from reportlab.lib.colors import black, gray
+from reportlab.platypus import Paragraph, SimpleDocTemplate
 from io import BytesIO
-from typing import List, Dict, Any, Optional
-from datetime import date
+from typing import List, Dict, Any
 from core.models import UserProfile
-from core.utils.local_llms import OllamaClient
+from core.utils.local_llms import GrokClient
 import json
 import logging
 
@@ -26,7 +24,7 @@ class CoverLetterComposition:
         self.job_description: str = job_desc
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
-        self.ollama_client = OllamaClient(model="phi4:latest")
+        self.grok_client = GrokClient(model="grok-2-1212", temperature=0.3)
         
     def _setup_styles(self) -> Dict[str, ParagraphStyle]:
         """Set up custom styles for the cover letter."""
@@ -81,8 +79,12 @@ class CoverLetterComposition:
         
         try:
             # Generate hiring manager name
-            response = self.ollama_client.generate(
-                "Return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description or 'Hiring Manager' if no name is found. Do not include any explanatory text."
+            response = self.grok_client.generate(
+                f"""
+                here's the job description: {self.job_description}
+                return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description 
+                or 'Hiring Manager' if no name is found. Do not include any explanatory text.
+                """
             )
             # Clean the response to ensure it's valid JSON
             response = response.strip()
@@ -202,8 +204,8 @@ class CoverLetterComposition:
             projects = []
         
         
-        # Generate cover letter content using Ollama
-        prompt = f"""Generate a professional cover letter for the mentioned position at mentioned company in .
+        # Generate cover letter content using Grok
+        prompt = f"""Generate a professional cover letter based on the following information.
 
                 Job Description: {self.job_description}
 
@@ -231,10 +233,11 @@ class CoverLetterComposition:
                 3. closing : A strong closing paragraph that expresses enthusiasm for the opportunity
 
                 Make the content specific to the job and company, and ensure it's professional and engaging. 
-                Focus on matching the candidate's experience and skills with the job requirements."""
+                Focus on matching the candidate's experience and skills with the job requirements.
+                No Dear hiring manager, or any other salutation. No content field name in the JSON object."""
 
         # try:
-        generated_content = self.ollama_client.generate(prompt)
+        generated_content = self.grok_client.generate(prompt)
         # Parse the generated content as JSON
         content = json.loads(generated_content)
                 

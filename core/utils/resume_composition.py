@@ -12,6 +12,7 @@ from collections import Counter
 class ResumeComposition:
     def __init__(self, user_data):
         self.user_data = self._convert_to_dict(user_data)
+        print(self.user_data['phone'])
         self.styles = getSampleStyleSheet()
         self._setup_styles()
         self.elements = []
@@ -22,7 +23,7 @@ class ResumeComposition:
             return {
                 'name': user_data.user.get_full_name() or user_data.user.username,
                 'email': user_data.user.email,
-                'phone': getattr(user_data, 'phone', '').replace(' ', '-'),
+                'phone': ''.join(char for char in getattr(user_data, 'phone', '') if char.isdigit() or char == '+'),
                 'location': getattr(user_data, 'location', ''),
                 'linkedin': getattr(user_data, 'linkedin', ''),
                 'github': getattr(user_data, 'github', ''),
@@ -84,7 +85,7 @@ class ResumeComposition:
             name='ResumeHeader',
             fontName='Helvetica-Bold',
             fontSize=24,
-            spaceAfter=30,
+            spaceAfter=20,
             alignment=TA_CENTER
         ))
         
@@ -103,7 +104,8 @@ class ResumeComposition:
             name='ResumeContact',
             fontName='Helvetica',
             fontSize=12,
-            spaceAfter=20,
+            spaceAfter=10,
+            leading=15,
             alignment=TA_CENTER
         ))
         
@@ -122,7 +124,7 @@ class ResumeComposition:
             name='ResumeSectionHeader',
             fontName='Helvetica-Bold',
             fontSize=16,
-            spaceBefore=20,
+            spaceBefore=10,
             spaceAfter=10,
             leftIndent=0,
             textColor=colors.HexColor('#2c3e50')
@@ -176,7 +178,7 @@ class ResumeComposition:
             name='ResumeSummary',
             fontName='Helvetica',
             fontSize=12,
-            spaceAfter=20,
+            spaceAfter=10,
             alignment=4,
             leading=16
         ))
@@ -194,7 +196,9 @@ class ResumeComposition:
             name='ResumeProjectDesc',
             fontName='Helvetica',
             fontSize=12,
-            spaceAfter=2
+            spaceAfter=2,
+            leading=14,
+
         ))
         
         # Education style
@@ -226,7 +230,14 @@ class ResumeComposition:
         if self.user_data.get('email'):
             contact_info.append(self.user_data['email'])
         if self.user_data.get('phone'):
-            contact_info.append(self.user_data['phone'].replace(' ', '-'))
+            phone = self.user_data['phone']
+            if phone.startswith('+'):
+                # Format as +X XXX XXX XXXX
+                formatted_phone = f"{phone[:2]} {phone[2:5]} {phone[5:8]} {phone[8:]}"
+            else:
+                # Format as XXX XXX XXXX
+                formatted_phone = f"{phone[:3]} {phone[3:6]} {phone[6:]}"
+            contact_info.append(formatted_phone)
         if self.user_data.get('location'):
             contact_info.append(self.user_data['location'])
         if self.user_data.get('linkedin'):
@@ -237,7 +248,7 @@ class ResumeComposition:
         if contact_info:
             self.elements.append(Paragraph(' | '.join(contact_info), self.styles['ResumeContact']))
             
-        self.elements.append(Spacer(1, 20))
+        self.elements.append(Spacer(1, 5))
 
     def _format_date(self, date_str):
         if not date_str:
@@ -324,7 +335,7 @@ class ResumeComposition:
                     bullet = f"• {bullet}"
                 self.elements.append(Paragraph(bullet, self.styles['ResumeBullet']))
             
-            self.elements.append(Spacer(1, 10))
+            self.elements.append(Spacer(1, 2))
 
     def _score_project_relevance(self, project, job_description):
         """Score a project's relevance to the job description."""
@@ -394,7 +405,7 @@ class ResumeComposition:
                 for bullet in bullets:
                     self.elements.append(Paragraph(f"• {bullet}", self.styles['ResumeBullet']))
             
-            self.elements.append(Spacer(1, 10))
+            self.elements.append(Spacer(1, 2))
 
     def _create_certifications_section(self):
         if not self.user_data.get('certifications'):
@@ -410,7 +421,7 @@ class ResumeComposition:
                 cert_text += f" ({self._format_date(cert['date'])})"
             self.elements.append(Paragraph(cert_text, self.styles['ResumeCertification']))
             
-        self.elements.append(Spacer(1, 10))
+        self.elements.append(Spacer(1, 2))
 
     def _create_education_section(self):
         if not self.user_data.get('education'):
@@ -428,7 +439,33 @@ class ResumeComposition:
                 edu_text += f" ({self._format_date(edu['graduation_date'])})"
             self.elements.append(Paragraph(edu_text, self.styles['ResumeEducation']))
             
-        self.elements.append(Spacer(1, 10))
+        self.elements.append(Spacer(1, 2))
+
+    def _create_skills_section(self):
+        if not self.user_data.get('skills'):
+            return
+            
+        self.elements.append(Paragraph("SKILLS", self.styles['ResumeSectionHeader']))
+        
+        # Get unique skills and their highest proficiency level
+        skill_levels = {}
+        for skill in self.user_data['skills']:
+            name = skill.get('name', '').strip()
+            level = skill.get('level', 0)
+            if name and (name not in skill_levels or level > skill_levels[name]):
+                skill_levels[name] = level
+        
+        # Sort skills by proficiency level (descending) and name
+        sorted_skills = sorted(skill_levels.items(), key=lambda x: (-x[1], x[0]))
+        
+        # Take top skills (around 10-15 most relevant)
+        top_skills = [skill for skill, _ in sorted_skills[:15]]
+        
+        # Create a single line of skills
+        skills_text = " | ".join(top_skills)
+        self.elements.append(Paragraph(skills_text, self.styles['ResumeBullet']))
+        
+        self.elements.append(Spacer(1, 2))
 
     def tailor_to_job(self, job_description):
         """
@@ -514,8 +551,12 @@ class ResumeComposition:
         
         # Add professional summary
         if self.user_data.get('professional_summary'):
+            self.elements.append(Paragraph("PROFESSIONAL SUMMARY", self.styles['ResumeSectionHeader']))
             self.elements.append(Paragraph(self.user_data['professional_summary'], 
                                          self.styles['ResumeSummary']))
+        
+        # Add skills section
+        self._create_skills_section()
         
         # Add experience section
         self._create_experience_section()

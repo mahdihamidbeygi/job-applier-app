@@ -53,4 +53,5 @@ urlpatterns = [
     path('profile/edit/<str:record_type>/<int:record_id>/', views.edit_record, name='edit_record'),
     path('manual-submission/', views.ManualSubmissionView.as_view(), name='manual_submission'),
     path('api/generate-documents/', views.generate_documents, name='generate_documents'),
+    path('api/generate-answers/', views.generate_answers, name='generate_answers'),
 ] 

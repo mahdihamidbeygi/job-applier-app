@@ -41,6 +41,7 @@ from .serializers import (
 from .utils.profile_importers import GitHubProfileImporter, ResumeImporter, LinkedInImporter
 from .utils.resume_composition import ResumeComposition
 from .utils.cover_letter_composition import CoverLetterComposition
+from .utils.local_llms import OllamaClient
 
 logger = logging.getLogger(__name__)
 
@@ -863,3 +864,92 @@ def generate_documents(request):
     except Exception as e:
         logger.error(f"Unexpected error in generate_documents: {str(e)}")
         return JsonResponse({'error': f'Unexpected error: {str(e)}'}, status=500)
+
+@require_http_methods(["POST"])
+@login_required
+def generate_answers(request):
+    """Generate answers for application questions using Ollama."""
+    try:
+        data = json.loads(request.body)
+        job_description = data.get('job_description')
+        questions = data.get('questions')
+
+        if not job_description or not questions:
+            return JsonResponse({'error': 'Job description and questions are required'}, status=400)
+
+        # Get user profile information
+        user_profile = request.user.userprofile
+        
+        # Format user's background information
+        work_experiences = []
+        if user_profile.work_experiences.exists():
+            for exp in user_profile.work_experiences.all():
+                work_experiences.append({
+                    'company': exp.company,
+                    'position': exp.position,
+                    'start_date': exp.start_date.strftime('%Y-%m-%d') if exp.start_date else None,
+                    'end_date': exp.end_date.strftime('%Y-%m-%d') if exp.end_date else None,
+                    'current': exp.current,
+                    'description': exp.description,
+                    'technologies': exp.technologies
+                })
+
+        skills = []
+        if user_profile.skills.exists():
+            for skill in user_profile.skills.all():
+                skills.append({
+                    'name': skill.name,
+                    'category': skill.category,
+                    'proficiency': skill.proficiency
+                })
+
+        projects = []
+        if user_profile.projects.exists():
+            for proj in user_profile.projects.all():
+                projects.append({
+                    'title': proj.title,
+                    'description': proj.description,
+                    'technologies': proj.technologies,
+                    'start_date': proj.start_date.strftime('%Y-%m-%d') if proj.start_date else None,
+                    'end_date': proj.end_date.strftime('%Y-%m-%d') if proj.end_date else None
+                })
+
+        # Create prompt for Ollama
+        prompt = f"""you are excellent at writing cover letters and resumes.
+        Based on the following job description and candidate's background, provide a brief answer (2-3 sentences) in JSON format to the question.
+
+Job Description:
+{job_description}
+
+Candidate Information:
+- Name: {user_profile.user.get_full_name() or user_profile.user.username}
+- Professional Summary: {user_profile.professional_summary or 'Not provided'}
+- Current Position: {user_profile.current_position or 'Not specified'}
+- Years of Experience: {user_profile.years_of_experience or 'Not specified'}
+
+Work Experience:
+{json.dumps(work_experiences, indent=2)}
+
+Skills:
+{json.dumps(skills, indent=2)}
+
+Projects:
+{json.dumps(projects, indent=2)}
+
+Application Questions:
+{questions}
+
+Please provide a brief paragraph (2-3 sentences) in JSON format to each question. 
+if there are multiple questions, please provide a JSON object for all questions.
+the main key is "response" and the value is only string of the questions and answers just like example. 
+E.X.: {{"response": "Question1 : answer1,\n Question2 : answer2"}} """
+
+        # Initialize Ollama client and generate answers
+        ollama_client = OllamaClient(model="phi4:latest", temperature=0.2)
+        answers = ollama_client.generate(prompt)
+
+        return JsonResponse({'answers': answers})
+
+    except Exception as e:
+        logger.error(f"Error generating answers: {str(e)}")
+        return JsonResponse({'error': str(e)}, status=500)
