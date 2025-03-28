@@ -9,7 +9,7 @@ class OllamaClient:
         self.temperature = temperature
         self.base_url = "http://localhost:11434/api/generate"
 
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, json:bool=True) -> str:
         """Generate text using Ollama API."""
         try:
             # First, check if the model is available
@@ -46,24 +46,25 @@ class OllamaClient:
                 except:
                     error_msg += f": {response.text}"
                 raise Exception(error_msg)
-            
-            result = response.json()
-            if "error" in result:
-                raise Exception(f"Ollama API error: {result['error']}")
+            if json:
+                result = response.json()
+                if "error" in result:
+                    raise Exception(f"Ollama API error: {result['error']}")
                 
-            # Clean the response to ensure it's valid JSON
-            response_text = result["response"]
+                # Clean the response to ensure it's valid JSON
+                response_text = result["response"]
 
-            # Remove any markdown code block markers
-            response_text = response_text.replace('```json', '').replace('```', '').strip()
-            
-            # Validate the JSON structure
-            try:
-                json.loads(response_text)  # Test if it's valid JSON
-            except json.JSONDecodeError as e:
-                print(f"Invalid JSON after cleaning: {response_text}")
-                raise Exception(f"Failed to clean JSON string: {str(e)}")
-            
+                # Remove any markdown code block markers
+                response_text = response_text.replace('```json', '').replace('```', '').strip()
+                
+                # Validate the JSON structure
+                try:
+                    json.loads(response_text)  # Test if it's valid JSON
+                except json.JSONDecodeError as e:
+                    print(f"Invalid JSON after cleaning: {response_text}")
+                    raise Exception(f"Failed to clean JSON string: {str(e)}")
+            else:
+                response_text = response.json()["response"]
             return response_text
         except requests.exceptions.Timeout:
             raise Exception("Request to Ollama API timed out. The model might be too large or the input too long. Try using a smaller model or reducing the input size.")

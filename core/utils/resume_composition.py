@@ -8,7 +8,8 @@ from datetime import datetime
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from collections import Counter
-
+from .local_llms import OllamaClient
+import json
 class ResumeComposition:
     def __init__(self, user_data):
         self.user_data = self._convert_to_dict(user_data)
@@ -513,18 +514,54 @@ class ResumeComposition:
                                       key=lambda x: (-x[0], x[1].get('name', '')))
         ]
         
-        # Update professional summary to include key terms
-        if self.user_data.get('professional_summary'):
-            summary_matrix = vectorizer.transform([self.user_data['professional_summary']])
-            summary_terms = set(vectorizer.inverse_transform(summary_matrix)[0])
-            missing_key_terms = set(job_terms) - summary_terms
-            
-            if missing_key_terms:
-                key_terms_str = ', '.join(list(missing_key_terms)[:3])  # Top 3 missing terms
-                self.user_data['professional_summary'] = (
-                    f"{self.user_data['professional_summary']} "
-                    f"Experienced in {key_terms_str} and related technologies."
-                )
+        # Update professional summary to include key terms        
+        # Initialize Ollama client with a suitable model
+        ollama_client = OllamaClient(model="mixtral:latest")
+        
+        # Prepare comprehensive prompt for tailoring the summary
+        prompt = f"""
+        You are a professional resume writer. Create a tailored professional summary that highlights the candidate's relevant experience and skills for this job.
+
+        Job Description:
+        {job_description}
+        
+        Work Experience:
+        {chr(10).join([f"- {exp.get('position', '')} at {exp.get('company', '')} ({exp.get('start_date', '')} - {exp.get('end_date', '')})" for exp in self.user_data.get('work_experience', [])])}
+        
+        Projects:
+        {chr(10).join([f"- {proj.get('title', '')} ({', '.join(proj.get('technologies', []))})" for proj in self.user_data.get('projects', [])])}
+        
+        Skills:
+        {', '.join([skill.get('name', '') for skill in self.user_data.get('skills', [])])}
+
+        Instructions:
+        1. Analyze the job description and identify key requirements and skills
+        2. Review the candidate's background and identify relevant experience
+        3. Create a compelling 2-3 sentence summary that:
+           - Maintains the candidate's authentic voice and style
+           - Highlights relevant experience and skills from their background
+           - Emphasizes alignment with the job requirements
+           - Uses specific examples from their work history
+           - Incorporates relevant technical skills naturally
+        4. Keep the tone professional but engaging
+        5. Focus on achievements and impact rather than just responsibilities
+        6. Return the response in the following JSON format:
+           {{
+               "summary": "Your tailored summary here",
+               "key_skills_highlighted": ["skill1", "skill2", "skill3"],
+               "relevant_experience": ["experience1", "experience2"]
+           }}
+
+        Important: no additional text or explanations.
+        """
+        # Get tailored summary from Ollama
+        response = ollama_client.generate(prompt, json=False)
+        
+        # Parse JSON response
+        result = json.loads(response)
+        
+        # Update the professional summary with the tailored version
+        self.user_data['professional_summary'] = result['summary'].strip()   
 
         # Reorder projects based on relevance
         scored_projects = []
