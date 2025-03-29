@@ -989,7 +989,6 @@ def process_job_application(request):
         # Initialize application agent
         application_agent = ApplicationAgent(request.user.id, personal_agent)
         if document_type is not None:
-            print(document_type)
             # Initialize search agent for job analysis
             search_agent = SearchAgent(request.user.id, personal_agent)
             
@@ -1026,9 +1025,7 @@ def process_job_application(request):
         
         # Handle application questions if provided
         if questions:
-            print(questions)
             answers = application_agent.handle_screening_questions(questions, job_description)
-            print(answers)
             response_data['answers'] = answers
         
         # Add interview preparation if requested
