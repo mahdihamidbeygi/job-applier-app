@@ -105,18 +105,55 @@ class ApplicationAgent(BaseAgent):
         Candidate Background:
         {self.personal_agent.get_background_summary()}
         
-        Generate a compelling cover letter that:
+        Generate a professional cover letter that:
         1. Opens with a strong hook
         2. Highlights relevant experience
         3. Demonstrates understanding of the role
         4. Shows enthusiasm for the company
         5. Closes with a call to action
         6. Reflects company culture and values
+        
+        Format Requirements:
+        1. Start with "Dear Hiring Manager," on its own line
+        2. Add a blank line after the salutation
+        3. Write exactly 3 paragraphs:
+           - First paragraph: Introduction and hook
+           - Second paragraph: Relevant experience and skills
+           - Third paragraph: Closing and call to action
+        4. End with "Sincerely," followed by a blank line and the candidate's name
+        5. Each paragraph must be unique - do not repeat any sentences or content
+        6. Keep paragraphs focused and concise
+        
+        Return ONLY the formatted cover letter text, with no additional commentary.
         """
         
         response = self.llm.generate(prompt, resp_in_json=False)
-        self.save_context("Generate cover letter", response)
-        return response
+        
+        # Clean up formatting
+        # Split into paragraphs and remove empty lines
+        paragraphs = [p.strip() for p in response.split('\n') if p.strip()]
+        
+        # Remove any duplicate paragraphs while preserving order
+        seen = set()
+        unique_paragraphs = []
+        for p in paragraphs:
+            normalized_p = ' '.join(p.lower().split())  # Normalize for comparison
+            if normalized_p not in seen and p not in ['Dear Hiring Manager,', 'Sincerely,']:
+                seen.add(normalized_p)
+                unique_paragraphs.append(p)
+        
+        # Ensure proper structure
+        formatted_parts = []
+        formatted_parts.append("Dear Hiring Manager,")  # Salutation
+        formatted_parts.extend(unique_paragraphs[:3])  # Main paragraphs (limit to 3)
+        formatted_parts.append("Sincerely,")  # Closing
+        formatted_parts.append(self.personal_agent.background.profile['name'])  # Name
+        
+        # Join with double line breaks
+        formatted_letter = '\n\n'.join(formatted_parts)
+        
+        self.save_context("Generate cover letter", formatted_letter)
+        return formatted_letter
     
     def prepare_interview_responses(self, job_description: str) -> List[Dict[str, Any]]:
         """Prepares potential interview responses"""

@@ -840,22 +840,20 @@ def generate_documents(request):
                 return response
                 
             elif document_type == 'cover_letter':
-                # Create cover letter composition with user data and company info
-                cover_letter = CoverLetterComposition(
-                    user_info=request.user.userprofile,
-                    job_desc=job_description
-                )
-                # Build the cover letter
-                buffer = cover_letter.build()
-                
-                # Get the value of the BytesIO buffer and write it to the response
-                pdf = buffer.getvalue()
+                # Create cover letter using CoverLetterComposition
+                cover_letter_composer = CoverLetterComposition(request.user.userprofile, job_description)
+                buffer = cover_letter_composer.build()
+                cover_letter_bytes = buffer.getvalue()
                 buffer.close()
                 
-                # Create response
-                response = HttpResponse(pdf, content_type='application/pdf')
-                response['Content-Disposition'] = f'attachment; filename="{request.user.username}_cover_letter_{date.today().strftime("%Y%m%d")}.pdf"'
-                return response
+                # Encode cover letter bytes in base64
+                response_data = {
+                    'documents': {
+                        'cover_letter': base64.b64encode(cover_letter_bytes).decode('utf-8')
+                    }
+                }
+                
+                return JsonResponse(response_data)
         except Exception as e:
             logger.error(f"Error generating {document_type}: {str(e)}")
             return JsonResponse({'error': f'Error generating {document_type}: {str(e)}'}, status=500)
@@ -1015,15 +1013,12 @@ def process_job_application(request):
             response_data['documents']['resume'] = base64.b64encode(resume_bytes).decode('utf-8')
         
         if document_type in ['cover_letter', 'all']:
-            cover_letter = application_agent.generate_cover_letter(job_description)
-            # Convert cover letter to PDF bytes
-            buffer = BytesIO()
-            p = canvas.Canvas(buffer)
-            p.drawString(100, 750, cover_letter)
-            p.showPage()
-            p.save()
+            # Create cover letter using CoverLetterComposition
+            cover_letter_composer = CoverLetterComposition(request.user.userprofile, job_description)
+            buffer = cover_letter_composer.build()
             cover_letter_bytes = buffer.getvalue()
             buffer.close()
+            
             # Encode cover letter bytes in base64
             response_data['documents']['cover_letter'] = base64.b64encode(cover_letter_bytes).decode('utf-8')
         

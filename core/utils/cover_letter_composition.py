@@ -1,7 +1,7 @@
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from io import BytesIO
 from typing import List, Dict, Any
 from core.models import UserProfile
@@ -107,19 +107,24 @@ class CoverLetterComposition:
         # Opening paragraph
         if content.get('opening'):
             elements.append(Paragraph(str(content['opening']), self.styles['Body']))
+            elements.append(Spacer(1, 12))  # Add space after opening paragraph
             
         # Main paragraphs
         if content.get('main_content'):
             # Convert to string if it's not already
             main_content = str(content['main_content'])
-            # Split into paragraphs
-            for paragraph in main_content.split('\n\n'):
-                if paragraph.strip():
-                    elements.append(Paragraph(paragraph.strip(), self.styles['Body']))
+            # Split into paragraphs (handle both \n\n and single \n)
+            paragraphs = [p.strip() for p in main_content.replace('\n\n', '\n').split('\n')]
+            # Filter out empty paragraphs and add each non-empty one
+            for paragraph in paragraphs:
+                if paragraph:
+                    elements.append(Paragraph(paragraph, self.styles['Body']))
+                    elements.append(Spacer(1, 12))  # Add space between paragraphs
                     
         # Closing paragraph
         if content.get('closing'):
             elements.append(Paragraph(str(content['closing']), self.styles['Body']))
+            elements.append(Spacer(1, 12))  # Add space after closing paragraph
             
         return elements
     

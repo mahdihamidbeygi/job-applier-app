@@ -9,7 +9,7 @@ class AgentState:
     user_id: int
 
 class BaseAgent:
-    def __init__(self, user_id: int, model: str = "llama3:latest"):
+    def __init__(self, user_id: int, model: str = "phi4:latest"):
         self.user_id = user_id
         self.llm = OllamaClient(model=model,temperature=0.0)
         self.memory = ConversationBufferMemory(
