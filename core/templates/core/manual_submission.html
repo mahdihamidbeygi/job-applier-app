@@ -91,7 +91,7 @@
     loadingSpinner.classList.remove("d-none");
 
     try {
-      const response = await fetch("/api/generate-documents/", {
+      const response = await fetch("/process-application/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -100,11 +100,34 @@
         body: JSON.stringify({
           job_description: jobDescription,
           document_type: type,
+          additional_services: {
+            answer_questions: false,
+            prepare_interview: false,
+          },
         }),
       });
 
       if (response.ok) {
-        const blob = await response.blob();
+        const data = await response.json();
+
+        // Convert base64 to blob
+        const base64Data = data.documents[type];
+        const byteCharacters = atob(base64Data);
+        const byteArrays = [];
+
+        for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
+          const slice = byteCharacters.slice(offset, offset + 1024);
+          const byteNumbers = new Array(slice.length);
+
+          for (let i = 0; i < slice.length; i++) {
+            byteNumbers[i] = slice.charCodeAt(i);
+          }
+
+          const byteArray = new Uint8Array(byteNumbers);
+          byteArrays.push(byteArray);
+        }
+
+        const blob = new Blob(byteArrays, { type: "application/pdf" });
         const fileName = `${type === "resume" ? "resume" : "cover_letter"}_${
           new Date().toISOString().split("T")[0]
         }.pdf`;
@@ -153,7 +176,7 @@
     loadingSpinner.querySelector("p").textContent = "Generating answers...";
 
     try {
-      const response = await fetch("/api/generate-answers/", {
+      const response = await fetch("/process-application/", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -162,19 +185,31 @@
         body: JSON.stringify({
           job_description: jobDescription,
           questions: questions,
+          document_type: "none",
+          additional_services: {
+            answer_questions: true,
+            prepare_interview: false,
+          },
         }),
       });
-
+      console.log(response);
       if (response.ok) {
         const data = await response.json();
 
-        // Parse the answers string into a JSON object
-        const answers = JSON.parse(data.answers);
-
-        // Clear previous content and display the response
-        answersContent.innerHTML = answers.response.replace(/\n/g, "<br>");
-
-        // Show the answers section
+        // Display the answers
+        if (Array.isArray(data.answers)) {
+          answersContent.innerHTML = data.answers
+            .map(
+              (answer) =>
+                `<div class="mb-3">
+              <strong>Q: ${answer.question}</strong><br>
+              A: ${answer.answer}
+            </div>`
+            )
+            .join("");
+        } else {
+          answersContent.innerHTML = data.answers.replace(/\n/g, "<br>");
+        }
         answersSection.classList.remove("d-none");
       } else {
         const errorData = await response.json();

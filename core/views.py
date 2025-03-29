@@ -13,17 +13,15 @@ from django.utils.decorators import method_decorator
 from rest_framework import viewsets, permissions, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from drf_spectacular.types import OpenApiTypes
-from datetime import datetime
+from datetime import datetime, date
 from django.views.generic import TemplateView
-from django.http import FileResponse
-from django.views.decorators.csrf import csrf_exempt
 import json
-from datetime import date
 from io import BytesIO
+import base64
+from reportlab.pdfgen import canvas
 
 from .models import (
     UserProfile, WorkExperience, Project, Education,
@@ -42,6 +40,9 @@ from .utils.profile_importers import GitHubProfileImporter, ResumeImporter, Link
 from .utils.resume_composition import ResumeComposition
 from .utils.cover_letter_composition import CoverLetterComposition
 from .utils.local_llms import OllamaClient
+from .utils.agents import PersonalAgent, PersonalBackground
+from .utils.agents.application_agent import ApplicationAgent
+from .utils.agents.search_agent import SearchAgent
 
 logger = logging.getLogger(__name__)
 
@@ -945,7 +946,7 @@ the main key is "response" and the value is only string of the questions and ans
 E.X.: {{"response": "Question1 : answer1,\n Question2 : answer2"}} """
 
         # Initialize Ollama client and generate answers
-        ollama_client = OllamaClient(model="phi4:latest", temperature=0.2)
+        ollama_client = OllamaClient(model="phi4:latest", temperature=0.0)
         answers = ollama_client.generate(prompt)
 
         return JsonResponse({'answers': answers})
@@ -953,3 +954,93 @@ E.X.: {{"response": "Question1 : answer1,\n Question2 : answer2"}} """
     except Exception as e:
         logger.error(f"Error generating answers: {str(e)}")
         return JsonResponse({'error': str(e)}, status=500)
+
+@login_required
+@require_http_methods(["POST"])
+def process_job_application(request):
+    try:
+        data = json.loads(request.body)
+        job_description = data.get('job_description')
+        questions = data.get('questions', [])
+        document_type = data.get('document_type', 'all')  # 'resume', 'cover_letter', or 'all'
+        
+        if not job_description:
+            return JsonResponse({'error': 'Missing job description'}, status=400)
+        
+        # Initialize agents
+        personal_agent = PersonalAgent(request.user.id)
+        
+        # Load user background
+        background = PersonalBackground(
+            profile=request.user.userprofile.__dict__,
+            work_experience=list(request.user.userprofile.work_experiences.values()),
+            education=list(request.user.userprofile.education.values()),
+            skills=list(request.user.userprofile.skills.values()),
+            projects=list(request.user.userprofile.projects.values()),
+            github_data={
+                'repositories': [],
+                'contributions': 0,
+                'languages': []
+            },
+            achievements=[],  # We'll add this field to the model later
+            interests=[]     # We'll add this field to the model later
+        )
+        personal_agent.load_background(background)
+        
+        # Initialize application agent
+        application_agent = ApplicationAgent(request.user.id, personal_agent)
+        
+        # Initialize search agent for job analysis
+        search_agent = SearchAgent(request.user.id, personal_agent)
+        
+        # Analyze job fit
+        job_analysis = search_agent.analyze_job_fit({
+            'description': job_description
+        })
+        
+        response_data = {
+            'job_analysis': json.loads(job_analysis),
+            'documents': {},
+            'answers': []
+        }
+
+        # Generate requested documents
+        if document_type in ['resume', 'all']:
+            resume_buffer = BytesIO()
+            resume = ResumeComposition(personal_agent)
+            resume.build(resume_buffer, job_description)
+            resume_bytes = resume_buffer.getvalue()
+            resume_buffer.close()
+            # Encode resume bytes in base64
+            response_data['documents']['resume'] = base64.b64encode(resume_bytes).decode('utf-8')
+        
+        if document_type in ['cover_letter', 'all']:
+            cover_letter = application_agent.generate_cover_letter(job_description)
+            # Convert cover letter to PDF bytes
+            buffer = BytesIO()
+            p = canvas.Canvas(buffer)
+            p.drawString(100, 750, cover_letter)
+            p.showPage()
+            p.save()
+            cover_letter_bytes = buffer.getvalue()
+            buffer.close()
+            # Encode cover letter bytes in base64
+            response_data['documents']['cover_letter'] = base64.b64encode(cover_letter_bytes).decode('utf-8')
+        
+        # Handle application questions if provided
+        if questions:
+            answers = application_agent.handle_screening_questions(questions, job_description)
+            response_data['answers'] = answers
+        
+        # Add interview preparation if requested
+        if data.get('include_interview_prep', False):
+            interview_prep = application_agent.prepare_interview_responses(job_description)
+            response_data['interview_prep'] = json.loads(interview_prep)
+        
+        return JsonResponse(response_data)
+        
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except Exception as e:
+        logger.error(f"Error processing job application: {str(e)}")
+        return JsonResponse({'error': f'Error processing application: {str(e)}'}, status=500)

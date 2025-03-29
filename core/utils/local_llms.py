@@ -1,5 +1,6 @@
 import requests
 import json
+import re
 from django.conf import settings
 
 class OllamaClient:
@@ -9,7 +10,7 @@ class OllamaClient:
         self.temperature = temperature
         self.base_url = "http://localhost:11434/api/generate"
 
-    def generate(self, prompt: str, json:bool=True) -> str:
+    def generate(self, prompt: str, resp_in_json:bool=False) -> str:
         """Generate text using Ollama API."""
         try:
             # First, check if the model is available
@@ -28,16 +29,17 @@ class OllamaClient:
                     "prompt": prompt,
                     "stream": False,
                     "options": {
-                        "temperature": self.temperature,  # Lower temperature for more focused output
-                        "num_predict": 2048,  # Increased token limit
-                        "top_k": 40,  # Limit token selection
-                        "top_p": 0.9,  # Nucleus sampling
-                        "repeat_penalty": 1.1,  # Prevent repetition
-                        "num_ctx": 4096  # Increased context window size
+                        "temperature": self.temperature,
+                        "num_predict": 2048,
+                        "top_k": 40,
+                        "top_p": 0.9,
+                        "repeat_penalty": 1.1,
+                        "num_ctx": 4096
                     }
                 },
-                timeout=120  # Increased timeout to 120 seconds
+                timeout=120
             )
+            
             if response.status_code != 200:
                 error_msg = f"Ollama API returned status code {response.status_code}"
                 try:
@@ -46,14 +48,13 @@ class OllamaClient:
                 except:
                     error_msg += f": {response.text}"
                 raise Exception(error_msg)
-            if json:
-                result = response.json()
-                if "error" in result:
-                    raise Exception(f"Ollama API error: {result['error']}")
-                
-                # Clean the response to ensure it's valid JSON
-                response_text = result["response"]
-
+            
+            result = response.json()
+            if "error" in result:
+                raise Exception(f"Ollama API error: {result['error']}")
+            
+            response_text = result["response"]
+            if resp_in_json:
                 # Remove any markdown code block markers
                 response_text = response_text.replace('```json', '').replace('```', '').strip()
                 
@@ -63,9 +64,9 @@ class OllamaClient:
                 except json.JSONDecodeError as e:
                     print(f"Invalid JSON after cleaning: {response_text}")
                     raise Exception(f"Failed to clean JSON string: {str(e)}")
-            else:
-                response_text = response.json()["response"]
+
             return response_text
+            
         except requests.exceptions.Timeout:
             raise Exception("Request to Ollama API timed out. The model might be too large or the input too long. Try using a smaller model or reducing the input size.")
         except requests.exceptions.ConnectionError:

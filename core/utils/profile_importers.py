@@ -1,128 +1,15 @@
 import os
-import json
 import tempfile
 import requests
 import ast
-import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from django.conf import settings
 import git
 from bs4 import BeautifulSoup
 import openai
 from datetime import datetime
-
-class OllamaClient:
-    """Client for interacting with Ollama API."""
-    def __init__(self, model="phi4:latest"):
-        self.model = model
-        self.base_url = "http://localhost:11434/api/generate"
-
-    def generate(self, prompt: str) -> str:
-        """Generate text using Ollama API."""
-        try:
-            # First, check if the model is available
-            response = requests.get("http://localhost:11434/api/tags")
-            response.raise_for_status()
-            available_models = [model["name"] for model in response.json()["models"]]
-            
-            if self.model not in available_models:
-                raise Exception(f"Model {self.model} is not available. Available models: {', '.join(available_models)}")
-
-            # Make the generate request with optimized parameters
-            response = requests.post(
-                self.base_url,
-                json={
-                    "model": self.model,
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {
-                        "temperature": 0.1,  # Lower temperature for more focused output
-                        "num_predict": 2048,  # Increased token limit
-                        "top_k": 40,  # Limit token selection
-                        "top_p": 0.9,  # Nucleus sampling
-                        "repeat_penalty": 1.1,  # Prevent repetition
-                        "num_ctx": 4096  # Increased context window size
-                    }
-                },
-                timeout=120  # Increased timeout to 120 seconds
-            )
-            
-            if response.status_code != 200:
-                error_msg = f"Ollama API returned status code {response.status_code}"
-                try:
-                    error_details = response.json()
-                    error_msg += f": {error_details.get('error', 'Unknown error')}"
-                except:
-                    error_msg += f": {response.text}"
-                raise Exception(error_msg)
-            
-            result = response.json()
-            if "error" in result:
-                raise Exception(f"Ollama API error: {result['error']}")
-                
-            # Clean the response to ensure it's valid JSON
-            response_text = result["response"]
-            
-            # Remove any markdown code block markers
-            response_text = response_text.replace('```json', '').replace('```', '').strip()
-            
-            # Find the first '{' and last '}'
-            start_idx = response_text.find('{')
-            end_idx = response_text.rfind('}')
-            
-            if start_idx == -1 or end_idx == -1:
-                raise Exception("No valid JSON object found in response")
-            
-            # Extract just the JSON part
-            response_text = response_text[start_idx:end_idx + 1]
-            
-            # Fix common JSON formatting issues
-            response_text = response_text.replace('\n', ' ')  # Remove newlines
-            response_text = response_text.replace('\r', '')   # Remove carriage returns
-            response_text = response_text.replace('\t', ' ')  # Replace tabs with spaces
-            
-            # Fix missing commas between array elements and objects
-            response_text = re.sub(r'}\s*{', '},{', response_text)
-            response_text = re.sub(r']\s*\[', '],[', response_text)
-            
-            # Fix property names without quotes
-            response_text = re.sub(r'([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)(\s*:)', r'\1"\2"\3', response_text)
-            
-            # Fix unescaped quotes in strings
-            response_text = re.sub(r'(?<!\\)"', '\\"', response_text)
-            
-            # Fix single quotes to double quotes
-            response_text = response_text.replace("'", '"')
-            
-            # Fix missing quotes around string values
-            response_text = re.sub(r':\s*([^"\d\[\{][^,}\]]*?)([,}])', r':"\1"\2', response_text)
-            
-            # Fix boolean values and null
-            response_text = response_text.replace(':true', ':true')
-            response_text = response_text.replace(':false', ':false')
-            response_text = response_text.replace(':null', ':null')
-            
-            # Fix array values
-            response_text = re.sub(r':\s*\[([^\]]*?)\]([,}])', lambda m: ':' + '[' + ','.join(f'"{x.strip()}"' for x in m.group(1).split(',')) + ']' + m.group(2), response_text)
-            
-            # Remove any trailing commas
-            response_text = re.sub(r',(\s*[}\]])', r'\1', response_text)
-            
-            # Validate the JSON structure
-            try:
-                json.loads(response_text)  # Test if it's valid JSON
-            except json.JSONDecodeError as e:
-                print(f"Invalid JSON after cleaning: {response_text}")
-                raise Exception(f"Failed to clean JSON string: {str(e)}")
-            
-            return response_text
-        except requests.exceptions.Timeout:
-            raise Exception("Request to Ollama API timed out. The model might be too large or the input too long. Try using a smaller model or reducing the input size.")
-        except requests.exceptions.ConnectionError:
-            raise Exception("Could not connect to Ollama API. Make sure Ollama is running.")
-        except Exception as e:
-            raise Exception(f"Error calling Ollama API: {str(e)}")
+from .local_llms import OllamaClient
 
 class GitHubProfileImporter:
     def __init__(self, github_username: str):
@@ -808,7 +695,7 @@ class LinkedInImporter:
             if education_section:
                 for edu in education_section.find_all('li', class_='education-item'):
                     education_item = {
-                        'school': edu.find('h3').text.strip() if edu.find('h3') else "",
+                        'institution': edu.find('h3').text.strip() if edu.find('h3') else "",
                         'degree': edu.find('p', class_='degree').text.strip() if edu.find('p', class_='degree') else "",
                         'date_range': edu.find('p', class_='date-range').text.strip() if edu.find('p', class_='date-range') else "",
                         'description': edu.find('p', class_='description').text.strip() if edu.find('p', class_='description') else ""

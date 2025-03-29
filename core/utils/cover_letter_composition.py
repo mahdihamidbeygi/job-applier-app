@@ -24,7 +24,7 @@ class CoverLetterComposition:
         self.job_description: str = job_desc
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
-        self.grok_client = GrokClient(model="grok-2-1212", temperature=0.3)
+        self.grok_client = GrokClient(model="grok-2-1212", temperature=0.0)
         
     def _setup_styles(self) -> Dict[str, ParagraphStyle]:
         """Set up custom styles for the cover letter."""

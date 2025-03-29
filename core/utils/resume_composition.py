@@ -7,15 +7,23 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from datetime import datetime
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from collections import Counter
-from .local_llms import OllamaClient
+from core.utils.local_llms import OllamaClient
 import json
+
 class ResumeComposition:
-    def __init__(self, user_data):
-        self.user_data = self._convert_to_dict(user_data)
+    def __init__(self, personal_agent):
+        """
+        Initialize the ResumeComposition class.
+        
+        Args:
+            personal_agent (PersonalAgent): The personal agent containing user data
+        """
+        self.personal_agent = personal_agent
+        self.user_data = self._convert_to_dict(personal_agent.background.profile)
         self.styles = getSampleStyleSheet()
         self._setup_styles()
         self.elements = []
+        self.ollama_client = OllamaClient(model="phi4:latest", temperature=0.0)
         
     def _convert_to_dict(self, user_data):
         """Convert UserProfile model instance to dictionary format"""
@@ -62,7 +70,7 @@ class ResumeComposition:
                 ],
                 'education': [
                     {
-                        'school': edu.institution,
+                        'institute': edu.institution,
                         'degree': edu.degree,
                         'field_of_study': edu.field_of_study,
                         'graduation_date': edu.end_date.strftime('%Y-%m-%d') if edu.end_date else None
@@ -230,14 +238,16 @@ class ResumeComposition:
         if self.user_data.get('email'):
             contact_info.append(self.user_data['email'])
         if self.user_data.get('phone'):
-            phone = self.user_data['phone']
-            if phone.startswith('+'):
-                # Format as +X XXX XXX XXXX
-                formatted_phone = f"{phone[:2]} {phone[2:5]} {phone[5:8]} {phone[8:]}"
-            else:
-                # Format as XXX XXX XXXX
-                formatted_phone = f"{phone[:3]} {phone[3:6]} {phone[6:]}"
-            contact_info.append(formatted_phone)
+            # Extract only numbers from phone string
+            phone = ''.join(char for char in str(self.user_data['phone']) if char.isdigit())
+            if len(phone) >= 10:  # Only format if we have enough digits
+                if phone.startswith('1') and len(phone) > 10:  # Handle country code 1
+                    # Format as +1 XXX XXX XXXX
+                    formatted_phone = f"+1 {phone[1:4]} {phone[4:7]} {phone[7:11]}"
+                else:
+                    # Format as XXX XXX XXXX
+                    formatted_phone = f"{phone[:3]} {phone[3:6]} {phone[6:10]}"
+                contact_info.append(formatted_phone)
         if self.user_data.get('location'):
             contact_info.append(self.user_data['location'])
         if self.user_data.get('linkedin'):
@@ -254,10 +264,13 @@ class ResumeComposition:
         if not date_str:
             return "Present"
         try:
-            date = datetime.strptime(date_str, "%Y-%m-%d")
+            if isinstance(date_str, str):
+                date = datetime.strptime(date_str, "%Y-%m-%d")
+            else:  # Assuming it's already a datetime.date object
+                date = datetime.combine(date_str, datetime.min.time())
             return date.strftime("%m/%Y").lstrip('0')  # Remove leading zero from month
-        except ValueError:
-            return date_str
+        except (ValueError, TypeError):
+            return str(date_str)
 
     def _convert_description_to_bullets(self, description):
         """Convert a paragraph description into bullet points."""
@@ -284,18 +297,17 @@ class ResumeComposition:
         return bullet_points
 
     def _create_experience_section(self):
-        if not self.user_data.get('work_experience'):
+        """Create the experience section of the resume."""
+        if not self.personal_agent.background.work_experience:
             return
             
         self.elements.append(Paragraph("PROFESSIONAL EXPERIENCE", self.styles['ResumeSectionHeader']))
-        
         # Sort experiences by start date (most recent first)
         sorted_experiences = sorted(
-            self.user_data['work_experience'],
-            key=lambda x: datetime.strptime(x.get('start_date', '1900-01-01'), '%Y-%m-%d'),
+            self.personal_agent.background.work_experience,
+            key=lambda x: x.get('start_date', '1900-01-01').strftime('%Y-%m-%d'),
             reverse=True
         )
-        
         for exp in sorted_experiences:
             # Title, Company, Location and Date in one row
             position_text = f"<b>{exp['position']}</b>"
@@ -355,13 +367,18 @@ class ResumeComposition:
         except Exception:
             return 0.0
 
-    def _create_projects_section(self, job_description=None, max_projects=3):
-        if not self.user_data.get('projects'):
+    def _create_projects_section(self, job_description=None, max_projects=5):
+        if not self.personal_agent.background.projects:
             return
             
         # Score and sort projects by relevance
         scored_projects = []
-        for project in self.user_data['projects']:
+        for project in self.personal_agent.background.projects:
+            # Clean the project title by removing anything in parentheses
+            title = project.get('title', '')
+            cleaned_title = title.split('(')[0].strip()
+            project['title'] = cleaned_title
+            
             score = self._score_project_relevance(project, job_description)
             scored_projects.append((score, project))
             
@@ -377,8 +394,9 @@ class ResumeComposition:
         for project in relevant_projects:
             # Project title and dates row
             title_text = f"<b>{project['title']}</b>"
-            if project.get('technologies'):
-                title_text += f" ({', '.join(project['technologies'])})"
+            # TODO: Add technologies to project title
+            # if project.get('technologies'):
+            #     title_text += f" ({', '.join(project['technologies'])})"
                 
             start_date = self._format_date(project.get('start_date'))
             end_date = self._format_date(project.get('end_date'))
@@ -424,13 +442,14 @@ class ResumeComposition:
         self.elements.append(Spacer(1, 2))
 
     def _create_education_section(self):
-        if not self.user_data.get('education'):
+        """Create the education section of the resume."""
+        if not self.personal_agent.background.education:
             return
             
         self.elements.append(Paragraph("EDUCATION", self.styles['ResumeSectionHeader']))
         
-        for edu in self.user_data['education']:
-            edu_text = f"{edu['school']}"
+        for edu in self.personal_agent.background.education:
+            edu_text = f"{edu['institution']}"
             if edu.get('degree'):
                 edu_text += f" - {edu['degree']}"
             if edu.get('field_of_study'):
@@ -442,24 +461,28 @@ class ResumeComposition:
         self.elements.append(Spacer(1, 2))
 
     def _create_skills_section(self):
-        if not self.user_data.get('skills'):
+        """Create the skills section of the resume."""
+        if not self.personal_agent.background.skills:
             return
             
         self.elements.append(Paragraph("SKILLS", self.styles['ResumeSectionHeader']))
         
         # Get unique skills and their highest proficiency level
+        # Use lowercase name as key to ensure case-insensitive uniqueness
         skill_levels = {}
-        for skill in self.user_data['skills']:
+        for skill in self.personal_agent.background.skills:
             name = skill.get('name', '').strip()
+            name_lower = name.lower()
             level = skill.get('level', 0)
-            if name and (name not in skill_levels or level > skill_levels[name]):
-                skill_levels[name] = level
+            # Keep the version with highest proficiency, or the original case if same proficiency
+            if name_lower and (name_lower not in skill_levels or level > skill_levels[name_lower][1]):
+                skill_levels[name_lower] = (name, level)  # Store original name and level
         
         # Sort skills by proficiency level (descending) and name
-        sorted_skills = sorted(skill_levels.items(), key=lambda x: (-x[1], x[0]))
+        sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
         
-        # Take top skills (around 10-15 most relevant)
-        top_skills = [skill for skill, _ in sorted_skills[:15]]
+        # Take top skills (around 10-15 most relevant) and use original case
+        top_skills = [skill[0] for skill in sorted_skills[:15]]
         
         # Create a single line of skills
         skills_text = " | ".join(top_skills)
@@ -514,10 +537,6 @@ class ResumeComposition:
                                       key=lambda x: (-x[0], x[1].get('name', '')))
         ]
         
-        # Update professional summary to include key terms        
-        # Initialize Ollama client with a suitable model
-        ollama_client = OllamaClient(model="mixtral:latest")
-        
         # Prepare comprehensive prompt for tailoring the summary
         prompt = f"""
         You are a professional resume writer. Create a tailored professional summary that highlights the candidate's relevant experience and skills for this job.
@@ -525,11 +544,11 @@ class ResumeComposition:
         Job Description:
         {job_description}
         
-        Work Experience:
-        {chr(10).join([f"- {exp.get('position', '')} at {exp.get('company', '')} ({exp.get('start_date', '')} - {exp.get('end_date', '')})" for exp in self.user_data.get('work_experience', [])])}
-        
+        Candidate Background Summary:
+        {self.personal_agent.get_background_summary()}   
+             
         Projects:
-        {chr(10).join([f"- {proj.get('title', '')} ({', '.join(proj.get('technologies', []))})" for proj in self.user_data.get('projects', [])])}
+        {[proj for proj in self.personal_agent.background.projects]}
         
         Skills:
         {', '.join([skill.get('name', '') for skill in self.user_data.get('skills', [])])}
@@ -545,23 +564,32 @@ class ResumeComposition:
            - Incorporates relevant technical skills naturally
         4. Keep the tone professional but engaging
         5. Focus on achievements and impact rather than just responsibilities
-        6. Return the response in the following JSON format:
-           {{
-               "summary": "Your tailored summary here",
-               "key_skills_highlighted": ["skill1", "skill2", "skill3"],
-               "relevant_experience": ["experience1", "experience2"]
-           }}
 
-        Important: no additional text or explanations.
+        ⚠️ STRICT RESPONSE FORMAT REQUIREMENTS ⚠️
+        Your response must be EXACTLY in this format, with no additional text:
+        {{"summary": "Your tailored summary here"}}
+
+        ❌ FORBIDDEN:
+        1. NO introductory text like "Here is the tailored professional summary:"
+        2. NO explanatory text before or after the JSON
+        3. NO markdown formatting
+        4. NO line breaks or extra whitespace
+        5. NO additional context or notes
+        6. NO "Here's" or similar phrases
+        7. NO "The summary is:" or similar phrases
+
+        ✅ REQUIRED:
+        1. Response must start with {{ and end with }}
+        2. Response must be valid JSON
+        3. Response must contain only the JSON object with a "summary" key
+        4. Response must be parseable by a JSON parser
+
+        Remember: Your entire response should be a single JSON object, nothing more, nothing less.
         """
         # Get tailored summary from Ollama
-        response = ollama_client.generate(prompt, json=False)
-        
-        # Parse JSON response
-        result = json.loads(response)
-        
-        # Update the professional summary with the tailored version
-        self.user_data['professional_summary'] = result['summary'].strip()   
+        response = self.ollama_client.generate(prompt, resp_in_json=True)
+        response_dict = json.loads(response)
+        self.user_data['professional_summary'] = response_dict["summary"].strip()
 
         # Reorder projects based on relevance
         scored_projects = []
@@ -581,31 +609,23 @@ class ResumeComposition:
 
         if job_description:
             self.tailor_to_job(job_description)
-        
         # Create header
         self._create_header()
-        
         # Add professional summary
         if self.user_data.get('professional_summary'):
             self.elements.append(Paragraph("PROFESSIONAL SUMMARY", self.styles['ResumeSectionHeader']))
             self.elements.append(Paragraph(self.user_data['professional_summary'], 
                                          self.styles['ResumeSummary']))
-        
         # Add skills section
         self._create_skills_section()
-        
         # Add experience section
         self._create_experience_section()
-        
         # Add relevant projects section
         self._create_projects_section(job_description)
-        
         # Add certifications section
         self._create_certifications_section()
-        
         # Add education section
         self._create_education_section()
-        
         # Create PDF
         doc = SimpleDocTemplate(
             output_path,
