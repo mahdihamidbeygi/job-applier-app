@@ -71,7 +71,7 @@ class ApplicationAgent(BaseAgent):
             Relevant Experience:
             {relevant_background}
             
-            Provide a professional response that:
+            Provide a concise, focused response (2-3 sentences maximum) that:
             1. Directly answers the question
             2. Demonstrates relevant experience
             3. Aligns with job requirements

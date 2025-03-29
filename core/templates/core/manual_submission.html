@@ -184,7 +184,7 @@
         },
         body: JSON.stringify({
           job_description: jobDescription,
-          questions: questions,
+          questions: questions.split("\n").filter((q) => q.trim()),
           document_type: "none",
           additional_services: {
             answer_questions: true,

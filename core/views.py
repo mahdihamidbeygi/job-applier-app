@@ -11,7 +11,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.decorators import method_decorator
 from rest_framework import viewsets, permissions, status, filters
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -43,6 +43,7 @@ from .utils.local_llms import OllamaClient
 from .utils.agents import PersonalAgent, PersonalBackground
 from .utils.agents.application_agent import ApplicationAgent
 from .utils.agents.search_agent import SearchAgent
+from django.contrib.auth.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -987,20 +988,21 @@ def process_job_application(request):
         
         # Initialize application agent
         application_agent = ApplicationAgent(request.user.id, personal_agent)
-        
-        # Initialize search agent for job analysis
-        search_agent = SearchAgent(request.user.id, personal_agent)
-        
-        # Analyze job fit
-        job_analysis = search_agent.analyze_job_fit({
-            'description': job_description
-        })
-        
-        response_data = {
-            'job_analysis': json.loads(job_analysis),
-            'documents': {},
-            'answers': []
-        }
+        if document_type is not None:
+            print(document_type)
+            # Initialize search agent for job analysis
+            search_agent = SearchAgent(request.user.id, personal_agent)
+            
+            # Analyze job fit
+            job_analysis = search_agent.analyze_job_fit({
+                'description': job_description
+            })
+            
+            response_data = {
+                'job_analysis': json.loads(job_analysis),
+                'documents': {},
+                'answers': []
+            }
 
         # Generate requested documents
         if document_type in ['resume', 'all']:
@@ -1024,7 +1026,9 @@ def process_job_application(request):
         
         # Handle application questions if provided
         if questions:
+            print(questions)
             answers = application_agent.handle_screening_questions(questions, job_description)
+            print(answers)
             response_data['answers'] = answers
         
         # Add interview preparation if requested
@@ -1039,3 +1043,55 @@ def process_job_application(request):
     except Exception as e:
         logger.error(f"Error processing job application: {str(e)}")
         return JsonResponse({'error': f'Error processing application: {str(e)}'}, status=500)
+
+@api_view(['POST'])
+def fill_form(request):
+    try:
+        # Get form data from request
+        form_data = request.data
+        fields = form_data.get('fields', [])
+        job_description = form_data.get('jobDescription', '')
+        
+        # Get current user
+        user = request.user
+        if not user.is_authenticated:
+            return Response({'error': 'User not authenticated'}, status=401)
+        
+        # Initialize agents
+        personal_agent = PersonalAgent(user.id)
+        application_agent = ApplicationAgent(user.id, personal_agent)
+        
+        # Load user's background data
+        # You'll need to implement this based on your data model
+        background = load_user_background(user.id)
+        personal_agent.load_background(background)
+        
+        # Fill form fields
+        responses = application_agent.fill_application_form(fields, job_description)
+        
+        return Response({
+            'success': True,
+            'responses': responses
+        })
+    except Exception as e:
+        return Response({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+def load_user_background(user_id):
+    """Load user's background data from your database"""
+    # This is a placeholder - implement based on your data model
+    user = User.objects.get(id=user_id)
+    # Load profile, experience, education, etc. from your models
+    # Return PersonalBackground object
+    return PersonalBackground(
+        profile={},  # Load from your profile model
+        work_experience=[],  # Load from your experience model
+        education=[],  # Load from your education model
+        skills=[],  # Load from your skills model
+        projects=[],  # Load from your projects model
+        github_data={},  # Load from your GitHub data model
+        achievements=[],  # Load from your achievements model
+        interests=[]  # Load from your interests model
+    )
