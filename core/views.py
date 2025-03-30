@@ -11,7 +11,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST, require_http_methods
 from django.utils.decorators import method_decorator
 from rest_framework import viewsets, permissions, status, filters
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema, OpenApiParameter
@@ -22,10 +22,13 @@ import json
 from io import BytesIO
 import base64
 from reportlab.pdfgen import canvas
+from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import authenticate
+from rest_framework.permissions import AllowAny
 
 from .models import (
     UserProfile, WorkExperience, Project, Education,
-    Certification, Publication, Skill
+    Certification, Publication, Skill, JobListing
 )
 from .forms import (
     UserProfileForm, WorkExperienceForm, ProjectForm,
@@ -1042,29 +1045,33 @@ def process_job_application(request):
         return JsonResponse({'error': f'Error processing application: {str(e)}'}, status=500)
 
 @api_view(['POST'])
+@permission_classes([AllowAny])  # Temporarily allow any user for testing
 def fill_form(request):
-    try:
+    try:        
         # Get form data from request
-        form_data = request.data
+        form_data = json.loads(request.body)
+        
         fields = form_data.get('fields', [])
         job_description = form_data.get('jobDescription', '')
         
         # Get current user
         user = request.user
         if not user.is_authenticated:
+            print("User not authenticated")
             return Response({'error': 'User not authenticated'}, status=401)
+        
         
         # Initialize agents
         personal_agent = PersonalAgent(user.id)
         application_agent = ApplicationAgent(user.id, personal_agent)
         
         # Load user's background data
-        # You'll need to implement this based on your data model
         background = load_user_background(user.id)
         personal_agent.load_background(background)
         
         # Fill form fields
         responses = application_agent.fill_application_form(fields, job_description)
+        print("Generated responses:", responses)
         
         return Response({
             'success': True,
@@ -1092,3 +1099,147 @@ def load_user_background(user_id):
         achievements=[],  # Load from your achievements model
         interests=[]  # Load from your interests model
     )
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def get_token(request):
+    username = request.data.get('username')
+    password = request.data.get('password')
+    
+    if not username or not password:
+        return Response({
+            'error': 'Please provide both username and password'
+        }, status=400)
+    
+    user = authenticate(username=username, password=password)
+    
+    if not user:
+        return Response({
+            'error': 'Invalid credentials'
+        }, status=401)
+    
+    refresh = RefreshToken.for_user(user)
+    
+    return Response({
+        'access': str(refresh.access_token),
+        'refresh': str(refresh),
+    })
+
+@login_required
+def jobs_page(request):
+    """View for the jobs page"""
+    # Get user's job listings
+    job_listings = JobListing.objects.all().order_by('-posted_date', '-match_score')
+    
+    # Get search parameters from request
+    role = request.GET.get('role', '')
+    location = request.GET.get('location', '')
+    
+    # Filter job listings if search parameters are provided
+    if role or location:
+        if role:
+            job_listings = job_listings.filter(title__icontains=role)
+        if location:
+            job_listings = job_listings.filter(location__icontains=location)
+    
+    context = {
+        'job_listings': job_listings,
+        'role': role,
+        'location': location,
+    }
+    return render(request, 'core/jobs.html', context)
+
+@login_required
+@require_http_methods(["POST"])
+def search_jobs(request):
+    """API endpoint to search for jobs"""
+    try:
+        logger.info("Received job search request")
+        data = json.loads(request.body)
+        role = data.get('role', '')
+        location = data.get('location', '')
+        
+        logger.info(f"Searching for role: {role}, location: {location}")
+        
+        if not role or not location:
+            logger.warning("Missing role or location in search request")
+            return JsonResponse({
+                'error': 'Role and location are required'
+            }, status=400)
+        
+        try:
+            # Initialize search agent
+            logger.info("Initializing search agent")
+            personal_agent = PersonalAgent(request.user.id)
+            search_agent = SearchAgent(request.user.id, personal_agent)
+            
+            # Search for jobs
+            logger.info("Starting LinkedIn job search")
+            jobs = search_agent.search_linkedin_jobs(role, location)
+            logger.info(f"Found {len(jobs)} jobs")
+            
+            response_data = {
+                'message': f'Found {len(jobs)} jobs',
+                'jobs': [{
+                    'id': job.id,
+                    'title': job.title,
+                    'company': job.company,
+                    'location': job.location,
+                    'description': job.description,
+                    'match_score': job.match_score,
+                    'source_url': job.source_url,
+                    'has_tailored_documents': bool(job.tailored_resume and job.tailored_cover_letter)
+                } for job in jobs]
+            }
+            
+            logger.info("Successfully prepared response")
+            return JsonResponse(response_data)
+            
+        except Exception as agent_error:
+            logger.error(f"Error in search agent: {str(agent_error)}", exc_info=True)
+            return JsonResponse({
+                'error': f'Error searching jobs: {str(agent_error)}'
+            }, status=500)
+        
+    except json.JSONDecodeError as e:
+        logger.error(f"Invalid JSON in request: {str(e)}")
+        return JsonResponse({
+            'error': 'Invalid request format'
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Unexpected error in search_jobs: {str(e)}", exc_info=True)
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)
+
+@login_required
+@require_http_methods(["POST"])
+def apply_to_job(request, job_id):
+    """API endpoint to apply to a job"""
+    try:
+        job = JobListing.objects.get(id=job_id)
+        
+        # Update job status
+        job.applied = True
+        job.application_date = datetime.now().date()
+        job.application_status = 'Applied'
+        job.save()
+        
+        return JsonResponse({
+            'message': 'Successfully applied to job',
+            'job': {
+                'id': job.id,
+                'title': job.title,
+                'company': job.company,
+                'application_status': job.application_status
+            }
+        })
+        
+    except JobListing.DoesNotExist:
+        return JsonResponse({
+            'error': 'Job not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e)
+        }, status=500)

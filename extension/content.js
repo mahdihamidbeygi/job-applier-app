@@ -16,6 +16,77 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   }
 });
 
+async function refreshToken(apiEndpoint, refreshToken) {
+  try {
+    console.log("Refreshing token with:", refreshToken);
+    const response = await fetch(`${apiEndpoint}/token/refresh/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh: refreshToken.trim() })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to refresh token');
+    }
+
+    const data = await response.json();
+    console.log("Token refresh response:", data);
+    return data.access;
+  } catch (error) {
+    console.error("Error refreshing token:", error);
+    throw error;
+  }
+}
+
+async function makeAuthenticatedRequest(url, options) {
+  const settings = await new Promise(resolve => {
+    chrome.storage.local.get(['apiEndpoint', 'authToken', 'refreshToken'], resolve);
+  });
+
+  if (!settings.apiEndpoint || !settings.authToken) {
+    throw new Error('API endpoint and auth token not configured');
+  }
+
+  try {
+    // First attempt with current token
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${settings.authToken.trim()}`
+      }
+    });
+
+    if (response.status === 401 && settings.refreshToken) {
+      // Token expired, try to refresh
+      console.log("Token expired, attempting refresh...");
+      const newToken = await refreshToken(settings.apiEndpoint, settings.refreshToken);
+      
+      // Update stored token
+      await new Promise(resolve => {
+        chrome.storage.local.set({ authToken: newToken }, resolve);
+      });
+
+      // Retry request with new token
+      return fetch(url, {
+        ...options,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${newToken.trim()}`
+        }
+      });
+    }
+
+    return response;
+  } catch (error) {
+    console.error("Error in authenticated request:", error);
+    throw error;
+  }
+}
+
 function detectJobApplicationForm() {
   // Look for common job application form indicators
   const indicators = [
@@ -75,20 +146,42 @@ async function fillForm() {
   }
 
   try {
-    // Send form data to backend
-    const response = await fetch('http://localhost:8000/api/fill-form/', {
+    // Get settings from storage
+    const settings = await new Promise(resolve => {
+      chrome.storage.local.get(['apiEndpoint', 'authToken'], resolve);
+    });
+
+    console.log("Current settings:", settings);
+
+    if (!settings.apiEndpoint) {
+      console.error("API endpoint missing from settings");
+      throw new Error('API endpoint not configured. Please set it in the extension settings.');
+    }
+
+    if (!settings.authToken) {
+      console.error("Auth token missing from settings");
+      throw new Error('Authentication token not configured. Please get a token from the extension settings.');
+    }
+
+    console.log("Sending form data to backend:", formData);
+    
+    const response = await makeAuthenticatedRequest(`${settings.apiEndpoint}/fill-form/`, {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type': 'application/json'
       },
       body: JSON.stringify(formData)
     });
+    
+    console.log("Response status:", response.status);
+    console.log("Response headers:", Object.fromEntries(response.headers.entries()));
+    
+    const data = await response.json();
+    console.log("Response data:", data);
 
     if (!response.ok) {
-      throw new Error('Failed to get AI responses');
+      throw new Error(data.error || data.detail || 'Failed to get AI responses');
     }
-
-    const data = await response.json();
     
     // Fill form fields with AI responses
     Object.entries(data.responses).forEach(([fieldId, value]) => {
@@ -98,11 +191,14 @@ async function fillForm() {
         element.value = value;
         // Trigger change event to ensure form validation works
         element.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        console.warn(`Could not find element for field ID: ${fieldId}`);
       }
     });
 
     return {success: true};
   } catch (error) {
+    console.error("Error in fillForm:", error);
     return {success: false, error: error.message};
   }
 }

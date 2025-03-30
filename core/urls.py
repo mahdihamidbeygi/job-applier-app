@@ -56,4 +56,8 @@ urlpatterns = [
     path('api/generate-documents/', views.generate_documents, name='generate_documents'),
     path('api/generate-answers/', views.generate_answers, name='generate_answers'),
     path('api/fill-form/', views.fill_form, name='fill-form'),
+    path('api/token/', views.get_token, name='token'),
+    path('jobs/', views.jobs_page, name='jobs_page'),
+    path('api/search-jobs/', views.search_jobs, name='search_jobs'),
+    path('api/apply-to-job/<int:job_id>/', views.apply_to_job, name='apply_to_job'),
 ] 

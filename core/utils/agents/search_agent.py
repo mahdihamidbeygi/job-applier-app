@@ -2,12 +2,117 @@ from typing import Dict, Any, List
 from core.utils.agents.base_agent import BaseAgent
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.rag.job_knowledge import JobKnowledgeBase
+from core.utils.job_scrapers.linkedin_scraper import LinkedInJobScraper
+from core.models import JobListing
+from django.conf import settings
+from core.utils.resume_composition import ResumeComposition
+from core.utils.cover_letter_composition import CoverLetterComposition
+import logging
+from django.utils import timezone
+
+logger = logging.getLogger(__name__)
 
 class SearchAgent(BaseAgent):
     def __init__(self, user_id: int, personal_agent: PersonalAgent):
         super().__init__(user_id)
         self.personal_agent = personal_agent
         self.knowledge_base = JobKnowledgeBase()
+        self.linkedin_scraper = None
+    
+    def search_linkedin_jobs(self, role: str, location: str) -> List[Dict[str, Any]]:
+        """Search for jobs on LinkedIn"""
+        try:
+            # Initialize LinkedIn scraper
+            linkedin_scraper = LinkedInJobScraper()
+            
+            # Search for jobs
+            jobs = linkedin_scraper.search_jobs(role, location)
+            # Process and save jobs
+            for job in jobs:
+                try:
+                    # # Skip jobs with empty title or company
+                    # if not job.get('description'):
+                    #     print(f"Skipping job with missing title or company")
+                    #     continue
+                    
+                    # Create job data with only the fields that exist in the model
+                    job_data = {
+                        'title': job.get('title', ''),  # Truncate to 200 chars
+                        'company': job.get('company', ''),  # Truncate to 200 chars
+                        'location': job.get('location', ''),  # Truncate to 200 chars
+                        'description': job.get('description', ''),  # Keep full description
+                        'source_url': job.get('source_url', ''),  # Truncate to 200 chars
+                        'source': job.get('source', 'linkedin'),  # Truncate to 200 chars
+                        'posted_date': timezone.now(),  # Use current time as default
+                        'salary_range': '',  # Empty string as default
+                        'job_type': '',  # Empty string as default
+                        'experience_level': '',  # Empty string as default
+                        'required_skills': '',  # Empty string as default
+                        'preferred_skills': ''  # Empty string as default
+                    }
+                    
+                    # Save job to database
+                    job_listing = JobListing.objects.create(**job_data)
+                    print(f"Saved job: {job_data['title']} at {job_data['company']}")
+                    
+                    # Add the job listing ID to the job data
+                    job['id'] = job_listing.id
+                    
+                except Exception as e:
+                    print(f"Error processing job {job.get('title', 'Unknown')}: {str(e)}")
+                    continue
+            
+            # Filter out jobs that weren't successfully saved
+            jobs = [job for job in jobs if 'id' in job]
+            return jobs
+        except Exception as e:
+            print(f"Error searching LinkedIn jobs: {str(e)}")
+            return []
+    
+    def _generate_tailored_documents(self, job_listing: JobListing):
+        """Generate tailored resume and cover letter for a job listing"""
+        try:
+            # Get personal background
+            background = self.personal_agent.get_background_summary()
+            
+            # Generate tailored resume
+            resume_composer = ResumeComposition(self.user_id)
+            tailored_resume = resume_composer.generate_tailored_resume(
+                job_listing.title,
+                job_listing.company,
+                job_listing.description,
+                job_listing.required_skills,
+                background
+            )
+            
+            # Save tailored resume
+            if tailored_resume:
+                job_listing.tailored_resume.save(
+                    f"tailored_resume_{job_listing.id}.pdf",
+                    tailored_resume
+                )
+            
+            # Generate tailored cover letter
+            cover_letter_composer = CoverLetterComposition(self.user_id)
+            tailored_cover_letter = cover_letter_composer.generate_tailored_cover_letter(
+                job_listing.title,
+                job_listing.company,
+                job_listing.description,
+                job_listing.required_skills,
+                background
+            )
+            
+            # Save tailored cover letter
+            if tailored_cover_letter:
+                job_listing.tailored_cover_letter.save(
+                    f"tailored_cover_letter_{job_listing.id}.pdf",
+                    tailored_cover_letter
+                )
+            
+            job_listing.save()
+            
+        except Exception as e:
+            logger.error(f"Error generating tailored documents: {str(e)}")
     
     def analyze_job_fit(self, job_posting: Dict[str, Any]) -> Dict[str, Any]:
         """Analyzes job posting for fit with personal background"""

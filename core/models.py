@@ -175,6 +175,48 @@ class Skill(models.Model):
     def __str__(self):
         return f"{self.name} ({self.get_category_display()})"
 
+class JobListing(models.Model):
+    JOB_SOURCES = [
+        ('linkedin', 'LinkedIn'),
+        ('indeed', 'Indeed'),
+        ('glassdoor', 'Glassdoor'),
+        ('other', 'Other'),
+    ]
+
+    title = models.CharField(max_length=200)
+    company = models.CharField(max_length=200)
+    location = models.CharField(max_length=200)
+    description = models.TextField()
+    requirements = models.TextField(blank=True)
+    source = models.CharField(max_length=20, choices=JOB_SOURCES)
+    source_url = models.URLField()
+    posted_date = models.DateField()
+    salary_range = models.CharField(max_length=100, blank=True)
+    job_type = models.CharField(max_length=50, blank=True)  # Full-time, Part-time, Contract, etc.
+    experience_level = models.CharField(max_length=50, blank=True)
+    required_skills = models.JSONField(default=list)
+    preferred_skills = models.JSONField(default=list)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    is_active = models.BooleanField(default=True)
+    match_score = models.FloatField(null=True, blank=True)
+    tailored_resume = models.FileField(upload_to='tailored_resumes/', blank=True)
+    tailored_cover_letter = models.FileField(upload_to='tailored_cover_letters/', blank=True)
+    applied = models.BooleanField(default=False)
+    application_date = models.DateField(null=True, blank=True)
+    application_status = models.CharField(max_length=50, blank=True)  # Applied, Interviewing, Rejected, etc.
+
+    class Meta:
+        ordering = ['-posted_date', '-match_score']
+        indexes = [
+            models.Index(fields=['title', 'company', 'location']),
+            models.Index(fields=['source', 'is_active']),
+            models.Index(fields=['posted_date']),
+        ]
+
+    def __str__(self):
+        return f"{self.title} at {self.company}"
+
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
     if created:

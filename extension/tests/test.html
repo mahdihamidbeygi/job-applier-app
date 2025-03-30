@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Job Application Form</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        textarea {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Software Engineer Position</h1>
+    <div id="job-description">
+        <h2>Job Description</h2>
+        <p>We are looking for an experienced Software Engineer to join our team. The ideal candidate should have:</p>
+        <ul>
+            <li>5+ years of experience in software development</li>
+            <li>Strong knowledge of Python and JavaScript</li>
+            <li>Experience with Django and React</li>
+            <li>Excellent problem-solving skills</li>
+            <li>Good communication abilities</li>
+        </ul>
+    </div>
+
+    <form id="application-form">
+        <div class="form-group">
+            <label for="full-name">Full Name</label>
+            <input type="text" id="full-name" name="full-name" required>
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email Address</label>
+            <input type="email" id="email" name="email" required>
+        </div>
+
+        <div class="form-group">
+            <label for="phone">Phone Number</label>
+            <input type="tel" id="phone" name="phone" required>
+        </div>
+
+        <div class="form-group">
+            <label for="experience">Years of Experience</label>
+            <input type="text" id="experience" name="experience" required>
+        </div>
+
+        <div class="form-group">
+            <label for="skills">Key Skills</label>
+            <textarea id="skills" name="skills" rows="4" required></textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="cover-letter">Cover Letter</label>
+            <textarea id="cover-letter" name="cover-letter" rows="6" required></textarea>
+        </div>
+
+        <button type="submit">Submit Application</button>
+    </form>
+</body>
+</html> 
