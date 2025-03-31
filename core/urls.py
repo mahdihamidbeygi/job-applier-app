@@ -60,4 +60,10 @@ urlpatterns = [
     path('jobs/', views.jobs_page, name='jobs_page'),
     path('api/search-jobs/', views.search_jobs, name='search_jobs'),
     path('api/apply-to-job/<int:job_id>/', views.apply_to_job, name='apply_to_job'),
+    
+    # Job-related URLs
+    path('jobs/<int:job_id>/', views.job_detail, name='job_detail'),
+    path('jobs/<int:job_id>/apply/', views.job_apply, name='job_apply'),
+    path('api/jobs/<int:job_id>/documents/', views.get_job_documents, name='get_job_documents'),
+    path('api/jobs/<int:job_id>/generate-documents/', views.generate_job_documents, name='generate_job_documents'),
 ] 

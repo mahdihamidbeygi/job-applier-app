@@ -8,6 +8,7 @@
         </div>
         <div class="card-body">
           <form id="manualSubmissionForm">
+            {% csrf_token %}
             <div class="form-group mb-4">
               <label for="jobDescription" class="form-label"
                 >Job Description</label
@@ -97,6 +98,7 @@
           "Content-Type": "application/json",
           "X-CSRFToken": getCookie("csrftoken"),
         },
+        credentials: "include",
         body: JSON.stringify({
           job_description: jobDescription,
           document_type: type,
@@ -182,6 +184,7 @@
           "Content-Type": "application/json",
           "X-CSRFToken": getCookie("csrftoken"),
         },
+        credentials: "include",
         body: JSON.stringify({
           job_description: jobDescription,
           questions: questions.split("\n").filter((q) => q.trim()),

@@ -402,48 +402,40 @@ body {
 .profile-nav {
     position: sticky;
     top: 20px;
-    background: rgba(10, 10, 10, 0.95);
-    padding: 2rem;
+    background: var(--darker-bg);
+    padding: 1rem;
     margin-bottom: 3rem;
-    border-radius: 20px;
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        0 0 0 1px rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     display: flex;
-    gap: 1.5rem;
+    gap: 1rem;
     overflow-x: auto;
     z-index: 100;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--border-color);
 }
 
 .nav-item {
-    background: var(--card-bg);
-    color: var(--text-secondary);
-    border: 1px solid var(--card-border);
-    padding: 1.2rem 2.5rem;
-    border-radius: 16px;
+    background: none;
+    color: var(--text-primary);
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
     cursor: pointer;
     transition: all 0.3s ease;
     white-space: nowrap;
-    font-size: 1.2rem;
+    font-size: 1rem;
     font-weight: 500;
-    position: relative;
-    overflow: hidden;
 }
 
 .nav-item:hover {
-    color: var(--text-primary);
-    background: var(--hover-bg);
-    border-color: var(--accent-primary);
-    transform: translateY(-2px);
+    color: var(--accent-color);
+    background: none;
 }
 
 .nav-item.active {
-    background: var(--gradient-1);
-    color: var(--text-primary);
+    background: var(--primary-color);
+    color: white;
     border: none;
-    box-shadow: 0 4px 12px rgba(45, 127, 249, 0.3);
 }
 
 .loading-container {

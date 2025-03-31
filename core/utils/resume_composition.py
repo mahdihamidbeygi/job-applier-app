@@ -9,6 +9,8 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from core.utils.local_llms import OllamaClient
 import json
+from typing import List
+from io import BytesIO
 
 class ResumeComposition:
     def __init__(self, personal_agent):
@@ -636,3 +638,72 @@ class ResumeComposition:
             bottomMargin=20
         )
         doc.build(self.elements)
+
+    def generate_tailored_resume(self, job_title: str, company: str, job_description: str, required_skills: List[str], background: str) -> BytesIO:
+        """
+        Generate a tailored resume for a specific job.
+        
+        Args:
+            job_title (str): The job title
+            company (str): The company name
+            job_description (str): The job description
+            required_skills (List[str]): List of required skills
+            background (str): User's background summary
+            
+        Returns:
+            BytesIO: The generated resume PDF
+        """
+        try:
+            # Clear any existing elements
+            self.elements = []
+            
+            # Tailor the resume content
+            self.tailor_to_job(job_description)
+            
+            # Create a buffer for the PDF
+            buffer = BytesIO()
+            
+            # Create all sections
+            self._create_header()
+            
+            # Add professional summary
+            if self.user_data.get('professional_summary'):
+                self.elements.append(Paragraph("PROFESSIONAL SUMMARY", self.styles['ResumeSectionHeader']))
+                self.elements.append(Paragraph(self.user_data['professional_summary'], 
+                                            self.styles['ResumeSummary']))
+            
+            # Add skills section
+            self._create_skills_section()
+            
+            # Add experience section
+            self._create_experience_section()
+            
+            # Add relevant projects section
+            self._create_projects_section(job_description)
+            
+            # Add certifications section
+            self._create_certifications_section()
+            
+            # Add education section
+            self._create_education_section()
+            
+            # Create PDF document
+            doc = SimpleDocTemplate(
+                buffer,
+                pagesize=letter,
+                rightMargin=20,
+                leftMargin=20,
+                topMargin=15,
+                bottomMargin=20
+            )
+            
+            # Build the resume
+            doc.build(self.elements)
+            
+            # Reset buffer position
+            buffer.seek(0)
+            return buffer
+            
+        except Exception as e:
+            print(f"Error generating tailored resume: {str(e)}")
+            return None

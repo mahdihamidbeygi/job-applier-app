@@ -127,8 +127,16 @@ class LinkedInJobScraper:
             print(f"Error scraping job links: {str(e)}")
             return []
 
-    def search_jobs(self, role: str, location: str, max_pages: int = 10) -> List[Dict[str, Any]]:
+    def scroll_down(self):
+        """Scrolls to the bottom of the page and waits for dynamic content to load."""
+        self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(3)  # Wait for content to load
+        self.driver.execute_script("window.scrollTo(0, 0);") # scroll back to the top
+        time.sleep(1)
+
+    def search_jobs(self, role: str, location: str, max_pages: int = 3) -> List[Dict[str, Any]]:
         jobs = []
+        urls_done = []
         try:
             self.setup_driver()
             encoded_role = urllib.parse.quote(role)
@@ -138,16 +146,19 @@ class LinkedInJobScraper:
             self.driver.get(search_url)
             time.sleep(3)  # Wait for initial load
 
-            page = 1
+            page = 0
             while page <= max_pages:
                 print(f"Scraping page {page}...")
                 job_links = self.scrape_job_links()
                 
                 # Scrape details for each job on this page
                 for link in job_links:
+                    if link in urls_done:
+                        continue
                     print(f"Scraping job details for {link}...")
                     job_details = self._extract_job_details(link)
                     jobs.append(job_details)
+                    urls_done.append(link)
                     time.sleep(2)  # Avoid overwhelming the server
 
                 # if job_links:
@@ -157,13 +168,7 @@ class LinkedInJobScraper:
                 
                 # Check if there's a next page
                 try:
-                    next_button = WebDriverWait(self.driver, 10).until(
-                        EC.element_to_be_clickable((By.XPATH, "//button[@aria-label='Next']"))
-                    )
-                    if "disabled" in next_button.get_attribute("class"):
-                        break
-                    next_button.click()
-                    time.sleep(5)  # Wait for page load
+                    self.scroll_down()
                     page += 1
                 except Exception as e:
                     print(f"Error navigating to next page: {str(e)}")

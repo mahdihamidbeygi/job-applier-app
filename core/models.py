@@ -200,8 +200,16 @@ class JobListing(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     is_active = models.BooleanField(default=True)
     match_score = models.FloatField(null=True, blank=True)
-    tailored_resume = models.FileField(upload_to='tailored_resumes/', blank=True)
-    tailored_cover_letter = models.FileField(upload_to='tailored_cover_letters/', blank=True)
+    tailored_resume = models.FileField(
+        upload_to='tailored_resumes/',
+        blank=True,
+        max_length=500
+    )
+    tailored_cover_letter = models.FileField(
+        upload_to='tailored_cover_letters/',
+        blank=True,
+        max_length=500
+    )
     applied = models.BooleanField(default=False)
     application_date = models.DateField(null=True, blank=True)
     application_status = models.CharField(max_length=50, blank=True)  # Applied, Interviewing, Rejected, etc.
@@ -210,12 +218,29 @@ class JobListing(models.Model):
         ordering = ['-posted_date', '-match_score']
         indexes = [
             models.Index(fields=['title', 'company', 'location']),
-            models.Index(fields=['source', 'is_active']),
             models.Index(fields=['posted_date']),
+            models.Index(fields=['match_score']),
         ]
 
     def __str__(self):
         return f"{self.title} at {self.company}"
+
+    def get_resume_url(self):
+        """Get the URL for the tailored resume"""
+        if self.tailored_resume:
+            return self.tailored_resume.url
+        return None
+
+    def get_cover_letter_url(self):
+        """Get the URL for the tailored cover letter"""
+        if self.tailored_cover_letter:
+            return self.tailored_cover_letter.url
+        return None
+
+    @property
+    def has_tailored_documents(self):
+        """Check if both tailored documents exist"""
+        return bool(self.tailored_resume and self.tailored_cover_letter)
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):

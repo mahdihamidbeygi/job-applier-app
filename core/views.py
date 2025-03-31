@@ -24,7 +24,7 @@ import base64
 from reportlab.pdfgen import canvas
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from .models import (
     UserProfile, WorkExperience, Project, Education,
@@ -49,6 +49,12 @@ from .utils.agents.search_agent import SearchAgent
 from django.contrib.auth.models import User
 
 logger = logging.getLogger(__name__)
+
+__all__ = [
+    'home', 'profile', 'register', 'test_s3', 'jobs_page', 'job_detail', 
+    'job_apply', 'generate_job_documents', 'get_job_documents', 'apply_to_job',
+    'search_jobs'
+]
 
 def home(request):
     """Home page view"""
@@ -1149,67 +1155,134 @@ def jobs_page(request):
     }
     return render(request, 'core/jobs.html', context)
 
-@login_required
-@require_http_methods(["POST"])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def search_jobs(request):
-    """API endpoint to search for jobs"""
+    """Search for jobs based on role and location"""
     try:
-        logger.info("Received job search request")
-        data = json.loads(request.body)
-        role = data.get('role', '')
-        location = data.get('location', '')
-        
-        logger.info(f"Searching for role: {role}, location: {location}")
+        role = request.data.get('role')
+        location = request.data.get('location')
         
         if not role or not location:
-            logger.warning("Missing role or location in search request")
-            return JsonResponse({
-                'error': 'Role and location are required'
+            return Response({
+                'message': 'Role and location are required'
             }, status=400)
         
-        try:
-            # Initialize search agent
-            logger.info("Initializing search agent")
-            personal_agent = PersonalAgent(request.user.id)
-            search_agent = SearchAgent(request.user.id, personal_agent)
-            
-            # Search for jobs
-            logger.info("Starting LinkedIn job search")
-            jobs = search_agent.search_linkedin_jobs(role, location)
-            logger.info(f"Found {len(jobs)} jobs")
-            
-            response_data = {
-                'message': f'Found {len(jobs)} jobs',
-                'jobs': [{
-                    'id': job.id,
-                    'title': job.title,
-                    'company': job.company,
-                    'location': job.location,
-                    'description': job.description,
-                    'match_score': job.match_score,
-                    'source_url': job.source_url,
-                    'has_tailored_documents': bool(job.tailored_resume and job.tailored_cover_letter)
-                } for job in jobs]
-            }
-            
-            logger.info("Successfully prepared response")
-            return JsonResponse(response_data)
-            
-        except Exception as agent_error:
-            logger.error(f"Error in search agent: {str(agent_error)}", exc_info=True)
-            return JsonResponse({
-                'error': f'Error searching jobs: {str(agent_error)}'
-            }, status=500)
+        # Initialize agents
+        personal_agent = PersonalAgent(request.user)
+        search_agent = SearchAgent(request.user, personal_agent)
         
-    except json.JSONDecodeError as e:
-        logger.error(f"Invalid JSON in request: {str(e)}")
-        return JsonResponse({
-            'error': 'Invalid request format'
-        }, status=400)
+        # Search for jobs
+        logger.info("Starting LinkedIn job search")
+        jobs = search_agent.search_linkedin_jobs(role, location)
+        logger.info(f"Found {len(jobs)} jobs")
+        
+        response_data = {
+            'message': f'Found {len(jobs)} jobs',
+            'jobs': [{
+                'id': job.id,
+                'title': job.title,
+                'company': job.company,
+                'location': job.location,
+                'description': job.description,
+                'source_url': job.source_url,
+                'has_tailored_documents': bool(job.tailored_resume and job.tailored_cover_letter)
+            } for job in jobs]
+        }
+        
+        return Response(response_data)
+        
     except Exception as e:
-        logger.error(f"Unexpected error in search_jobs: {str(e)}", exc_info=True)
-        return JsonResponse({
-            'error': str(e)
+        logger.error(f"Error in job search: {str(e)}")
+        return Response({
+            'message': 'An error occurred while searching for jobs'
+        }, status=500)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def generate_job_documents(request, job_id):
+    """Generate tailored resume and cover letter for a specific job"""
+    try:
+        # Get the job listing
+        job_listing = get_object_or_404(JobListing, id=job_id)
+        
+        # Initialize agents
+        personal_agent = PersonalAgent(request.user.id)
+        search_agent = SearchAgent(request.user.id, personal_agent)
+        
+        # Load user background
+        background = PersonalBackground(
+            profile=request.user.userprofile.__dict__,
+            work_experience=list(request.user.userprofile.work_experiences.values()),
+            education=list(request.user.userprofile.education.values()),
+            skills=list(request.user.userprofile.skills.values()),
+            projects=list(request.user.userprofile.projects.values()),
+            github_data={},  # We'll implement GitHub data fetching later
+            achievements=[],  # We'll add this field to the model later
+            interests=[]     # We'll add this field to the model later
+        )
+        personal_agent.load_background(background)
+        
+        # Generate documents
+        logger.info(f"Generating documents for job {job_id}")
+        success = search_agent.generate_tailored_documents(job_listing)
+        
+        if success:
+            return Response({
+                'success': True,
+                'message': 'Documents generated successfully',
+                'has_tailored_documents': True,
+                'resume_url': job_listing.tailored_resume.url if job_listing.tailored_resume else None,
+                'cover_letter_url': job_listing.tailored_cover_letter.url if job_listing.tailored_cover_letter else None
+            })
+        else:
+            return Response({
+                'success': False,
+                'message': 'Failed to generate documents',
+                'has_tailored_documents': False
+            }, status=500)
+            
+    except JobListing.DoesNotExist:
+        return Response({
+            'success': False,
+            'message': 'Job not found'
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error generating documents: {str(e)}")
+        return Response({
+            'success': False,
+            'message': f'Error generating documents: {str(e)}'
+        }, status=500)
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_job_documents(request, job_id):
+    """Get the tailored resume and cover letter for a specific job"""
+    try:
+        job_listing = JobListing.objects.get(id=job_id, user=request.user)
+        
+        if not job_listing.tailored_resume or not job_listing.tailored_cover_letter:
+            return Response({
+                'message': 'Documents not found',
+                'has_tailored_documents': False
+            }, status=404)
+        
+        # Return URLs to the documents
+        return Response({
+            'message': 'Documents found',
+            'has_tailored_documents': True,
+            'resume_url': job_listing.tailored_resume.url if job_listing.tailored_resume else None,
+            'cover_letter_url': job_listing.tailored_cover_letter.url if job_listing.tailored_cover_letter else None
+        })
+        
+    except JobListing.DoesNotExist:
+        return Response({
+            'message': 'Job not found'
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error getting documents: {str(e)}")
+        return Response({
+            'message': 'An error occurred while getting documents'
         }, status=500)
 
 @login_required
@@ -1243,3 +1316,37 @@ def apply_to_job(request, job_id):
         return JsonResponse({
             'error': str(e)
         }, status=500)
+
+@login_required
+def job_detail(request, job_id):
+    """View for individual job details"""
+    job = get_object_or_404(JobListing, id=job_id)
+    context = {
+        'job': job,
+    }
+    return render(request, 'core/job_detail.html', context)
+
+@login_required
+def job_apply(request, job_id):
+    """View for job application process"""
+    job = get_object_or_404(JobListing, id=job_id)
+    
+    if request.method == 'POST':
+        try:
+            # Update job status
+            job.applied = True
+            job.application_date = datetime.now().date()
+            job.application_status = 'Applied'
+            job.save()
+            
+            messages.success(request, 'Successfully applied to job!')
+            return redirect('core:job_detail', job_id=job.id)
+            
+        except Exception as e:
+            messages.error(request, f'Error applying to job: {str(e)}')
+            return redirect('core:job_detail', job_id=job.id)
+    
+    context = {
+        'job': job,
+    }
+    return render(request, 'core/job_apply.html', context)

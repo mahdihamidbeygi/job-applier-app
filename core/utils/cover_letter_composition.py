@@ -5,7 +5,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from io import BytesIO
 from typing import List, Dict, Any
 from core.models import UserProfile
-from core.utils.local_llms import GrokClient
+from core.utils.local_llms import GrokClient, OllamaClient
 import json
 import logging
 
@@ -25,7 +25,8 @@ class CoverLetterComposition:
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
         self.grok_client = GrokClient(model="grok-2-1212", temperature=0.0)
-        
+        self.llm = OllamaClient(model="llama3:latest", temperature=0.0)
+
     def _setup_styles(self) -> Dict[str, ParagraphStyle]:
         """Set up custom styles for the cover letter."""
         styles = getSampleStyleSheet()
@@ -258,3 +259,35 @@ class CoverLetterComposition:
         # Reset buffer position
         self.buffer.seek(0)
         return self.buffer 
+
+    def generate_tailored_cover_letter(self, job_title: str, company: str, job_description: str, required_skills: List[str], background: str) -> BytesIO:
+        """
+        Generate a tailored cover letter for a specific job.
+        
+        Args:
+            job_title (str): The job title
+            company (str): The company name
+            job_description (str): The job description
+            required_skills (List[str]): List of required skills
+            background (str): User's background summary
+            
+        Returns:
+            BytesIO: The generated cover letter PDF
+        """
+        try:
+            # Update job description for better tailoring
+            self.job_description = f"""
+            Position: {job_title}
+            Company: {company}
+            Required Skills: {', '.join(required_skills)}
+            
+            Job Description:
+            {job_description}
+            """
+            
+            # Generate and return the cover letter
+            return self.build()
+            
+        except Exception as e:
+            print(f"Error generating tailored cover letter: {str(e)}")
+            return None 
