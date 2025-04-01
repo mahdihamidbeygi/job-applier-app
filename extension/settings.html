@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Job Application Assistant Settings</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            width: 400px;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        label {
+            font-weight: bold;
+        }
+        .help-text {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        input[type="text"],
+        input[type="password"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .success {
+            background-color: #dff0d8;
+            color: #3c763d;
+        }
+        .error {
+            background-color: #f2dede;
+            color: #a94442;
+        }
+        .login-form {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Extension Settings</h2>
+        
+        <div class="form-group">
+            <label for="api-endpoint">API Endpoint</label>
+            <input type="text" id="api-endpoint" placeholder="http://localhost:8000/api">
+            <div class="help-text">The base URL of your Django backend</div>
+        </div>
+
+        <div class="login-form">
+            <h3>Get Authentication Token</h3>
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" placeholder="Enter your password">
+            </div>
+            <button id="get-token">Get Token</button>
+        </div>
+
+        <div class="form-group">
+            <label for="auth-token">Authentication Token</label>
+            <input type="password" id="auth-token" placeholder="Your authentication token">
+            <div class="help-text">Your Django authentication token</div>
+        </div>
+
+        <div class="get-token">
+            <h3>How to Get Your Token</h3>
+            <p>1. Log in to your Django admin panel</p>
+            <p>2. Go to your profile page</p>
+            <p>3. Copy your API token</p>
+            <p>Or use this curl command:</p>
+            <code>curl -X POST http://localhost:8000/api/token/ \<br>
+                -H "Content-Type: application/json" \<br>
+                -d '{"username": "mhami", "password": "194025"}'</code>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="auto-detect"> Auto-detect job application forms
+            </label>
+        </div>
+
+        <div class="form-group">
+            <label>
+                <input type="checkbox" id="auto-fill"> Auto-fill forms when detected
+            </label>
+        </div>
+
+        <button id="save-settings">Save Settings</button>
+        <div id="status" class="status"></div>
+    </div>
+    <script src="settings.js"></script>
+</body>
+</html> 

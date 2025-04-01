@@ -6,21 +6,21 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0003_userprofile_bio_userprofile_email_and_more'),
+        ("core", "0003_userprofile_bio_userprofile_email_and_more"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='userprofile',
-            name='first_name',
+            model_name="userprofile",
+            name="first_name",
         ),
         migrations.RemoveField(
-            model_name='userprofile',
-            name='last_name',
+            model_name="userprofile",
+            name="last_name",
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='name',
+            model_name="userprofile",
+            name="name",
             field=models.CharField(blank=True, max_length=200),
         ),
     ]

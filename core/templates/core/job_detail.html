@@ -1,0 +1,270 @@
+{% extends 'core/base.html' %} {% load static %} {% block content %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-md-8">
+      <!-- Job Details -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h1 class="card-title">{{ job.title }}</h1>
+          <h5 class="card-subtitle mb-3 text-muted">{{ job.company }}</h5>
+          <p class="card-text">
+            <i class="fas fa-map-marker-alt"></i> {{ job.location }}
+          </p>
+
+          <div class="job-description mt-4">
+            <h4>Job Description</h4>
+            <div class="description-content">
+              {{ job.description|linebreaks }}
+            </div>
+          </div>
+
+          <div class="job-requirements mt-4">
+            <h4>Requirements</h4>
+            <div class="requirements-content">
+              {{ job.requirements|linebreaks }}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <!-- Application Actions -->
+      <div class="card mb-4">
+        <div class="card-body">
+          <h5 class="card-title">Application Actions</h5>
+
+          <!-- Document Generation -->
+          <div class="mb-3">
+            <h6>Documents</h6>
+            <div id="documentStatus" class="alert alert-info d-none">
+              Generating documents... Please wait.
+            </div>
+            <div id="documentError" class="alert alert-danger d-none"></div>
+            <div id="documentButtons">
+              {% if job.tailored_resume or job.tailored_cover_letter %}
+              <div class="d-flex flex-column">
+                {% if job.tailored_resume %}
+                <a
+                  href="{{ job.tailored_resume.url }}"
+                  class="btn btn-outline-primary mb-2"
+                  target="_blank"
+                >
+                  Download Tailored Resume
+                </a>
+                {% endif %} {% if job.tailored_cover_letter %}
+                <a
+                  href="{{ job.tailored_cover_letter.url }}"
+                  class="btn btn-outline-primary mb-2"
+                  target="_blank"
+                >
+                  Download Tailored Cover Letter
+                </a>
+                {% endif %}
+                <button
+                  id="generateDocsBtn"
+                  class="btn btn-secondary"
+                  onclick="generateDocuments({{ job.id }})"
+                >
+                  Regenerate Documents
+                </button>
+              </div>
+              {% else %}
+              <button
+                id="generateDocsBtn"
+                class="btn btn-primary mb-2"
+                onclick="generateDocuments({{ job.id }})"
+              >
+                Generate Tailored Documents
+              </button>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Apply Button -->
+          <div class="mt-3">
+            {% if not job.applied %}
+            <button
+              class="btn btn-success w-100"
+              onclick="applyToJob({{ job.id }})"
+            >
+              Apply to Job
+            </button>
+            {% else %}
+            <div class="alert alert-success">
+              <i class="fas fa-check-circle"></i> Applied on {{ job.applied_date
+              }}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Job Metadata -->
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Job Details</h5>
+          <ul class="list-unstyled">
+            <li><strong>Posted:</strong> {{ job.posted_date }}</li>
+            <li>
+              <strong>Source:</strong>
+              <a href="{{ job.source_url }}" target="_blank">LinkedIn</a>
+            </li>
+            <li><strong>Match Score:</strong> {{ job.match_score }}%</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script>
+  // Define functions in the global scope immediately
+  window.generateDocuments = async function (jobId) {
+    const statusDiv = document.getElementById("documentStatus");
+    const errorDiv = document.getElementById("documentError");
+    const generateBtn = document.getElementById("generateDocsBtn");
+    const documentButtons = document.getElementById("documentButtons");
+
+    try {
+      // Show status and disable button
+      statusDiv.textContent = "Generating documents... Please wait.";
+      statusDiv.classList.remove("d-none");
+      errorDiv.classList.add("d-none");
+      generateBtn.disabled = true;
+
+      const authToken = localStorage.getItem("authToken");
+      if (!authToken) {
+        window.location.href = "{% url 'core:login' %}";
+        return;
+      }
+
+      const response = await fetch(`/api/jobs/${jobId}/generate-documents/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken"),
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem("authToken");
+          window.location.href = "{% url 'core:login' %}";
+          return;
+        }
+        throw new Error(data.message || "Failed to generate documents");
+      }
+
+      // Check if documents were generated successfully
+      if (data.has_tailored_documents) {
+        // Create the new buttons container
+        const newButtons = document.createElement("div");
+        newButtons.className = "d-flex flex-column";
+
+        // Add resume download button if available
+        if (data.resume_url) {
+          const resumeLink = document.createElement("a");
+          resumeLink.href = data.resume_url;
+          resumeLink.className = "btn btn-outline-primary mb-2";
+          resumeLink.target = "_blank";
+          resumeLink.textContent = "Download Tailored Resume";
+          newButtons.appendChild(resumeLink);
+        }
+
+        // Add cover letter download button if available
+        if (data.cover_letter_url) {
+          const coverLetterLink = document.createElement("a");
+          coverLetterLink.href = data.cover_letter_url;
+          coverLetterLink.className = "btn btn-outline-primary mb-2";
+          coverLetterLink.target = "_blank";
+          coverLetterLink.textContent = "Download Tailored Cover Letter";
+          newButtons.appendChild(coverLetterLink);
+        }
+
+        // Add regenerate button
+        const regenerateBtn = document.createElement("button");
+        regenerateBtn.id = "generateDocsBtn";
+        regenerateBtn.className = "btn btn-secondary";
+        regenerateBtn.onclick = () => generateDocuments(jobId);
+        regenerateBtn.textContent = "Regenerate Documents";
+        newButtons.appendChild(regenerateBtn);
+
+        // Replace the old buttons with the new ones
+        documentButtons.innerHTML = "";
+        documentButtons.appendChild(newButtons);
+
+        // Hide the status message
+        statusDiv.classList.add("d-none");
+      } else {
+        throw new Error(data.message || "Failed to generate documents");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      errorDiv.textContent = error.message;
+      errorDiv.classList.remove("d-none");
+      statusDiv.classList.add("d-none");
+    } finally {
+      generateBtn.disabled = false;
+    }
+  };
+
+  window.applyToJob = async function (jobId) {
+    try {
+      const authToken = localStorage.getItem("authToken");
+      if (!authToken) {
+        window.location.href = "{% url 'core:login' %}";
+        return;
+      }
+
+      const response = await fetch(`/api/apply-to-job/${jobId}/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken"),
+          Authorization: `Bearer ${authToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          localStorage.removeItem("authToken");
+          window.location.href = "{% url 'core:login' %}";
+          return;
+        }
+        throw new Error("Failed to apply to job");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        location.reload();
+      } else {
+        throw new Error(data.message || "Failed to apply to job");
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      alert(error.message);
+    }
+  };
+
+  // Helper function to get CSRF token
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+</script>
+{% endblock %}

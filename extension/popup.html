@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Job Application Assistant</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    button {
+      padding: 8px 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+      position: relative;
+    }
+    button:hover {
+      background-color: #45a049;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      cursor: not-allowed;
+    }
+    .status {
+      margin-top: 10px;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .success {
+      background-color: #dff0d8;
+      color: #3c763d;
+    }
+    .error {
+      background-color: #f2dede;
+      color: #a94442;
+    }
+    .loading {
+      display: none;
+      position: absolute;
+      right: 10px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 16px;
+      height: 16px;
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      border-top-color: transparent;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to {
+        transform: translateY(-50%) rotate(360deg);
+      }
+    }
+    .settings-link {
+      text-align: right;
+      margin-top: 10px;
+    }
+    .settings-link a {
+      color: #4CAF50;
+      text-decoration: none;
+      font-size: 12px;
+    }
+    .settings-link a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Job Application Assistant</h2>
+    <button id="detectForm">
+      Detect Application Form
+      <div class="loading" id="detectLoading"></div>
+    </button>
+    <button id="fillForm" disabled>
+      Fill Form
+      <div class="loading" id="fillLoading"></div>
+    </button>
+    <div id="status" class="status"></div>
+    <div class="settings-link">
+      <a href="#" id="openSettings">Settings</a>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html> 

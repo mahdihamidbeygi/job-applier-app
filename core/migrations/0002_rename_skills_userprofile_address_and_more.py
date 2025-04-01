@@ -7,174 +7,265 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0001_initial'),
+        ("core", "0001_initial"),
     ]
 
     operations = [
         migrations.RenameField(
-            model_name='userprofile',
-            old_name='skills',
-            new_name='address',
+            model_name="userprofile",
+            old_name="skills",
+            new_name="address",
         ),
         migrations.RenameField(
-            model_name='userprofile',
-            old_name='location',
-            new_name='city',
+            model_name="userprofile",
+            old_name="location",
+            new_name="city",
         ),
         migrations.RemoveField(
-            model_name='userprofile',
-            name='bio',
+            model_name="userprofile",
+            name="bio",
         ),
         migrations.RemoveField(
-            model_name='userprofile',
-            name='birth_date',
+            model_name="userprofile",
+            name="birth_date",
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='country',
+            model_name="userprofile",
+            name="country",
             field=models.CharField(blank=True, max_length=100),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='github',
+            model_name="userprofile",
+            name="github",
             field=models.URLField(blank=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='linkedin',
+            model_name="userprofile",
+            name="linkedin",
             field=models.URLField(blank=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='phone',
+            model_name="userprofile",
+            name="phone",
             field=models.CharField(blank=True, max_length=20),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='postal_code',
+            model_name="userprofile",
+            name="postal_code",
             field=models.CharField(blank=True, max_length=20),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='professional_summary',
+            model_name="userprofile",
+            name="professional_summary",
             field=models.TextField(blank=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='state',
+            model_name="userprofile",
+            name="state",
             field=models.CharField(blank=True, max_length=100),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='website',
+            model_name="userprofile",
+            name="website",
             field=models.URLField(blank=True),
         ),
         migrations.CreateModel(
-            name='Certification',
+            name="Certification",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=200)),
-                ('issuer', models.CharField(max_length=200)),
-                ('issue_date', models.DateField()),
-                ('expiry_date', models.DateField(blank=True, null=True)),
-                ('credential_id', models.CharField(blank=True, max_length=100)),
-                ('credential_url', models.URLField(blank=True)),
-                ('order', models.IntegerField(default=0)),
-                ('profile', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='certifications', to='core.userprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("name", models.CharField(max_length=200)),
+                ("issuer", models.CharField(max_length=200)),
+                ("issue_date", models.DateField()),
+                ("expiry_date", models.DateField(blank=True, null=True)),
+                ("credential_id", models.CharField(blank=True, max_length=100)),
+                ("credential_url", models.URLField(blank=True)),
+                ("order", models.IntegerField(default=0)),
+                (
+                    "profile",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="certifications",
+                        to="core.userprofile",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-issue_date', '-order'],
+                "ordering": ["-issue_date", "-order"],
             },
         ),
         migrations.CreateModel(
-            name='Education',
+            name="Education",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('institution', models.CharField(max_length=200)),
-                ('degree', models.CharField(max_length=200)),
-                ('field_of_study', models.CharField(max_length=200)),
-                ('start_date', models.DateField()),
-                ('end_date', models.DateField(blank=True, null=True)),
-                ('current', models.BooleanField(default=False)),
-                ('gpa', models.DecimalField(blank=True, decimal_places=2, max_digits=3, null=True)),
-                ('achievements', models.TextField(blank=True)),
-                ('order', models.IntegerField(default=0)),
-                ('profile', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='education', to='core.userprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("institution", models.CharField(max_length=200)),
+                ("degree", models.CharField(max_length=200)),
+                ("field_of_study", models.CharField(max_length=200)),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField(blank=True, null=True)),
+                ("current", models.BooleanField(default=False)),
+                ("gpa", models.DecimalField(blank=True, decimal_places=2, max_digits=3, null=True)),
+                ("achievements", models.TextField(blank=True)),
+                ("order", models.IntegerField(default=0)),
+                (
+                    "profile",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="education",
+                        to="core.userprofile",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-start_date', '-order'],
+                "ordering": ["-start_date", "-order"],
             },
         ),
         migrations.CreateModel(
-            name='Project',
+            name="Project",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=200)),
-                ('description', models.TextField()),
-                ('start_date', models.DateField()),
-                ('end_date', models.DateField(blank=True, null=True)),
-                ('current', models.BooleanField(default=False)),
-                ('technologies', models.TextField(blank=True)),
-                ('github_url', models.URLField(blank=True)),
-                ('live_url', models.URLField(blank=True)),
-                ('order', models.IntegerField(default=0)),
-                ('profile', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='projects', to='core.userprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("title", models.CharField(max_length=200)),
+                ("description", models.TextField()),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField(blank=True, null=True)),
+                ("current", models.BooleanField(default=False)),
+                ("technologies", models.TextField(blank=True)),
+                ("github_url", models.URLField(blank=True)),
+                ("live_url", models.URLField(blank=True)),
+                ("order", models.IntegerField(default=0)),
+                (
+                    "profile",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="projects",
+                        to="core.userprofile",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-start_date', '-order'],
+                "ordering": ["-start_date", "-order"],
             },
         ),
         migrations.CreateModel(
-            name='Publication',
+            name="Publication",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=500)),
-                ('authors', models.TextField()),
-                ('publication_date', models.DateField()),
-                ('publisher', models.CharField(max_length=200)),
-                ('journal', models.CharField(blank=True, max_length=200)),
-                ('doi', models.CharField(blank=True, max_length=100)),
-                ('url', models.URLField(blank=True)),
-                ('abstract', models.TextField(blank=True)),
-                ('order', models.IntegerField(default=0)),
-                ('profile', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='publications', to='core.userprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("title", models.CharField(max_length=500)),
+                ("authors", models.TextField()),
+                ("publication_date", models.DateField()),
+                ("publisher", models.CharField(max_length=200)),
+                ("journal", models.CharField(blank=True, max_length=200)),
+                ("doi", models.CharField(blank=True, max_length=100)),
+                ("url", models.URLField(blank=True)),
+                ("abstract", models.TextField(blank=True)),
+                ("order", models.IntegerField(default=0)),
+                (
+                    "profile",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="publications",
+                        to="core.userprofile",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-publication_date', '-order'],
+                "ordering": ["-publication_date", "-order"],
             },
         ),
         migrations.CreateModel(
-            name='Skill',
+            name="Skill",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('name', models.CharField(max_length=100)),
-                ('category', models.CharField(choices=[('programming', 'Programming Languages'), ('frameworks', 'Frameworks & Libraries'), ('databases', 'Databases'), ('tools', 'Tools & Technologies'), ('soft_skills', 'Soft Skills'), ('languages', 'Languages'), ('other', 'Other')], max_length=20)),
-                ('proficiency', models.IntegerField(choices=[(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)], default=3)),
-                ('order', models.IntegerField(default=0)),
-                ('profile', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='skills', to='core.userprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("name", models.CharField(max_length=100)),
+                (
+                    "category",
+                    models.CharField(
+                        choices=[
+                            ("programming", "Programming Languages"),
+                            ("frameworks", "Frameworks & Libraries"),
+                            ("databases", "Databases"),
+                            ("tools", "Tools & Technologies"),
+                            ("soft_skills", "Soft Skills"),
+                            ("languages", "Languages"),
+                            ("other", "Other"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "proficiency",
+                    models.IntegerField(
+                        choices=[(1, 1), (2, 2), (3, 3), (4, 4), (5, 5)], default=3
+                    ),
+                ),
+                ("order", models.IntegerField(default=0)),
+                (
+                    "profile",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="skills",
+                        to="core.userprofile",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['category', '-proficiency', 'name'],
+                "ordering": ["category", "-proficiency", "name"],
             },
         ),
         migrations.CreateModel(
-            name='WorkExperience',
+            name="WorkExperience",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('company', models.CharField(max_length=200)),
-                ('position', models.CharField(max_length=200)),
-                ('location', models.CharField(blank=True, max_length=200)),
-                ('start_date', models.DateField()),
-                ('end_date', models.DateField(blank=True, null=True)),
-                ('current', models.BooleanField(default=False)),
-                ('description', models.TextField()),
-                ('achievements', models.TextField(blank=True)),
-                ('technologies', models.TextField(blank=True)),
-                ('order', models.IntegerField(default=0)),
-                ('profile', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='work_experiences', to='core.userprofile')),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("company", models.CharField(max_length=200)),
+                ("position", models.CharField(max_length=200)),
+                ("location", models.CharField(blank=True, max_length=200)),
+                ("start_date", models.DateField()),
+                ("end_date", models.DateField(blank=True, null=True)),
+                ("current", models.BooleanField(default=False)),
+                ("description", models.TextField()),
+                ("achievements", models.TextField(blank=True)),
+                ("technologies", models.TextField(blank=True)),
+                ("order", models.IntegerField(default=0)),
+                (
+                    "profile",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="work_experiences",
+                        to="core.userprofile",
+                    ),
+                ),
             ],
             options={
-                'ordering': ['-start_date', '-order'],
+                "ordering": ["-start_date", "-order"],
             },
         ),
     ]

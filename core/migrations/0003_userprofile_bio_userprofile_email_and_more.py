@@ -6,48 +6,48 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0002_rename_skills_userprofile_address_and_more'),
+        ("core", "0002_rename_skills_userprofile_address_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='userprofile',
-            name='bio',
+            model_name="userprofile",
+            name="bio",
             field=models.TextField(blank=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='email',
+            model_name="userprofile",
+            name="email",
             field=models.EmailField(blank=True, max_length=254),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='first_name',
+            model_name="userprofile",
+            name="first_name",
             field=models.CharField(blank=True, max_length=100),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='github_url',
+            model_name="userprofile",
+            name="github_url",
             field=models.URLField(blank=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='last_name',
+            model_name="userprofile",
+            name="last_name",
             field=models.CharField(blank=True, max_length=100),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='linkedin_url',
+            model_name="userprofile",
+            name="linkedin_url",
             field=models.URLField(blank=True),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='location',
+            model_name="userprofile",
+            name="location",
             field=models.CharField(blank=True, max_length=200),
         ),
         migrations.AddField(
-            model_name='userprofile',
-            name='title',
+            model_name="userprofile",
+            name="title",
             field=models.CharField(blank=True, max_length=100),
         ),
     ]

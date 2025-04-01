@@ -1,49 +1,137 @@
-{% extends 'core/base.html' %}
-
-{% block title %}Login - Job Applier{% endblock %}
-
-{% block content %}
+{% extends 'core/base.html' %} {% load form_tags %} {% block title %}Login - Job
+Applier{% endblock %} {% block content %}
 <div class="container">
-    <div class="row justify-content-center">
-        <div class="col-md-6 col-lg-5">
-            <div class="card shadow-sm">
-                <div class="card-body p-5">
-                    <div class="text-center mb-4">
-                        <i class="fas fa-user-circle fa-3x text-primary mb-3"></i>
-                        <h2 class="card-title mb-3">Welcome Back</h2>
-                        <p class="text-muted">Please login to access your profile</p>
-                    </div>
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-body p-5">
+          <div class="text-center mb-4">
+            <i class="fas fa-user-circle fa-3x text-primary mb-3"></i>
+            <h2 class="card-title mb-3">Welcome Back</h2>
+            <p class="text-muted">Please login to access your profile</p>
+          </div>
 
-                    <form method="post">
-                        {% csrf_token %}
-                        
-                        {% if form.errors %}
-                            <div class="alert alert-danger">
-                                <small>Your username and password didn't match. Please try again.</small>
-                            </div>
-                        {% endif %}
-
-                        <div class="mb-3">
-                            <label for="{{ form.username.id_for_label }}" class="form-label">Username</label>
-                            {{ form.username|addclass:"form-control" }}
-                        </div>
-
-                        <div class="mb-4">
-                            <label for="{{ form.password.id_for_label }}" class="form-label">Password</label>
-                            {{ form.password|addclass:"form-control" }}
-                        </div>
-
-                        <div class="d-grid">
-                            <button type="submit" class="btn btn-primary btn-lg">Login</button>
-                        </div>
-                    </form>
-
-                    <div class="text-center mt-4">
-                        <p class="mb-0">Don't have an account? <a href="{% url 'core:register' %}" class="text-primary">Sign up</a></p>
-                    </div>
-                </div>
+          <form id="loginForm">
+            {% csrf_token %}
+            <div id="loginError" class="alert alert-danger d-none">
+              <small
+                >Your username and password didn't match. Please try
+                again.</small
+              >
             </div>
+
+            <div class="mb-3">
+              <label for="{{ form.username.id_for_label }}" class="form-label"
+                >Username</label
+              >
+              {{ form.username|addclass:"form-control" }}
+            </div>
+
+            <div class="mb-4">
+              <label for="{{ form.password.id_for_label }}" class="form-label"
+                >Password</label
+              >
+              {{ form.password|addclass:"form-control" }}
+            </div>
+
+            <div class="d-grid">
+              <button type="submit" class="btn btn-primary btn-lg">
+                Login
+              </button>
+            </div>
+          </form>
+
+          <div class="text-center mt-4">
+            <p class="mb-0">
+              Don't have an account?
+              <a href="{% url 'core:register' %}" class="text-primary"
+                >Sign up</a
+              >
+            </p>
+          </div>
         </div>
+      </div>
     </div>
+  </div>
 </div>
-{% endblock %} 
+
+<script>
+  document
+    .getElementById("loginForm")
+    .addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const username = document.getElementById(
+        "{{ form.username.id_for_label }}"
+      ).value;
+      const password = document.getElementById(
+        "{{ form.password.id_for_label }}"
+      ).value;
+      const errorDiv = document.getElementById("loginError");
+
+      try {
+        // First get the token
+        const tokenResponse = await fetch("/api/token/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+          body: JSON.stringify({
+            username: username,
+            password: password,
+          }),
+        });
+
+        const tokenData = await tokenResponse.json();
+
+        if (tokenResponse.ok && tokenData.access) {
+          // Store the token
+          localStorage.setItem("authToken", tokenData.access);
+
+          // Now perform the Django login
+          const loginForm = new FormData();
+          loginForm.append("username", username);
+          loginForm.append("password", password);
+          loginForm.append("csrfmiddlewaretoken", getCookie("csrftoken"));
+
+          const loginResponse = await fetch('{% url "core:login" %}', {
+            method: "POST",
+            body: loginForm,
+            headers: {
+              "X-CSRFToken": getCookie("csrftoken"),
+            },
+          });
+
+          if (loginResponse.ok) {
+            // Redirect to home page or intended URL
+            window.location.href = '{% url "core:home" %}';
+          } else {
+            throw new Error("Login failed");
+          }
+        } else {
+          throw new Error(tokenData.error || "Authentication failed");
+        }
+      } catch (error) {
+        console.error("Login error:", error);
+        errorDiv.classList.remove("d-none");
+      }
+    });
+
+  // Helper function to get CSRF token
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+</script>
+{% endblock %}
