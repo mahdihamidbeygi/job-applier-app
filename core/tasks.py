@@ -39,12 +39,12 @@ def generate_documents_async(job_id: int, user_id: int):
         personal_agent.load_background(background)
 
         # Generate documents
-        logger.info(f"Generating documents for job {job_id}")
+        print(f"Generating documents for job {job_id}")
         success: bool = personal_agent.generate_tailored_documents(job_listing)
 
         if not success:
-            logger.error(f"Failed to generate documents for job {job_id}")
+            print(f"Failed to generate documents for job {job_id}")
 
     except Exception as e:
-        logger.error(f"Error in generate_documents_async task: {str(e)}")
+        print(f"Error in generate_documents_async task: {str(e)}")
         raise
