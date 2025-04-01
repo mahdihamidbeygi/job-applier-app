@@ -180,6 +180,8 @@ class JobListing(models.Model):
         ('linkedin', 'LinkedIn'),
         ('indeed', 'Indeed'),
         ('glassdoor', 'Glassdoor'),
+        ('monster', 'Monster'),
+        ('jobbank', 'JobBank'),
         ('other', 'Other'),
     ]
 

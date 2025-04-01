@@ -1,0 +1,254 @@
+{% extends 'core/base.html' %} {% load static %} {% block content %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-md-4">
+      <div class="card">
+        <div class="card-body">
+          <h5 class="card-title">Job Search</h5>
+          <form id="jobSearchForm">
+            <div class="mb-3">
+              <label for="role" class="form-label">Job Title</label>
+              <input
+                type="text"
+                class="form-control"
+                id="role"
+                name="role"
+                value="{{ role }}"
+                required
+              />
+            </div>
+            <div class="mb-3">
+              <label for="location" class="form-label">Location</label>
+              <input
+                type="text"
+                class="form-control"
+                id="location"
+                name="location"
+                value="{{ location }}"
+                required
+              />
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Job Platforms</label>
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  value="linkedin"
+                  id="linkedin"
+                  checked
+                />
+                <label class="form-check-label" for="linkedin">LinkedIn</label>
+              </div>
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  value="indeed"
+                  id="indeed"
+                  checked
+                />
+                <label class="form-check-label" for="indeed">Indeed</label>
+              </div>
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  value="glassdoor"
+                  id="glassdoor"
+                  checked
+                />
+                <label class="form-check-label" for="glassdoor"
+                  >Glassdoor</label
+                >
+              </div>
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  value="monster"
+                  id="monster"
+                  checked
+                />
+                <label class="form-check-label" for="monster">Monster</label>
+              </div>
+              <div class="form-check">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  value="jobbank"
+                  id="jobbank"
+                  checked
+                />
+                <label class="form-check-label" for="jobbank">JobBank</label>
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary">Search Jobs</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-8">
+      <div id="searchResults">
+        {% if job_listings %} {% for job in job_listings %}
+        <div class="card mb-3">
+          <div class="card-body">
+            <h5 class="card-title">{{ job.title }}</h5>
+            <h6 class="card-subtitle mb-2 text-muted">{{ job.company }}</h6>
+            <p class="card-text">
+              <small class="text-muted">
+                <i class="fas fa-map-marker-alt"></i> {{ job.location }} |
+                <i class="fas fa-calendar"></i> Posted {{
+                job.posted_date|date:"M d, Y" }}
+              </small>
+            </p>
+            <p class="card-text">{{ job.description|truncatewords:50 }}</p>
+            <div class="d-flex justify-content-between align-items-center">
+              <div>
+                <a
+                  href="{{ job.source_url }}"
+                  target="_blank"
+                  class="btn btn-outline-primary btn-sm"
+                >
+                  View on {{ job.get_source_display }}
+                </a>
+                {% if job.has_tailored_documents %}
+                <a
+                  href="{% url 'core:job_detail' job.id %}"
+                  class="btn btn-outline-success btn-sm"
+                >
+                  View Documents
+                </a>
+                {% endif %}
+              </div>
+              <div>
+                <span class="badge bg-{{ job.source }}"
+                  >{{ job.get_source_display }}</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %} {% else %}
+        <div class="alert alert-info">
+          No jobs found. Try adjusting your search criteria.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %} {% block extra_js %}
+<script>
+  document
+    .getElementById("jobSearchForm")
+    .addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      const role = document.getElementById("role").value;
+      const location = document.getElementById("location").value;
+      const platforms = Array.from(
+        document.querySelectorAll('input[type="checkbox"]:checked')
+      ).map((checkbox) => checkbox.value);
+
+      try {
+        const response = await fetch("/api/search-jobs/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken"),
+          },
+          body: JSON.stringify({
+            role: role,
+            location: location,
+            platforms: platforms,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          const resultsDiv = document.getElementById("searchResults");
+          resultsDiv.innerHTML = "";
+
+          if (data.jobs.length > 0) {
+            data.jobs.forEach((job) => {
+              const jobCard = createJobCard(job);
+              resultsDiv.appendChild(jobCard);
+            });
+          } else {
+            resultsDiv.innerHTML = `
+                    <div class="alert alert-info">
+                        No jobs found. Try adjusting your search criteria.
+                    </div>
+                `;
+          }
+        } else {
+          throw new Error(data.message || "An error occurred");
+        }
+      } catch (error) {
+        console.error("Error:", error);
+        document.getElementById("searchResults").innerHTML = `
+            <div class="alert alert-danger">
+                ${error.message}
+            </div>
+        `;
+      }
+    });
+
+  function createJobCard(job) {
+    const card = document.createElement("div");
+    card.className = "card mb-3";
+    card.innerHTML = `
+        <div class="card-body">
+            <h5 class="card-title">${job.title}</h5>
+            <h6 class="card-subtitle mb-2 text-muted">${job.company}</h6>
+            <p class="card-text">
+                <small class="text-muted">
+                    <i class="fas fa-map-marker-alt"></i> ${job.location}
+                </small>
+            </p>
+            <p class="card-text">${job.description.substring(0, 150)}...</p>
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <a href="${
+                      job.source_url
+                    }" target="_blank" class="btn btn-outline-primary btn-sm">
+                        View on ${job.source}
+                    </a>
+                    ${
+                      job.has_tailored_documents
+                        ? `
+                        <a href="/jobs/${job.id}/" class="btn btn-outline-success btn-sm">
+                            View Documents
+                        </a>
+                    `
+                        : ""
+                    }
+                </div>
+                <div>
+                    <span class="badge bg-${job.source}">${job.source}</span>
+                </div>
+            </div>
+        </div>
+    `;
+    return card;
+  }
+
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+</script>
+{% endblock %}

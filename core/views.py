@@ -1,52 +1,73 @@
+import base64
 import io
+import json
 import logging
+from datetime import date, datetime, timezone
+from io import BytesIO
+
 import pdfminer.high_level
+from django.contrib import messages
+from django.contrib.auth import authenticate
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
-from django.contrib import messages
-from django.core.files.storage import default_storage
-from django.core.files.base import ContentFile
-from django.http import JsonResponse, HttpResponse
-from django.shortcuts import render, redirect, get_object_or_404
-from django.views.decorators.http import require_POST, require_http_methods
-from django.utils.decorators import method_decorator
-from rest_framework import viewsets, permissions, status, filters
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.response import Response
-from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema, OpenApiParameter
-from drf_spectacular.types import OpenApiTypes
-from datetime import datetime, date
-from django.views.generic import TemplateView
-import json
-from io import BytesIO
-import base64
-from reportlab.pdfgen import canvas
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.contrib.auth import authenticate
-from rest_framework.permissions import AllowAny, IsAuthenticated
-
-from .models import (
-    UserProfile, WorkExperience, Project, Education,
-    Certification, Publication, Skill, JobListing
-)
-from .forms import (
-    UserProfileForm, WorkExperienceForm, ProjectForm,
-    EducationForm, CertificationForm, PublicationForm, SkillForm
-)
-from .serializers import (
-    UserProfileSerializer, WorkExperienceSerializer, ProjectSerializer,
-    EducationSerializer, CertificationSerializer, PublicationSerializer,
-    SkillSerializer, ProfileSerializer
-)
-from .utils.profile_importers import GitHubProfileImporter, ResumeImporter, LinkedInImporter
-from .utils.resume_composition import ResumeComposition
-from .utils.cover_letter_composition import CoverLetterComposition
-from .utils.local_llms import OllamaClient
-from .utils.agents import PersonalAgent, PersonalBackground
-from .utils.agents.application_agent import ApplicationAgent
-from .utils.agents.search_agent import SearchAgent
 from django.contrib.auth.models import User
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.http import (
+    HttpResponse,
+    HttpResponsePermanentRedirect,
+    HttpResponseRedirect,
+    JsonResponse,
+)
+from django.shortcuts import get_object_or_404, redirect, render
+from django.utils.decorators import method_decorator
+from django.views.decorators.http import require_http_methods, require_POST
+from django.views.generic import TemplateView
+from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiParameter, extend_schema
+from rest_framework import filters, permissions, status, viewsets
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.response import Response
+from rest_framework_simplejwt.tokens import RefreshToken
+
+from core.forms import (
+    CertificationForm,
+    EducationForm,
+    ProjectForm,
+    PublicationForm,
+    SkillForm,
+    UserProfileForm,
+    WorkExperienceForm,
+)
+from core.models import (
+    Certification,
+    Education,
+    JobListing,
+    Project,
+    Publication,
+    Skill,
+    UserProfile,
+    WorkExperience,
+)
+from core.serializers import (
+    CertificationSerializer,
+    EducationSerializer,
+    ProfileSerializer,
+    ProjectSerializer,
+    PublicationSerializer,
+    SkillSerializer,
+    UserProfileSerializer,
+    WorkExperienceSerializer,
+)
+from core.utils.agents.application_agent import ApplicationAgent
+from core.utils.agents.personal_agent import PersonalAgent, PersonalBackground
+from core.utils.agents.search_agent import SearchAgent
+from core.utils.cover_letter_composition import CoverLetterComposition
+from core.utils.local_llms import OllamaClient
+from core.utils.profile_importers import GitHubProfileImporter, LinkedInImporter, ResumeImporter
+from core.utils.resume_composition import ResumeComposition
 
 logger = logging.getLogger(__name__)
 
@@ -1155,48 +1176,94 @@ def jobs_page(request):
     }
     return render(request, 'core/jobs.html', context)
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@login_required
 def search_jobs(request):
-    """Search for jobs based on role and location"""
-    try:
-        role = request.data.get('role')
-        location = request.data.get('location')
-        
-        if not role or not location:
-            return Response({
-                'message': 'Role and location are required'
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            role = data.get('role')
+            location = data.get('location')
+            platforms = data.get('platforms', ['linkedin'])  # Default to LinkedIn if no platforms specified
+            
+            if not role or not location:
+                return JsonResponse({
+                    'error': 'Role and location are required'
+                }, status=400)
+            
+            # Initialize agents
+            search_agent = SearchAgent()
+            
+            # Get user profile for job search
+            user_profile = UserProfile.objects.get(user=request.user)
+            
+            # Search for jobs based on selected platforms
+            job_listings = []
+            for platform in platforms:
+                try:
+                    platform_jobs = search_agent.search_jobs(role, location, platform)
+                    job_listings.extend(platform_jobs)
+                except Exception as e:
+                    logger.error(f"Error searching {platform}: {str(e)}")
+                    continue
+            
+            # Process and save job listings
+            processed_jobs = []
+            for job_data in job_listings:
+                try:
+                    # Check if job already exists
+                    existing_job = JobListing.objects.filter(
+                        title=job_data['title'],
+                        company=job_data['company'],
+                        location=job_data['location'],
+                        source_url=job_data['source_url']
+                    ).first()
+                    
+                    if existing_job:
+                        job = existing_job
+                    else:
+                        # Create new job listing
+                        job = JobListing.objects.create(
+                            title=job_data['title'],
+                            company=job_data['company'],
+                            location=job_data['location'],
+                            description=job_data['description'],
+                            source_url=job_data['source_url'],
+                            source=job_data['source'],
+                            posted_date=job_data.get('posted_date', timezone.now())
+                        )
+                        
+                        # Trigger document generation for new jobs
+                        generate_job_documents.delay(job.id, user_profile.id)
+                    
+                    processed_jobs.append({
+                        'id': job.id,
+                        'title': job.title,
+                        'company': job.company,
+                        'location': job.location,
+                        'description': job.description,
+                        'source_url': job.source_url,
+                        'source': job.source,
+                        'posted_date': job.posted_date.isoformat(),
+                        'has_tailored_documents': job.has_tailored_documents
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing job listing: {str(e)}")
+                    continue
+            
+            return JsonResponse({
+                'jobs': processed_jobs
+            })
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON data'
             }, status=400)
-        
-        # Initialize agents
-        personal_agent = PersonalAgent(request.user)
-        search_agent = SearchAgent(request.user, personal_agent)
-        
-        # Search for jobs
-        logger.info("Starting LinkedIn job search")
-        jobs = search_agent.search_linkedin_jobs(role, location)
-        logger.info(f"Found {len(jobs)} jobs")
-        
-        response_data = {
-            'message': f'Found {len(jobs)} jobs',
-            'jobs': [{
-                'id': job.id,
-                'title': job.title,
-                'company': job.company,
-                'location': job.location,
-                'description': job.description,
-                'source_url': job.source_url,
-                'has_tailored_documents': bool(job.tailored_resume and job.tailored_cover_letter)
-            } for job in jobs]
-        }
-        
-        return Response(response_data)
-        
-    except Exception as e:
-        logger.error(f"Error in job search: {str(e)}")
-        return Response({
-            'message': 'An error occurred while searching for jobs'
-        }, status=500)
+        except Exception as e:
+            return JsonResponse({
+                'error': str(e)
+            }, status=500)
+    
+    return render(request, 'core/jobs.html')
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -1208,7 +1275,6 @@ def generate_job_documents(request, job_id):
         
         # Initialize agents
         personal_agent = PersonalAgent(request.user.id)
-        search_agent = SearchAgent(request.user.id, personal_agent)
         
         # Load user background
         background = PersonalBackground(
@@ -1225,7 +1291,7 @@ def generate_job_documents(request, job_id):
         
         # Generate documents
         logger.info(f"Generating documents for job {job_id}")
-        success = search_agent.generate_tailored_documents(job_listing)
+        success = personal_agent.generate_tailored_documents(job_listing)
         
         if success:
             return Response({
@@ -1259,7 +1325,7 @@ def generate_job_documents(request, job_id):
 def get_job_documents(request, job_id):
     """Get the tailored resume and cover letter for a specific job"""
     try:
-        job_listing = JobListing.objects.get(id=job_id, user=request.user)
+        job_listing: JobListing = JobListing.objects.get(id=job_id, user=request.user)
         
         if not job_listing.tailored_resume or not job_listing.tailored_cover_letter:
             return Response({
@@ -1287,10 +1353,10 @@ def get_job_documents(request, job_id):
 
 @login_required
 @require_http_methods(["POST"])
-def apply_to_job(request, job_id):
+def apply_to_job(request, job_id) -> JsonResponse:
     """API endpoint to apply to a job"""
     try:
-        job = JobListing.objects.get(id=job_id)
+        job: JobListing = JobListing.objects.get(id=job_id)
         
         # Update job status
         job.applied = True
@@ -1318,18 +1384,18 @@ def apply_to_job(request, job_id):
         }, status=500)
 
 @login_required
-def job_detail(request, job_id):
+def job_detail(request, job_id) -> HttpResponse:
     """View for individual job details"""
-    job = get_object_or_404(JobListing, id=job_id)
-    context = {
+    job: JobListing = get_object_or_404(JobListing, id=job_id)
+    context: dict[str, JobListing] = {
         'job': job,
     }
     return render(request, 'core/job_detail.html', context)
 
 @login_required
-def job_apply(request, job_id):
+def job_apply(request, job_id) -> HttpResponseRedirect | HttpResponsePermanentRedirect | HttpResponse:
     """View for job application process"""
-    job = get_object_or_404(JobListing, id=job_id)
+    job: JobListing = get_object_or_404(JobListing, id=job_id)
     
     if request.method == 'POST':
         try:
@@ -1346,7 +1412,7 @@ def job_apply(request, job_id):
             messages.error(request, f'Error applying to job: {str(e)}')
             return redirect('core:job_detail', job_id=job.id)
     
-    context = {
+    context: dict[str, JobListing] = {
         'job': job,
     }
     return render(request, 'core/job_apply.html', context)

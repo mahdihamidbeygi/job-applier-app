@@ -1,14 +1,18 @@
-from typing import Dict, Any, List
+import logging
+from typing import Any, Dict, List
+
+from django.utils import timezone
+
+from core.models import JobListing
+from core.tasks import generate_documents_async
 from core.utils.agents.base_agent import BaseAgent
 from core.utils.agents.personal_agent import PersonalAgent
-from core.utils.rag.job_knowledge import JobKnowledgeBase
+from core.utils.job_scrapers.glassdoor_scraper import GlassdoorJobScraper
+from core.utils.job_scrapers.indeed_scraper import IndeedJobScraper
+from core.utils.job_scrapers.jobbank_scraper import JobBankScraper
 from core.utils.job_scrapers.linkedin_scraper import LinkedInJobScraper
-from core.models import JobListing
-from core.utils.resume_composition import ResumeComposition
-from core.utils.cover_letter_composition import CoverLetterComposition
-import logging
-from django.utils import timezone
-import json
+from core.utils.job_scrapers.monster_scraper import MonsterJobScraper
+from core.utils.rag.job_knowledge import JobKnowledgeBase
 
 logger = logging.getLogger(__name__)
 
@@ -17,151 +21,70 @@ class SearchAgent(BaseAgent):
         super().__init__(user_id)
         self.personal_agent = personal_agent
         self.knowledge_base = JobKnowledgeBase()
-        self.linkedin_scraper = None
+        self.linkedin_scraper = LinkedInJobScraper()
+        self.indeed_scraper = IndeedJobScraper()
+        self.glassdoor_scraper = GlassdoorJobScraper()
+        self.monster_scraper = MonsterJobScraper()
+        self.jobbank_scraper = JobBankScraper()
     
-    def search_linkedin_jobs(self, role: str, location: str) -> List[JobListing]:
-        """Search for jobs on LinkedIn"""
-        try:
-            # Import task here to avoid circular import
-            from core.tasks import generate_documents_async
+    def search_jobs(self, role: str, location: str, platform: str = 'linkedin') -> List[Dict]:
+        """
+        Search for jobs on the specified platform
+        
+        Args:
+            role: Job title or role to search for
+            location: Location to search in
+            platform: Platform to search on (linkedin, indeed, glassdoor, monster, jobbank)
             
-            # Initialize LinkedIn scraper
-            scraper = LinkedInJobScraper()
-            
-            # Search for jobs
-            jobs = scraper.search_jobs(role, location)
-            
-            # Convert to JobListing objects
-            job_listings = []
-            for job in jobs:
-                if job:  # Skip None results
-                    # Check for existing job with same title, company, and location
-                    existing_job = JobListing.objects.filter(
+        Returns:
+            List of job listings
+        """
+        platform = platform.lower()
+        
+        if platform == 'linkedin':
+            return self.linkedin_scraper.search_jobs(role, location)
+        elif platform == 'indeed':
+            return self.indeed_scraper.search_jobs(role, location)
+        elif platform == 'glassdoor':
+            return self.glassdoor_scraper.search_jobs(role, location)
+        elif platform == 'monster':
+            return self.monster_scraper.search_jobs(role, location)
+        elif platform == 'jobbank':
+            return self.jobbank_scraper.search_jobs(role, location)
+        else:
+            raise ValueError(f"Unsupported platform: {platform}")
+    
+    def _process_jobs(self, jobs: List[Dict[str, str]], source: str) -> List[JobListing]:
+        """Process jobs from a specific source and create JobListing objects"""
+        job_listings = []
+        for job in jobs:
+            if job:  # Skip None results
+                # Check for existing job with same title, company, and location
+                existing_job = JobListing.objects.filter(
+                    title=job.get('title', ''),
+                    company=job.get('company', ''),
+                    location=job.get('location', ''),
+                    source=source
+                ).first()
+                
+                if not existing_job:
+                    job_listing = JobListing.objects.create(
                         title=job.get('title', ''),
                         company=job.get('company', ''),
                         location=job.get('location', ''),
-                        source='linkedin'
-                    ).first()
+                        description=job.get('description', ''),
+                        source_url=job.get('source_url', ''),
+                        source=source,
+                        posted_date=timezone.now().date()
+                    )
                     
-                    if not existing_job:
-                        job_listing = JobListing.objects.create(
-                            title=job.get('title', ''),
-                            company=job.get('company', ''),
-                            location=job.get('location', ''),
-                            description=job.get('description', ''),
-                            source_url=job.get('source_url', ''),
-                            source='linkedin',
-                            posted_date=timezone.now().date()
-                        )
-                        
-                        job_listings.append(job_listing)
-                        
-                        # Trigger background document generation
-                        generate_documents_async.delay(job_listing.id, self.user_id)
-            
-            return job_listings
-            
-        except Exception as e:
-            logger.error(f"Error searching LinkedIn jobs: {str(e)}")
-            return []
-
-    def generate_tailored_documents(self, job_listing: JobListing) -> bool:
-        """
-        Generate tailored resume and cover letter for a job listing.
-        This can be called separately after job search or via a button click.
+                    job_listings.append(job_listing)
+                    
+                    # Trigger background document generation
+                    generate_documents_async.delay(job_listing.id, self.user_id)
         
-        Args:
-            job_listing (JobListing): The job listing to generate documents for
-            
-        Returns:
-            bool: True if documents were generated successfully, False otherwise
-        """
-        try:
-            # Get the UserProfile instance first
-            from core.models import UserProfile
-            user_profile = UserProfile.objects.get(user_id=self.user_id)
-            
-            # Get personal background
-            background = self.personal_agent.get_background_summary()
-            
-            # Extract required skills from job description
-            required_skills = self._extract_required_skills(job_listing.description)
-            
-            # Generate tailored resume
-            resume_composer = ResumeComposition(self.personal_agent)
-            tailored_resume = resume_composer.generate_tailored_resume(
-                job_listing.title,
-                job_listing.company,
-                job_listing.description,
-                required_skills,
-                background
-            )
-            
-            # Save tailored resume
-            if tailored_resume:
-                # Create a safe filename
-                safe_name = "".join(c for c in user_profile.name if c.isalnum() or c in (' ', '_')).strip()
-                safe_title = "".join(c for c in job_listing.title if c.isalnum() or c in (' ', '_')).strip()
-                safe_company = "".join(c for c in job_listing.company if c.isalnum() or c in (' ', '_')).strip()
-                
-                resume_filename = f"{safe_name}_resume_{safe_title}_{safe_company}_{job_listing.id}.pdf"
-                job_listing.tailored_resume.save(resume_filename, tailored_resume)
-            
-            # Generate tailored cover letter
-            cover_letter_composer = CoverLetterComposition(user_profile, job_listing.description)
-            tailored_cover_letter = cover_letter_composer.generate_tailored_cover_letter(
-                job_listing.title,
-                job_listing.company,
-                job_listing.description,
-                required_skills,
-                background
-            )
-            
-            # Save tailored cover letter
-            if tailored_cover_letter:
-                # Create a safe filename
-                cover_letter_filename = f"{safe_name}_cover_letter_{safe_title}_{safe_company}_{job_listing.id}.pdf"
-                job_listing.tailored_cover_letter.save(cover_letter_filename, tailored_cover_letter)
-            
-            job_listing.save()
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error generating tailored documents: {str(e)}")
-            return False
+        return job_listings
 
-    def _extract_required_skills(self, job_description: str) -> List[str]:
-        """Extract required skills from job description using Ollama"""
-        try:
-            prompt = f"""
-            Extract the required skills from this job description. Return them as a JSON array of strings.
-            Focus on technical skills, tools, and technologies.
-            
-            Job Description:
-            {job_description}
-            
-            Return only the JSON array, no other text. Example format: ["Python", "JavaScript", "React"]
-            """
-            
-            response = self.llm.generate(prompt)
-            # Clean the response to ensure it's valid JSON
-            response = response.strip()
-            if not response.startswith('['):
-                response = response[response.find('['):]
-            if not response.endswith(']'):
-                response = response[:response.rfind(']')+1]
-            
-            try:
-                skills = json.loads(response)
-                return skills if isinstance(skills, list) else []
-            except json.JSONDecodeError:
-                # If JSON parsing fails, try to extract skills as a comma-separated list
-                skills = [skill.strip().strip('"\'') for skill in response.strip('[]').split(',')]
-                return [skill for skill in skills if skill]
-            
-        except Exception as e:
-            logger.error(f"Error extracting required skills: {str(e)}")
-            return []
     
     def analyze_job_fit(self, job_posting: Dict[str, Any]) -> Dict[str, Any]:
         """Analyzes job posting for fit with personal background"""
