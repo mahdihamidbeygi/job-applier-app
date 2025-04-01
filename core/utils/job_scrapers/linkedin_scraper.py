@@ -17,10 +17,11 @@ import time
 from selenium.common.exceptions import TimeoutException
 from bs4 import BeautifulSoup
 
+
 class LinkedInJobScraper:
     def __init__(self):
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         }
         self.ollama_client = OllamaClient(model="phi4:latest", temperature=0.0)
         self.driver = None
@@ -28,7 +29,7 @@ class LinkedInJobScraper:
     def setup_driver(self):
         if self.driver is not None:
             return self.driver
-            
+
         # Set up Chrome options
         chrome_options = Options()
         chrome_options.add_argument("--headless=new")
@@ -36,7 +37,7 @@ class LinkedInJobScraper:
         chrome_options.add_argument("--enable-unsafe-swiftshader")
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--disable-dev-shm-usage")
-        
+
         # Initialize the Chrome WebDriver
         self.driver = webdriver.Chrome(options=chrome_options)
         return self.driver
@@ -51,13 +52,19 @@ class LinkedInJobScraper:
             wait = WebDriverWait(self.driver, 10)
 
             # Wait for the job title to be present
-            job_title_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "h1.top-card-layout__title")))
+            job_title_element = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "h1.top-card-layout__title"))
+            )
             job_title = job_title_element.text
 
-            company_name_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "a.topcard__org-name-link")))
+            company_name_element = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "a.topcard__org-name-link"))
+            )
             company_name = company_name_element.text
 
-            location_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "span.topcard__flavor--bullet")))
+            location_element = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "span.topcard__flavor--bullet"))
+            )
             location = location_element.text
 
             # Scroll down to load more content
@@ -67,12 +74,18 @@ class LinkedInJobScraper:
             try:
                 # Try to find and click "Show more" button if it exists
                 try:
-                    show_more_button = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "button.show-more-less-html__button")))
+                    show_more_button = wait.until(
+                        EC.presence_of_element_located(
+                            (By.CSS_SELECTOR, "button.show-more-less-html__button")
+                        )
+                    )
                     self.driver.execute_script("arguments[0].click();", show_more_button)
                     time.sleep(1)
                 except TimeoutException:
                     print("No 'Show more' button found")
-                description_element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, "div.description__text")))
+                description_element = wait.until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "div.description__text"))
+                )
                 job_description = description_element.text
             except TimeoutException:
                 job_description = "Description not found"
@@ -82,10 +95,10 @@ class LinkedInJobScraper:
                 "company": company_name,
                 "location": location,
                 "description": job_description,
-                'source_url': job_url,
-                'source': 'linkedin',
+                "source_url": job_url,
+                "source": "linkedin",
             }
-            
+
         except Exception as e:
             print(f"Error extracting job details: {str(e)}")
             return None
@@ -95,8 +108,8 @@ class LinkedInJobScraper:
         try:
             job_data = self._extract_job_details(job_url=url)
             if job_data:
-                job_data['source_url'] = url
-                job_data['source'] = 'linkedin'
+                job_data["source_url"] = url
+                job_data["source"] = "linkedin"
             return job_data
         except Exception as e:
             print(f"Error processing job URL {url}: {str(e)}")
@@ -131,7 +144,7 @@ class LinkedInJobScraper:
         """Scrolls to the bottom of the page and waits for dynamic content to load."""
         self.driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(3)  # Wait for content to load
-        self.driver.execute_script("window.scrollTo(0, 0);") # scroll back to the top
+        self.driver.execute_script("window.scrollTo(0, 0);")  # scroll back to the top
         time.sleep(1)
 
     def search_jobs(self, role: str, location: str, max_pages: int = 3) -> List[Dict[str, Any]]:
@@ -150,7 +163,7 @@ class LinkedInJobScraper:
             while page <= max_pages:
                 print(f"Scraping page {page}...")
                 job_links = self.scrape_job_links()
-                
+
                 # Scrape details for each job on this page
                 for link in job_links:
                     if link in urls_done:
@@ -165,7 +178,7 @@ class LinkedInJobScraper:
                 #     # Process all job URLs in parallel
                 #     page_jobs = asyncio.run(self._process_job_urls(job_links))
                 #     jobs.extend(page_jobs)
-                
+
                 # Check if there's a next page
                 try:
                     self.scroll_down()
@@ -173,7 +186,7 @@ class LinkedInJobScraper:
                 except Exception as e:
                     print(f"Error navigating to next page: {str(e)}")
                     break
-            
+
             return jobs
         except Exception as e:
             print(f"Error during job search: {str(e)}")
@@ -189,4 +202,4 @@ class LinkedInJobScraper:
             except Exception as e:
                 print(f"Error closing WebDriver: {str(e)}")
             finally:
-                self.driver = None 
+                self.driver = None

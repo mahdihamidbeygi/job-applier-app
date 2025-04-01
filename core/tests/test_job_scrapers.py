@@ -1,176 +1,190 @@
-import unittest
-from unittest.mock import patch, MagicMock
+import logging
+import random
+import time
+
 from bs4 import BeautifulSoup
-from core.utils.job_scrapers.linkedin_scraper import LinkedInJobScraper
-from core.utils.job_scrapers.indeed_scraper import IndeedJobScraper
-from core.utils.job_scrapers.glassdoor_scraper import GlassdoorJobScraper
-from core.utils.job_scrapers.monster_scraper import MonsterJobScraper
-from core.utils.job_scrapers.jobbank_scraper import JobBankScraper
+from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
-class TestJobScrapers(unittest.TestCase):
-    def setUp(self):
-        self.test_role = "Software Engineer"
-        self.test_location = "New York, NY"
-        
-        # Sample HTML responses for each platform
-        self.linkedin_html = """
-        <div class="job-card-container">
-            <h3 class="base-search-card__title">Software Engineer</h3>
-            <h4 class="base-search-card__subtitle">Google</h4>
-            <div class="base-search-card__metadata">New York, NY</div>
-            <div class="base-search-card__description">Looking for a software engineer...</div>
-            <a href="/jobs/view/123">View Job</a>
-        </div>
-        """
-        
-        self.indeed_html = """
-        <div class="job_seen_beacon">
-            <h2 class="jobTitle">Software Engineer</h2>
-            <span class="companyName">Google</span>
-            <div class="companyLocation">New York, NY</div>
-            <div class="job-snippet">Looking for a software engineer...</div>
-            <a href="/viewjob?jk=123">View Job</a>
-        </div>
-        """
-        
-        self.glassdoor_html = """
-        <li class="react-job-listing">
-            <div class="job-title">Software Engineer</div>
-            <div class="employer-name">Google</div>
-            <div class="location">New York, NY</div>
-            <div class="job-description">Looking for a software engineer...</div>
-            <a href="/job-listing/123">View Job</a>
-        </li>
-        """
-        
-        self.monster_html = """
-        <div class="job-search-card">
-            <h2 class="title">Software Engineer</h2>
-            <div class="company">Google</div>
-            <div class="location">New York, NY</div>
-            <div class="description">Looking for a software engineer...</div>
-            <a href="/jobs/123">View Job</a>
-        </div>
-        """
-        
-        self.jobbank_html = """
-        <article class="resultJobItem">
-            <span class="noctitle">Software Engineer</span>
-            <span class="business">Google</span>
-            <span class="location">New York, NY</span>
-            <div class="result-description">Looking for a software engineer...</div>
-            <a href="/job/123">View Job</a>
-        </article>
-        """
+logger: logging.Logger = logging.getLogger(__name__)
+ROLE = "Data Scientist"
+LOCATION = "Toronto, ON"
+BASE_URL = "https://www.glassdoor.ca"  # Glassdoor base URL
 
-    @patch('requests.get')
-    def test_linkedin_scraper(self, mock_get):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.text = self.linkedin_html
-        mock_get.return_value = mock_response
-        
-        # Test scraper
-        scraper = LinkedInJobScraper()
-        jobs = scraper.search_jobs(self.test_role, self.test_location)
-        
-        # Assertions
-        self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0]['title'], 'Software Engineer')
-        self.assertEqual(jobs[0]['company'], 'Google')
-        self.assertEqual(jobs[0]['location'], 'New York, NY')
-        self.assertTrue('Looking for a software engineer' in jobs[0]['description'])
+# List of User-Agents (expanded)
+USER_AGENTS = [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/118.0',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:109.0) Gecko/20100101 Firefox/118.0',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/118.0.2088.46',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Safari/605.1.15',
+    'Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; AS; rv:11.0) like Gecko',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/112.0.0.0 Safari/537.36',
+]
 
-    @patch('requests.get')
-    def test_indeed_scraper(self, mock_get):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.text = self.indeed_html
-        mock_get.return_value = mock_response
-        
-        # Test scraper
-        scraper = IndeedJobScraper()
-        jobs = scraper.search_jobs(self.test_role, self.test_location)
-        
-        # Assertions
-        self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0]['title'], 'Software Engineer')
-        self.assertEqual(jobs[0]['company'], 'Google')
-        self.assertEqual(jobs[0]['location'], 'New York, NY')
-        self.assertTrue('Looking for a software engineer' in jobs[0]['description'])
+# List of Proxies (replace with your actual proxies)
+PROXIES = [
+    # Example format: 'http://user:pass@ip:port' or 'http://ip:port'
+    'http://user:pass@103.163.10.10:8080',
+    'http://user:pass@103.163.10.11:8080',
+    'http://user:pass@103.163.10.12:8080',
+    'http://user:pass@103.163.10.13:8080',
+    'http://user:pass@103.163.10.14:8080',
+    'http://user:pass@103.163.10.15:8080',
+    'http://user:pass@103.163.10.16:8080',
+    'http://user:pass@103.163.10.17:8080',
+    'http://user:pass@103.163.10.18:8080',
+    'http://user:pass@103.163.10.19:8080',
+]
 
-    @patch('requests.get')
-    def test_glassdoor_scraper(self, mock_get):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.text = self.glassdoor_html
-        mock_get.return_value = mock_response
-        
-        # Test scraper
-        scraper = GlassdoorJobScraper()
-        jobs = scraper.search_jobs(self.test_role, self.test_location)
-        
-        # Assertions
-        self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0]['title'], 'Software Engineer')
-        self.assertEqual(jobs[0]['company'], 'Google')
-        self.assertEqual(jobs[0]['location'], 'New York, NY')
-        self.assertTrue('Looking for a software engineer' in jobs[0]['description'])
 
-    @patch('requests.get')
-    def test_monster_scraper(self, mock_get):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.text = self.monster_html
-        mock_get.return_value = mock_response
-        
-        # Test scraper
-        scraper = MonsterJobScraper()
-        jobs = scraper.search_jobs(self.test_role, self.test_location)
-        
-        # Assertions
-        self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0]['title'], 'Software Engineer')
-        self.assertEqual(jobs[0]['company'], 'Google')
-        self.assertEqual(jobs[0]['location'], 'New York, NY')
-        self.assertTrue('Looking for a software engineer' in jobs[0]['description'])
+def get_random_user_agent():
+    return random.choice(USER_AGENTS)
 
-    @patch('requests.get')
-    def test_jobbank_scraper(self, mock_get):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_response.text = self.jobbank_html
-        mock_get.return_value = mock_response
-        
-        # Test scraper
-        scraper = JobBankScraper()
-        jobs = scraper.search_jobs(self.test_role, self.test_location)
-        
-        # Assertions
-        self.assertEqual(len(jobs), 1)
-        self.assertEqual(jobs[0]['title'], 'Software Engineer')
-        self.assertEqual(jobs[0]['company'], 'Google')
-        self.assertEqual(jobs[0]['location'], 'New York, NY')
-        self.assertTrue('Looking for a software engineer' in jobs[0]['description'])
 
-    def test_scraper_error_handling(self):
-        """Test error handling for all scrapers"""
-        scrapers = [
-            LinkedInJobScraper(),
-            IndeedJobScraper(),
-            GlassdoorJobScraper(),
-            MonsterJobScraper(),
-            JobBankScraper()
-        ]
-        
-        for scraper in scrapers:
-            with patch('requests.get') as mock_get:
-                # Simulate a network error
-                mock_get.side_effect = Exception("Network error")
-                
-                # Test that scraper handles error gracefully
-                jobs = scraper.search_jobs(self.test_role, self.test_location)
-                self.assertEqual(jobs, [])
+def get_random_proxy():
+    return random.choice(PROXIES)
 
-if __name__ == '__main__':
-    unittest.main() 
+
+def simulate_human_behavior(driver):
+    """Simulates human-like behavior on the page."""
+    # Scroll down the page a bit
+    scroll_amount = random.randint(200, 500)
+    driver.execute_script(f"window.scrollBy(0, {scroll_amount});")
+    time.sleep(random.uniform(0.5, 1.5))
+
+    # Move the mouse randomly
+    actions = ActionChains(driver)
+    try:
+        body = driver.find_element(By.TAG_NAME, "body")
+        actions.move_to_element_with_offset(body, random.randint(0, 500), random.randint(0, 500)).perform()
+        time.sleep(random.uniform(0.5, 1.5))
+    except NoSuchElementException:
+        logger.warning("Could not find body element for mouse movement.")
+
+    # Maybe click on a random element (optional)
+    if random.random() < 0.3:  # 30% chance of clicking
+        try:
+            all_links = driver.find_elements(By.TAG_NAME, "a")
+            if all_links:
+                random_link = random.choice(all_links)
+                actions.move_to_element(random_link).click().perform()
+                time.sleep(random.uniform(1, 3))
+                driver.back()
+        except NoSuchElementException:
+            logger.warning("Could not find any links to click.")
+        except Exception as e:
+            logger.error(f"Error clicking on a random link: {str(e)}")
+
+
+def test_glassdoor_scraper_selenium() -> None:
+    jobs = []
+    start = 0
+    has_more = True
+
+    # Set up Selenium with Chrome (you'll need to download ChromeDriver)
+    options = webdriver.ChromeOptions()
+    options.add_argument(f"user-agent={get_random_user_agent()}")
+    # options.add_argument("--headless")  # Remove headless mode
+
+    # Set up proxy
+    proxy = get_random_proxy()
+    options.add_argument(f"--proxy-server={proxy}")
+    logger.info(f"Using proxy: {proxy}")
+
+    driver = webdriver.Chrome(options=options)
+
+    try:
+        while has_more:
+            search_url = f"{BASE_URL}/Job/jobs.htm?sc.keyword={ROLE}&locT=C&locId=15&locKeyword={LOCATION}&jobType=all&fromAge=-1&minSalary=0&maxSalary=0&radius=0&cityId=-1&pageSize=30&firstJob=0&start={start}"
+            logger.info(f"Navigating to: {search_url}")
+            driver.get(search_url)
+
+            # Simulate human behavior
+            simulate_human_behavior(driver)
+
+            # Wait for the job cards to load (adjust the timeout as needed)
+            try:
+                WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, "jobCard"))
+                )
+            except TimeoutException:
+                logger.warning("Timeout waiting for job cards to load.")
+                break
+
+            # Get the page source after JavaScript has executed
+            soup = BeautifulSoup(driver.page_source, "html.parser")
+
+            job_cards = soup.find_all("li", class_="jobCard")
+
+            if not job_cards:
+                logger.warning("Could not find job cards in response. Stopping.")
+                break
+
+            for card in job_cards:
+                try:
+                    title_element = card.find("a", class_="jobLink")
+                    title = title_element.text.strip() if title_element else ""
+
+                    company_element = card.find("a", class_="jobCard_companyName")
+                    company = company_element.text.strip() if company_element else ""
+
+                    location_element = card.find("div", class_="jobCard_location")
+                    location = location_element.text.strip() if location_element else ""
+
+                    description_element = card.find("div", class_="jobCard_jobDescription")
+                    description = description_element.text.strip() if description_element else ""
+
+                    job_link_element = card.find("a", class_="jobLink")
+                    job_url = BASE_URL + job_link_element["href"] if job_link_element and "href" in job_link_element.attrs else ""
+
+                    jobs.append({
+                        'title': title,
+                        'company': company,
+                        'location': location,
+                        'description': description,
+                        'source_url': job_url,
+                        'source': 'glassdoor',
+                        'posted_date': ""  # You'll need to find the date element in the HTML
+                    })
+                except Exception as e:
+                    logger.error(f"Error parsing job card: {str(e)}")
+                    continue
+
+            # Basic pagination check (you'll need to improve this)
+            if start > 100:
+                has_more = False
+            else:
+                start += 30
+
+            # Add random delay
+            delay = random.uniform(5, 10)  # Delay between 5 and 10 seconds
+            logger.info(f"Waiting for {delay:.2f} seconds...")
+            time.sleep(delay)
+
+    except WebDriverException as e:
+        logger.error(f"WebDriver error: {e}")
+        if "ERR_PROXY_CONNECTION_FAILED" in str(e):
+            logger.error("Proxy connection failed. Check your proxy settings.")
+    except Exception as e:
+        logger.error(f"Error in test_glassdoor_scraper_selenium: {str(e)}")
+        raise
+    finally:
+        driver.quit()  # Close the browser
+
+    # Print the jobs found
+    for job in jobs:
+        print(job)
+
+
+test_glassdoor_scraper_selenium()

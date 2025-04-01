@@ -9,7 +9,7 @@ Applier{% endblock %} {% block content %}
     <div class="card-body">
       <h5 class="card-title">Search Jobs</h5>
       <form id="jobSearchForm" class="row g-3">
-        <div class="col-md-5">
+        <div class="col-md-4">
           <label for="role" class="form-label">Job Title</label>
           <input
             type="text"
@@ -20,7 +20,7 @@ Applier{% endblock %} {% block content %}
             placeholder="e.g., Software Engineer"
           />
         </div>
-        <div class="col-md-5">
+        <div class="col-md-3">
           <label for="location" class="form-label">Location</label>
           <input
             type="text"
@@ -30,6 +30,17 @@ Applier{% endblock %} {% block content %}
             value="{{ location }}"
             placeholder="e.g., New York, NY"
           />
+        </div>
+        <div class="col-md-3">
+          <label for="platforms" class="form-label">Platforms</label>
+          <select class="form-select" id="platforms" name="platforms" multiple>
+            <option value="linkedin">LinkedIn</option>
+            <option value="indeed">Indeed</option>
+            <option value="glassdoor">Glassdoor</option>
+            <option value="monster">Monster</option>
+            <option value="jobbank">JobBank</option>
+            <option value="ziprecruiter">ZipRecruiter</option>
+          </select>
         </div>
         <div class="col-md-2 d-flex align-items-end">
           <button type="submit" class="btn btn-primary w-100">Search</button>
@@ -74,15 +85,22 @@ Applier{% endblock %} {% block content %}
         <div class="mt-3">
           <p class="card-text">{{ job.description|truncatewords:50 }}</p>
           <div class="d-flex justify-content-between align-items-center">
-            <small class="text-muted">
-              Posted: {{ job.posted_date|date:"M d, Y" }}
-            </small>
+            <div>
+              <small class="text-muted">
+                Posted: {{ job.posted_date|date:"M d, Y" }}
+              </small>
+              <span class="badge bg-secondary ms-2"
+                >{{ job.source|title }}</span
+              >
+            </div>
             <a
               href="{{ job.source_url }}"
               target="_blank"
               class="btn btn-sm btn-outline-secondary"
-              ><i class="fab fa-linkedin"></i> View on LinkedIn</a
             >
+              <i class="fab fa-{{ job.source|lower }}"></i> View on {{
+              job.source|title }}
+            </a>
           </div>
         </div>
       </div>
@@ -143,6 +161,10 @@ Applier{% endblock %} {% block content %}
 
       const role = document.getElementById("role").value;
       const location = document.getElementById("location").value;
+      const platformsSelect = document.getElementById("platforms");
+      const selectedPlatforms = Array.from(platformsSelect.selectedOptions).map(
+        (option) => option.value
+      );
       const authToken = getAuthToken();
 
       if (!authToken) {
@@ -166,6 +188,8 @@ Applier{% endblock %} {% block content %}
         body: JSON.stringify({
           role: role,
           location: location,
+          platforms:
+            selectedPlatforms.length > 0 ? selectedPlatforms : ["linkedin"], // Default to LinkedIn if none selected
         }),
       })
         .then((response) => {

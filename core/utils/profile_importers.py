@@ -11,6 +11,7 @@ import openai
 from datetime import datetime
 from .local_llms import OllamaClient
 
+
 class GitHubProfileImporter:
     def __init__(self, github_username: str):
         self.github_username = github_username
@@ -23,7 +24,11 @@ class GitHubProfileImporter:
             tree = ast.parse(code)
             functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
             classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-            imports = [node.module for node in ast.walk(tree) if isinstance(node, ast.ImportFrom) and node.module]
+            imports = [
+                node.module
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ImportFrom) and node.module
+            ]
             return {
                 "functions": functions,
                 "classes": classes,
@@ -36,12 +41,12 @@ class GitHubProfileImporter:
         """Fetch and analyze all public repositories."""
         repos_url = f"https://api.github.com/users/{self.github_username}/repos"
         headers = {"Accept": "application/vnd.github.v3+json"}
-        
+
         try:
             response = requests.get(repos_url, headers=headers)
             response.raise_for_status()
             repos = response.json()
-            
+
             repo_analyses = []
             for repo in repos:
                 name = repo.get("name", "")
@@ -51,7 +56,7 @@ class GitHubProfileImporter:
                 stars = repo.get("stargazers_count", 0)
                 forks = repo.get("forks_count", 0)
                 updated_at = repo.get("updated_at", "")
-                
+
                 repo_path = os.path.join(self.temp_dir, name)
                 try:
                     git.Repo.clone_from(clone_url, repo_path)
@@ -71,25 +76,27 @@ class GitHubProfileImporter:
 
                 # Analyze repository structure
                 structure = self.analyze_repository_structure(repo_path)
-                
+
                 # Analyze dependencies
                 dependencies = self.analyze_dependencies(repo_path)
-                
+
                 # Analyze commit history
                 commit_history = self.analyze_commit_history(repo_path)
 
-                repo_analyses.append({
-                    "name": name,
-                    "description": description,
-                    "language": language,
-                    "stars": stars,
-                    "forks": forks,
-                    "last_updated": updated_at,
-                    "code_analysis": repo_summary,
-                    "structure": structure,
-                    "dependencies": dependencies,
-                    "commit_history": commit_history
-                })
+                repo_analyses.append(
+                    {
+                        "name": name,
+                        "description": description,
+                        "language": language,
+                        "stars": stars,
+                        "forks": forks,
+                        "last_updated": updated_at,
+                        "code_analysis": repo_summary,
+                        "structure": structure,
+                        "dependencies": dependencies,
+                        "commit_history": commit_history,
+                    }
+                )
 
             return repo_analyses
         except Exception as e:
@@ -98,26 +105,21 @@ class GitHubProfileImporter:
     def analyze_repository_structure(self, repo_path: str) -> Dict:
         """Analyze repository structure and organization."""
         try:
-            structure = {
-                "total_files": 0,
-                "file_types": {},
-                "directories": [],
-                "main_files": []
-            }
-            
+            structure = {"total_files": 0, "file_types": {}, "directories": [], "main_files": []}
+
             for root, dirs, files in os.walk(repo_path):
                 rel_path = os.path.relpath(root, repo_path)
-                if rel_path != '.':
+                if rel_path != ".":
                     structure["directories"].append(rel_path)
-                
+
                 for file in files:
                     structure["total_files"] += 1
                     ext = os.path.splitext(file)[1]
                     structure["file_types"][ext] = structure["file_types"].get(ext, 0) + 1
-                    
-                    if file.lower() in ['readme.md', 'requirements.txt', 'setup.py', 'main.py']:
+
+                    if file.lower() in ["readme.md", "requirements.txt", "setup.py", "main.py"]:
                         structure["main_files"].append(os.path.join(rel_path, file))
-            
+
             return structure
         except Exception as e:
             print(f"Error analyzing repository structure: {e}")
@@ -125,19 +127,17 @@ class GitHubProfileImporter:
 
     def analyze_dependencies(self, repo_path: str) -> Dict:
         """Analyze project dependencies."""
-        dependencies = {
-            "requirements": [],
-            "setup_py": [],
-            "imports": set()
-        }
-        
+        dependencies = {"requirements": [], "setup_py": [], "imports": set()}
+
         try:
             # Check requirements.txt
             req_path = os.path.join(repo_path, "requirements.txt")
             if os.path.exists(req_path):
                 with open(req_path, "r") as f:
-                    dependencies["requirements"] = [line.strip() for line in f if line.strip() and not line.startswith("#")]
-            
+                    dependencies["requirements"] = [
+                        line.strip() for line in f if line.strip() and not line.startswith("#")
+                    ]
+
             # Check setup.py
             setup_path = os.path.join(repo_path, "setup.py")
             if os.path.exists(setup_path):
@@ -145,11 +145,14 @@ class GitHubProfileImporter:
                     content = f.read()
                     # Simple regex to find install_requires
                     import re
+
                     install_requires = re.search(r"install_requires=\[(.*?)\]", content, re.DOTALL)
                     if install_requires:
                         deps = install_requires.group(1).split(",")
-                        dependencies["setup_py"] = [dep.strip().strip("'\"") for dep in deps if dep.strip()]
-            
+                        dependencies["setup_py"] = [
+                            dep.strip().strip("'\"") for dep in deps if dep.strip()
+                        ]
+
             # Collect all imports from Python files
             for filepath in Path(repo_path).rglob("*.py"):
                 try:
@@ -160,12 +163,12 @@ class GitHubProfileImporter:
                             if isinstance(node, (ast.Import, ast.ImportFrom)):
                                 if isinstance(node, ast.Import):
                                     for name in node.names:
-                                        dependencies["imports"].add(name.name.split('.')[0])
+                                        dependencies["imports"].add(name.name.split(".")[0])
                                 else:
-                                    dependencies["imports"].add(node.module.split('.')[0])
+                                    dependencies["imports"].add(node.module.split(".")[0])
                 except Exception as e:
                     print(f"Error analyzing imports in {filepath}: {e}")
-            
+
             dependencies["imports"] = list(dependencies["imports"])
             return dependencies
         except Exception as e:
@@ -177,22 +180,24 @@ class GitHubProfileImporter:
         try:
             repo = git.Repo(repo_path)
             commits = list(repo.iter_commits())
-            
+
             history = {
                 "total_commits": len(commits),
                 "first_commit": commits[-1].committed_datetime if commits else None,
                 "last_commit": commits[0].committed_datetime if commits else None,
                 "commit_frequency": {},
-                "contributors": set()
+                "contributors": set(),
             }
-            
+
             # Analyze commit frequency by month
             for commit in commits:
                 date = commit.committed_datetime
                 month_key = f"{date.year}-{date.month:02d}"
-                history["commit_frequency"][month_key] = history["commit_frequency"].get(month_key, 0) + 1
+                history["commit_frequency"][month_key] = (
+                    history["commit_frequency"].get(month_key, 0) + 1
+                )
                 history["contributors"].add(commit.author.name)
-            
+
             history["contributors"] = list(history["contributors"])
             return history
         except Exception as e:
@@ -270,6 +275,7 @@ Format the response as a JSON object with the following structure:
         """Clean up temporary files."""
         try:
             import shutil
+
             shutil.rmtree(self.temp_dir)
         except Exception as e:
             print(f"Error cleaning up temporary files: {e}")
@@ -283,8 +289,10 @@ Format the response as a JSON object with the following structure:
         finally:
             self.cleanup()
 
+
 class ResumeImporter:
     """Class for handling resume uploads and parsing."""
+
     def __init__(self, resume_file):
         self.resume_file = resume_file
         self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
@@ -293,10 +301,10 @@ class ResumeImporter:
         """Parse date string into a datetime.date object."""
         if not date_str:
             return None
-        
+
         try:
             # Try different date formats
-            for fmt in ['%Y-%m-%d', '%B %Y', '%b %Y', '%m/%Y', '%m/%d/%Y', '%Y']:
+            for fmt in ["%Y-%m-%d", "%B %Y", "%b %Y", "%m/%Y", "%m/%d/%Y", "%Y"]:
                 try:
                     return datetime.strptime(date_str.strip(), fmt).date()
                 except ValueError:
@@ -308,15 +316,17 @@ class ResumeImporter:
     def extract_text(self) -> str:
         """Extract text from the resume file."""
         try:
-            if self.resume_file.name.endswith('.pdf'):
+            if self.resume_file.name.endswith(".pdf"):
                 import PyPDF2
+
                 pdf_reader = PyPDF2.PdfReader(self.resume_file)
                 text = ""
                 for page in pdf_reader.pages:
                     text += page.extract_text()
                 return text
-            elif self.resume_file.name.endswith(('.doc', '.docx')):
+            elif self.resume_file.name.endswith((".doc", ".docx")):
                 import docx
+
                 doc = docx.Document(self.resume_file)
                 text = ""
                 for paragraph in doc.paragraphs:
@@ -347,10 +357,13 @@ Resume text:
             basic_response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts information from resumes. Only provide the requested information in the exact format specified."},
-                    {"role": "user", "content": basic_prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts information from resumes. Only provide the requested information in the exact format specified.",
+                    },
+                    {"role": "user", "content": basic_prompt},
                 ],
-                temperature=0.1
+                temperature=0.1,
             )
 
             # Get work experience
@@ -369,10 +382,13 @@ Resume text:
             work_response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts work experience from resumes. List each position separately and use the exact format specified."},
-                    {"role": "user", "content": work_prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts work experience from resumes. List each position separately and use the exact format specified.",
+                    },
+                    {"role": "user", "content": work_prompt},
                 ],
-                temperature=0.1
+                temperature=0.1,
             )
 
             # Get education
@@ -392,10 +408,13 @@ Resume text:
             education_response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts education information from resumes. List each education entry separately and use the exact format specified."},
-                    {"role": "user", "content": education_prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts education information from resumes. List each education entry separately and use the exact format specified.",
+                    },
+                    {"role": "user", "content": education_prompt},
                 ],
-                temperature=0.1
+                temperature=0.1,
             )
 
             # Get projects
@@ -415,10 +434,13 @@ Resume text:
             projects_response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts project information from resumes. List each project separately and use the exact format specified."},
-                    {"role": "user", "content": projects_prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts project information from resumes. List each project separately and use the exact format specified.",
+                    },
+                    {"role": "user", "content": projects_prompt},
                 ],
-                temperature=0.1
+                temperature=0.1,
             )
 
             # Get certifications
@@ -437,10 +459,13 @@ Resume text:
             certifications_response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts certification information from resumes. List each certification separately and use the exact format specified."},
-                    {"role": "user", "content": certifications_prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts certification information from resumes. List each certification separately and use the exact format specified.",
+                    },
+                    {"role": "user", "content": certifications_prompt},
                 ],
-                temperature=0.1
+                temperature=0.1,
             )
 
             # Get publications
@@ -461,10 +486,13 @@ Resume text:
             publications_response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts publication information from resumes. List each publication separately and use the exact format specified."},
-                    {"role": "user", "content": publications_prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts publication information from resumes. List each publication separately and use the exact format specified.",
+                    },
+                    {"role": "user", "content": publications_prompt},
                 ],
-                temperature=0.1
+                temperature=0.1,
             )
 
             # Get skills with categories
@@ -480,27 +508,36 @@ Resume text:
             skills_response = self.openai_client.chat.completions.create(
                 model=settings.OPENAI_MODEL,
                 messages=[
-                    {"role": "system", "content": "You are a helpful assistant that extracts and categorizes skills from resumes. For each skill, provide the name, category, and a proficiency level from 1-5. Use the exact format specified."},
-                    {"role": "user", "content": skills_prompt}
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts and categorizes skills from resumes. For each skill, provide the name, category, and a proficiency level from 1-5. Use the exact format specified.",
+                    },
+                    {"role": "user", "content": skills_prompt},
                 ],
-                temperature=0.1
+                temperature=0.1,
             )
 
             # Process responses into a structured format
             def parse_key_value_response(response_text):
                 result = {}
                 current_key = None
-                for line in response_text.strip().split('\n'):
-                    if ':' in line:
-                        key, value = line.split(':', 1)
-                        key = key.strip().lower().replace(' ', '_')
+                for line in response_text.strip().split("\n"):
+                    if ":" in line:
+                        key, value = line.split(":", 1)
+                        key = key.strip().lower().replace(" ", "_")
                         value = value.strip()
-                        
+
                         # Handle dates specifically
-                        if key in ['start_date', 'end_date', 'issue_date', 'expiry_date', 'publication_date']:
-                            if value.lower() == 'present':
-                                if key == 'end_date':
-                                    result['current'] = True
+                        if key in [
+                            "start_date",
+                            "end_date",
+                            "issue_date",
+                            "expiry_date",
+                            "publication_date",
+                        ]:
+                            if value.lower() == "present":
+                                if key == "end_date":
+                                    result["current"] = True
                                     value = None
                             else:
                                 parsed_date = self.parse_date(value)
@@ -508,9 +545,9 @@ Resume text:
                                     value = parsed_date.isoformat()
                                 else:
                                     value = None
-                        
+
                         # Handle proficiency
-                        if key == 'proficiency':
+                        if key == "proficiency":
                             try:
                                 value = int(value)
                                 if value < 1:
@@ -519,60 +556,68 @@ Resume text:
                                     value = 5
                             except (ValueError, TypeError):
                                 value = 3  # Default proficiency
-                        
+
                         result[key] = value
                 return result
 
             # Structure all the data
             basic_info = parse_key_value_response(basic_response.choices[0].message.content)
-            
+
             # Parse work experiences
             work_text = work_response.choices[0].message.content
-            work_entries = [entry.strip() for entry in work_text.split('\n\n') if entry.strip()]
+            work_entries = [entry.strip() for entry in work_text.split("\n\n") if entry.strip()]
             work_experiences = [parse_key_value_response(entry) for entry in work_entries]
-            
+
             # Parse education entries
             education_text = education_response.choices[0].message.content
-            education_entries = [entry.strip() for entry in education_text.split('\n\n') if entry.strip()]
+            education_entries = [
+                entry.strip() for entry in education_text.split("\n\n") if entry.strip()
+            ]
             education = [parse_key_value_response(entry) for entry in education_entries]
-            
+
             # Parse projects
             projects_text = projects_response.choices[0].message.content
-            project_entries = [entry.strip() for entry in projects_text.split('\n\n') if entry.strip()]
+            project_entries = [
+                entry.strip() for entry in projects_text.split("\n\n") if entry.strip()
+            ]
             projects = [parse_key_value_response(entry) for entry in project_entries]
-            
+
             # Parse certifications
             certifications_text = certifications_response.choices[0].message.content
-            certification_entries = [entry.strip() for entry in certifications_text.split('\n\n') if entry.strip()]
+            certification_entries = [
+                entry.strip() for entry in certifications_text.split("\n\n") if entry.strip()
+            ]
             certifications = [parse_key_value_response(entry) for entry in certification_entries]
-            
+
             # Parse publications
             publications_text = publications_response.choices[0].message.content
-            publication_entries = [entry.strip() for entry in publications_text.split('\n\n') if entry.strip()]
+            publication_entries = [
+                entry.strip() for entry in publications_text.split("\n\n") if entry.strip()
+            ]
             publications = [parse_key_value_response(entry) for entry in publication_entries]
-            
+
             # Parse skills
             skills_text = skills_response.choices[0].message.content
-            skill_entries = [entry.strip() for entry in skills_text.split('\n\n') if entry.strip()]
+            skill_entries = [entry.strip() for entry in skills_text.split("\n\n") if entry.strip()]
             skills = [parse_key_value_response(entry) for entry in skill_entries]
 
             # Combine everything into the final structure
             parsed_data = {
                 "personal_info": {
-                    "name": basic_info.get('name', ''),
-                    "email": basic_info.get('email', ''),
-                    "phone": basic_info.get('phone', ''),
-                    "location": basic_info.get('location', ''),
-                    "linkedin": basic_info.get('linkedin_url', ''),
-                    "github": basic_info.get('github_url', ''),
-                    "professional_summary": basic_info.get('professional_summary', '')
+                    "name": basic_info.get("name", ""),
+                    "email": basic_info.get("email", ""),
+                    "phone": basic_info.get("phone", ""),
+                    "location": basic_info.get("location", ""),
+                    "linkedin": basic_info.get("linkedin_url", ""),
+                    "github": basic_info.get("github_url", ""),
+                    "professional_summary": basic_info.get("professional_summary", ""),
                 },
                 "work_experiences": work_experiences,
                 "education": education,
                 "projects": projects,
                 "certifications": certifications,
                 "publications": publications,
-                "skills": skills
+                "skills": skills,
             }
 
             return parsed_data
@@ -585,25 +630,27 @@ Resume text:
         try:
             # Extract text from the resume
             text = self.extract_text()
-            
+
             # Parse the text using ChatGPT
             parsed_data = self.parse_with_chatgpt(text)
-            
+
             # Add the raw text to the parsed data
-            parsed_data['raw_text'] = text
-            
+            parsed_data["raw_text"] = text
+
             return parsed_data
-            
+
         except Exception as e:
             raise Exception(f"Error parsing resume: {str(e)}")
 
+
 class LinkedInImporter:
     """Class for handling LinkedIn profile imports."""
+
     def __init__(self, linkedin_url: str):
         self.linkedin_url = linkedin_url
         self.client = OllamaClient()
         self.headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
 
     def scrape_profile(self) -> Dict:
@@ -611,28 +658,28 @@ class LinkedInImporter:
         try:
             import time
             import random
-            
+
             # Add random delay to avoid rate limiting
             time.sleep(random.uniform(2, 5))
-            
+
             response = requests.get(self.linkedin_url, headers=self.headers)
             if response.status_code != 200:
                 raise Exception(f"Failed to fetch LinkedIn profile: {response.status_code}")
-            
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
+
+            soup = BeautifulSoup(response.text, "html.parser")
+
             # Extract profile data
             profile_data = {
-                'name': self._extract_name(soup),
-                'headline': self._extract_headline(soup),
-                'location': self._extract_location(soup),
-                'about': self._extract_about(soup),
-                'experience': self._extract_experience(soup),
-                'education': self._extract_education(soup),
-                'skills': self._extract_skills(soup),
-                'certifications': self._extract_certifications(soup)
+                "name": self._extract_name(soup),
+                "headline": self._extract_headline(soup),
+                "location": self._extract_location(soup),
+                "about": self._extract_about(soup),
+                "experience": self._extract_experience(soup),
+                "education": self._extract_education(soup),
+                "skills": self._extract_skills(soup),
+                "certifications": self._extract_certifications(soup),
             }
-            
+
             return profile_data
         except Exception as e:
             raise Exception(f"Error scraping LinkedIn profile: {str(e)}")
@@ -640,7 +687,7 @@ class LinkedInImporter:
     def _extract_name(self, soup) -> str:
         """Extract name from LinkedIn profile."""
         try:
-            name_element = soup.find('h1', class_='text-heading-xlarge')
+            name_element = soup.find("h1", class_="text-heading-xlarge")
             return name_element.text.strip() if name_element else ""
         except:
             return ""
@@ -648,7 +695,7 @@ class LinkedInImporter:
     def _extract_headline(self, soup) -> str:
         """Extract headline from LinkedIn profile."""
         try:
-            headline_element = soup.find('div', class_='text-body-medium')
+            headline_element = soup.find("div", class_="text-body-medium")
             return headline_element.text.strip() if headline_element else ""
         except:
             return ""
@@ -656,7 +703,7 @@ class LinkedInImporter:
     def _extract_location(self, soup) -> str:
         """Extract location from LinkedIn profile."""
         try:
-            location_element = soup.find('span', class_='text-body-small')
+            location_element = soup.find("span", class_="text-body-small")
             return location_element.text.strip() if location_element else ""
         except:
             return ""
@@ -664,7 +711,7 @@ class LinkedInImporter:
     def _extract_about(self, soup) -> str:
         """Extract about section from LinkedIn profile."""
         try:
-            about_element = soup.find('div', {'id': 'about'})
+            about_element = soup.find("div", {"id": "about"})
             return about_element.text.strip() if about_element else ""
         except:
             return ""
@@ -673,14 +720,26 @@ class LinkedInImporter:
         """Extract work experience from LinkedIn profile."""
         experiences = []
         try:
-            experience_section = soup.find('section', {'id': 'experience-section'})
+            experience_section = soup.find("section", {"id": "experience-section"})
             if experience_section:
-                for exp in experience_section.find_all('li', class_='experience-item'):
+                for exp in experience_section.find_all("li", class_="experience-item"):
                     experience = {
-                        'title': exp.find('h3').text.strip() if exp.find('h3') else "",
-                        'company': exp.find('p', class_='company-name').text.strip() if exp.find('p', class_='company-name') else "",
-                        'date_range': exp.find('p', class_='date-range').text.strip() if exp.find('p', class_='date-range') else "",
-                        'description': exp.find('p', class_='description').text.strip() if exp.find('p', class_='description') else ""
+                        "title": exp.find("h3").text.strip() if exp.find("h3") else "",
+                        "company": (
+                            exp.find("p", class_="company-name").text.strip()
+                            if exp.find("p", class_="company-name")
+                            else ""
+                        ),
+                        "date_range": (
+                            exp.find("p", class_="date-range").text.strip()
+                            if exp.find("p", class_="date-range")
+                            else ""
+                        ),
+                        "description": (
+                            exp.find("p", class_="description").text.strip()
+                            if exp.find("p", class_="description")
+                            else ""
+                        ),
                     }
                     experiences.append(experience)
         except:
@@ -691,14 +750,26 @@ class LinkedInImporter:
         """Extract education from LinkedIn profile."""
         education = []
         try:
-            education_section = soup.find('section', {'id': 'education-section'})
+            education_section = soup.find("section", {"id": "education-section"})
             if education_section:
-                for edu in education_section.find_all('li', class_='education-item'):
+                for edu in education_section.find_all("li", class_="education-item"):
                     education_item = {
-                        'institution': edu.find('h3').text.strip() if edu.find('h3') else "",
-                        'degree': edu.find('p', class_='degree').text.strip() if edu.find('p', class_='degree') else "",
-                        'date_range': edu.find('p', class_='date-range').text.strip() if edu.find('p', class_='date-range') else "",
-                        'description': edu.find('p', class_='description').text.strip() if edu.find('p', class_='description') else ""
+                        "institution": edu.find("h3").text.strip() if edu.find("h3") else "",
+                        "degree": (
+                            edu.find("p", class_="degree").text.strip()
+                            if edu.find("p", class_="degree")
+                            else ""
+                        ),
+                        "date_range": (
+                            edu.find("p", class_="date-range").text.strip()
+                            if edu.find("p", class_="date-range")
+                            else ""
+                        ),
+                        "description": (
+                            edu.find("p", class_="description").text.strip()
+                            if edu.find("p", class_="description")
+                            else ""
+                        ),
                     }
                     education.append(education_item)
         except:
@@ -709,9 +780,9 @@ class LinkedInImporter:
         """Extract skills from LinkedIn profile."""
         skills = []
         try:
-            skills_section = soup.find('section', {'id': 'skills-section'})
+            skills_section = soup.find("section", {"id": "skills-section"})
             if skills_section:
-                for skill in skills_section.find_all('span', class_='skill-name'):
+                for skill in skills_section.find_all("span", class_="skill-name"):
                     skills.append(skill.text.strip())
         except:
             pass
@@ -721,13 +792,21 @@ class LinkedInImporter:
         """Extract certifications from LinkedIn profile."""
         certifications = []
         try:
-            cert_section = soup.find('section', {'id': 'certifications-section'})
+            cert_section = soup.find("section", {"id": "certifications-section"})
             if cert_section:
-                for cert in cert_section.find_all('li', class_='certification-item'):
+                for cert in cert_section.find_all("li", class_="certification-item"):
                     certification = {
-                        'name': cert.find('h3').text.strip() if cert.find('h3') else "",
-                        'issuer': cert.find('p', class_='issuer').text.strip() if cert.find('p', class_='issuer') else "",
-                        'date': cert.find('p', class_='date').text.strip() if cert.find('p', class_='date') else ""
+                        "name": cert.find("h3").text.strip() if cert.find("h3") else "",
+                        "issuer": (
+                            cert.find("p", class_="issuer").text.strip()
+                            if cert.find("p", class_="issuer")
+                            else ""
+                        ),
+                        "date": (
+                            cert.find("p", class_="date").text.strip()
+                            if cert.find("p", class_="date")
+                            else ""
+                        ),
                     }
                     certifications.append(certification)
         except:
@@ -738,7 +817,7 @@ class LinkedInImporter:
         """Parse LinkedIn profile data into structured format."""
         try:
             profile_data = self.scrape_profile()
-            
+
             prompt = f"""Based on the following LinkedIn profile data, create a structured profile:
 
 Profile Data:
@@ -789,4 +868,4 @@ Please format the data as a JSON object with the following structure:
             response = self.client.generate(prompt)
             return response
         except Exception as e:
-            raise Exception(f"Error parsing LinkedIn profile: {str(e)}") 
+            raise Exception(f"Error parsing LinkedIn profile: {str(e)}")

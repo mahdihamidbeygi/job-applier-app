@@ -15,20 +15,30 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name='UserProfile',
+            name="UserProfile",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('bio', models.TextField(blank=True, max_length=500)),
-                ('location', models.CharField(blank=True, max_length=100)),
-                ('birth_date', models.DateField(blank=True, null=True)),
-                ('headline', models.CharField(blank=True, max_length=100)),
-                ('current_position', models.CharField(blank=True, max_length=100)),
-                ('company', models.CharField(blank=True, max_length=100)),
-                ('years_of_experience', models.IntegerField(default=0)),
-                ('skills', models.TextField(blank=True)),
-                ('resume', models.FileField(blank=True, upload_to='resumes/')),
-                ('parsed_resume_data', models.JSONField(blank=True, default=dict)),
-                ('user', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("bio", models.TextField(blank=True, max_length=500)),
+                ("location", models.CharField(blank=True, max_length=100)),
+                ("birth_date", models.DateField(blank=True, null=True)),
+                ("headline", models.CharField(blank=True, max_length=100)),
+                ("current_position", models.CharField(blank=True, max_length=100)),
+                ("company", models.CharField(blank=True, max_length=100)),
+                ("years_of_experience", models.IntegerField(default=0)),
+                ("skills", models.TextField(blank=True)),
+                ("resume", models.FileField(blank=True, upload_to="resumes/")),
+                ("parsed_resume_data", models.JSONField(blank=True, default=dict)),
+                (
+                    "user",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE, to=settings.AUTH_USER_MODEL
+                    ),
+                ),
             ],
         ),
     ]

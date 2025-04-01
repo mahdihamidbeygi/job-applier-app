@@ -8,12 +8,12 @@ from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
-class IndeedScraper:
-    """Scraper for Indeed job listings"""
+class ZipRecruiterScraper:
+    """Scraper for ZipRecruiter job listings"""
     
     def __init__(self):
-        self.base_url = "https://ca.indeed.com"
-        self.api_url = "https://ca.indeed.com/api/v1/jobs/search"
+        self.base_url = "https://www.ziprecruiter.com"
+        self.api_url = "https://www.ziprecruiter.com/api/v1/jobs/search"
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'Accept': 'application/json',
@@ -22,7 +22,7 @@ class IndeedScraper:
     
     def search_jobs(self, role: str, location: str) -> List[Dict]:
         """
-        Search for jobs on Indeed with infinite scroll support
+        Search for jobs on ZipRecruiter with page number support
         
         Args:
             role (str): Job title/role to search for
@@ -33,7 +33,7 @@ class IndeedScraper:
         """
         try:
             jobs = []
-            start = 0
+            page = 1
             has_more = True
             
             while has_more:
@@ -41,8 +41,8 @@ class IndeedScraper:
                 params = {
                     'q': role,
                     'l': location,
-                    'start': start,
-                    'limit': 25,
+                    'page': page,
+                    'limit': 20,
                     'sort': 'date',
                     'format': 'json'
                 }
@@ -59,7 +59,7 @@ class IndeedScraper:
                 data = response.json()
                 
                 # Extract job listings
-                job_cards = data.get('results', [])
+                job_cards = data.get('jobs', [])
                 
                 if not job_cards:
                     break
@@ -83,7 +83,7 @@ class IndeedScraper:
                             'location': location,
                             'description': description,
                             'source_url': job_url,
-                            'source': 'indeed',
+                            'source': 'ziprecruiter',
                             'posted_date': card.get('date')
                         })
                     except Exception as e:
@@ -91,15 +91,15 @@ class IndeedScraper:
                         continue
                 
                 # Check if there are more results
-                total_count = data.get('totalResults', 0)
-                has_more = len(jobs) < total_count
+                total_pages = data.get('totalPages', 1)
+                has_more = page < total_pages
                 
                 if has_more:
-                    start += 25  # Indeed uses 25 results per page
+                    page += 1
                     time.sleep(1)  # Be nice to the server
                 
             return jobs
             
         except Exception as e:
-            logger.error(f"Error searching Indeed: {str(e)}")
-            return []
+            logger.error(f"Error searching ZipRecruiter: {str(e)}")
+            return [] 

@@ -6,44 +6,71 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('core', '0004_remove_userprofile_first_name_and_more'),
+        ("core", "0004_remove_userprofile_first_name_and_more"),
     ]
 
     operations = [
         migrations.RemoveField(
-            model_name='userprofile',
-            name='years_of_experience',
+            model_name="userprofile",
+            name="years_of_experience",
         ),
         migrations.CreateModel(
-            name='JobListing',
+            name="JobListing",
             fields=[
-                ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
-                ('title', models.CharField(max_length=200)),
-                ('company', models.CharField(max_length=200)),
-                ('location', models.CharField(max_length=200)),
-                ('description', models.TextField()),
-                ('requirements', models.TextField(blank=True)),
-                ('source', models.CharField(choices=[('linkedin', 'LinkedIn'), ('indeed', 'Indeed'), ('glassdoor', 'Glassdoor'), ('other', 'Other')], max_length=20)),
-                ('source_url', models.URLField()),
-                ('posted_date', models.DateField()),
-                ('salary_range', models.CharField(blank=True, max_length=100)),
-                ('job_type', models.CharField(blank=True, max_length=50)),
-                ('experience_level', models.CharField(blank=True, max_length=50)),
-                ('required_skills', models.JSONField(default=list)),
-                ('preferred_skills', models.JSONField(default=list)),
-                ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('updated_at', models.DateTimeField(auto_now=True)),
-                ('is_active', models.BooleanField(default=True)),
-                ('match_score', models.FloatField(blank=True, null=True)),
-                ('tailored_resume', models.FileField(blank=True, upload_to='tailored_resumes/')),
-                ('tailored_cover_letter', models.FileField(blank=True, upload_to='tailored_cover_letters/')),
-                ('applied', models.BooleanField(default=False)),
-                ('application_date', models.DateField(blank=True, null=True)),
-                ('application_status', models.CharField(blank=True, max_length=50)),
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True, primary_key=True, serialize=False, verbose_name="ID"
+                    ),
+                ),
+                ("title", models.CharField(max_length=200)),
+                ("company", models.CharField(max_length=200)),
+                ("location", models.CharField(max_length=200)),
+                ("description", models.TextField()),
+                ("requirements", models.TextField(blank=True)),
+                (
+                    "source",
+                    models.CharField(
+                        choices=[
+                            ("linkedin", "LinkedIn"),
+                            ("indeed", "Indeed"),
+                            ("glassdoor", "Glassdoor"),
+                            ("other", "Other"),
+                        ],
+                        max_length=20,
+                    ),
+                ),
+                ("source_url", models.URLField()),
+                ("posted_date", models.DateField()),
+                ("salary_range", models.CharField(blank=True, max_length=100)),
+                ("job_type", models.CharField(blank=True, max_length=50)),
+                ("experience_level", models.CharField(blank=True, max_length=50)),
+                ("required_skills", models.JSONField(default=list)),
+                ("preferred_skills", models.JSONField(default=list)),
+                ("created_at", models.DateTimeField(auto_now_add=True)),
+                ("updated_at", models.DateTimeField(auto_now=True)),
+                ("is_active", models.BooleanField(default=True)),
+                ("match_score", models.FloatField(blank=True, null=True)),
+                ("tailored_resume", models.FileField(blank=True, upload_to="tailored_resumes/")),
+                (
+                    "tailored_cover_letter",
+                    models.FileField(blank=True, upload_to="tailored_cover_letters/"),
+                ),
+                ("applied", models.BooleanField(default=False)),
+                ("application_date", models.DateField(blank=True, null=True)),
+                ("application_status", models.CharField(blank=True, max_length=50)),
             ],
             options={
-                'ordering': ['-posted_date', '-match_score'],
-                'indexes': [models.Index(fields=['title', 'company', 'location'], name='core_joblis_title_ec371d_idx'), models.Index(fields=['source', 'is_active'], name='core_joblis_source_5c2ac1_idx'), models.Index(fields=['posted_date'], name='core_joblis_posted__e48449_idx')],
+                "ordering": ["-posted_date", "-match_score"],
+                "indexes": [
+                    models.Index(
+                        fields=["title", "company", "location"], name="core_joblis_title_ec371d_idx"
+                    ),
+                    models.Index(
+                        fields=["source", "is_active"], name="core_joblis_source_5c2ac1_idx"
+                    ),
+                    models.Index(fields=["posted_date"], name="core_joblis_posted__e48449_idx"),
+                ],
             },
         ),
     ]

@@ -2,7 +2,7 @@ import base64
 import io
 import json
 import logging
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from io import BytesIO
 
 import pdfminer.high_level
@@ -20,6 +20,7 @@ from django.http import (
     JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods, require_POST
 from django.views.generic import TemplateView
@@ -35,6 +36,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from core.forms import (
     CertificationForm,
     EducationForm,
+    JobPlatformPreferenceForm,
     ProjectForm,
     PublicationForm,
     SkillForm,
@@ -45,6 +47,7 @@ from core.models import (
     Certification,
     Education,
     JobListing,
+    JobPlatformPreference,
     Project,
     Publication,
     Skill,
@@ -61,6 +64,7 @@ from core.serializers import (
     UserProfileSerializer,
     WorkExperienceSerializer,
 )
+from core.tasks import generate_documents_async
 from core.utils.agents.application_agent import ApplicationAgent
 from core.utils.agents.personal_agent import PersonalAgent, PersonalBackground
 from core.utils.agents.search_agent import SearchAgent
@@ -72,68 +76,77 @@ from core.utils.resume_composition import ResumeComposition
 logger = logging.getLogger(__name__)
 
 __all__ = [
-    'home', 'profile', 'register', 'test_s3', 'jobs_page', 'job_detail', 
-    'job_apply', 'generate_job_documents', 'get_job_documents', 'apply_to_job',
-    'search_jobs'
+    "home",
+    "profile",
+    "register",
+    "test_s3",
+    "jobs_page",
+    "job_detail",
+    "job_apply",
+    "generate_job_documents",
+    "get_job_documents",
+    "apply_to_job",
+    "search_jobs",
+    "job_platform_preferences",
 ]
+
 
 def home(request):
     """Home page view"""
-    return render(request, 'core/home.html')
+    return render(request, "core/home.html")
+
 
 @login_required
 def profile(request):
     """User profile view"""
-    if request.method == 'POST':
+    if request.method == "POST":
         form = UserProfileForm(request.POST, request.FILES, instance=request.user.userprofile)
         if form.is_valid():
             profile = form.save(commit=False)
-            
+
             # Handle resume upload and parsing
-            if 'resume' in request.FILES:
-                resume_file = request.FILES['resume']
+            if "resume" in request.FILES:
+                resume_file = request.FILES["resume"]
                 try:
                     logger.info(f"Attempting to upload file: {resume_file.name}")
-                    file_path = f'resumes/{request.user.username}/{resume_file.name}'
+                    file_path = f"resumes/{request.user.username}/{resume_file.name}"
                     saved_path = default_storage.save(file_path, resume_file)
                     file_url = default_storage.url(saved_path)
                     logger.info(f"File uploaded successfully. URL: {file_url}")
-                    
-                    if resume_file.name.endswith('.pdf'):
+
+                    if resume_file.name.endswith(".pdf"):
                         text = parse_pdf_resume(resume_file)
-                        profile.parsed_resume_data = {
-                            'raw_text': text,
-                            'file_url': file_url
-                        }
-                    
-                    messages.success(request, 'Resume uploaded successfully!')
+                        profile.parsed_resume_data = {"raw_text": text, "file_url": file_url}
+
+                    messages.success(request, "Resume uploaded successfully!")
                 except Exception as e:
                     logger.error(f"Error uploading file: {str(e)}")
-                    messages.error(request, f'Error uploading resume: {str(e)}')
-            
+                    messages.error(request, f"Error uploading resume: {str(e)}")
+
             profile.save()
-            messages.success(request, 'Profile updated successfully!')
-            return redirect('core:profile')
+            messages.success(request, "Profile updated successfully!")
+            return redirect("core:profile")
     else:
         form = UserProfileForm(instance=request.user.userprofile)
-    
+
     context = {
-        'form': form,
-        'user_profile': request.user.userprofile,
-        'work_experiences': request.user.userprofile.work_experiences.all(),
-        'projects': request.user.userprofile.projects.all(),
-        'education': request.user.userprofile.education.all(),
-        'certifications': request.user.userprofile.certifications.all(),
-        'publications': request.user.userprofile.publications.all(),
-        'skills': request.user.userprofile.skills.all(),
-        'work_experience_form': WorkExperienceForm(),
-        'project_form': ProjectForm(),
-        'education_form': EducationForm(),
-        'certification_form': CertificationForm(),
-        'publication_form': PublicationForm(),
-        'skill_form': SkillForm(),
+        "form": form,
+        "user_profile": request.user.userprofile,
+        "work_experiences": request.user.userprofile.work_experiences.all(),
+        "projects": request.user.userprofile.projects.all(),
+        "education": request.user.userprofile.education.all(),
+        "certifications": request.user.userprofile.certifications.all(),
+        "publications": request.user.userprofile.publications.all(),
+        "skills": request.user.userprofile.skills.all(),
+        "work_experience_form": WorkExperienceForm(),
+        "project_form": ProjectForm(),
+        "education_form": EducationForm(),
+        "certification_form": CertificationForm(),
+        "publication_form": PublicationForm(),
+        "skill_form": SkillForm(),
     }
-    return render(request, 'core/profile.html', context)
+    return render(request, "core/profile.html", context)
+
 
 @login_required
 @require_POST
@@ -144,10 +157,11 @@ def add_work_experience(request):
         experience = form.save(commit=False)
         experience.profile = request.user.userprofile
         experience.save()
-        messages.success(request, 'Work experience added successfully!')
+        messages.success(request, "Work experience added successfully!")
     else:
-        messages.error(request, 'Error adding work experience.')
-    return redirect('core:profile')
+        messages.error(request, "Error adding work experience.")
+    return redirect("core:profile")
+
 
 @login_required
 @require_POST
@@ -158,10 +172,11 @@ def add_project(request):
         project = form.save(commit=False)
         project.profile = request.user.userprofile
         project.save()
-        messages.success(request, 'Project added successfully!')
+        messages.success(request, "Project added successfully!")
     else:
-        messages.error(request, 'Error adding project.')
-    return redirect('core:profile')
+        messages.error(request, "Error adding project.")
+    return redirect("core:profile")
+
 
 @login_required
 @require_POST
@@ -172,10 +187,11 @@ def add_education(request):
         education = form.save(commit=False)
         education.profile = request.user.userprofile
         education.save()
-        messages.success(request, 'Education added successfully!')
+        messages.success(request, "Education added successfully!")
     else:
-        messages.error(request, 'Error adding education.')
-    return redirect('core:profile')
+        messages.error(request, "Error adding education.")
+    return redirect("core:profile")
+
 
 @login_required
 @require_POST
@@ -186,10 +202,11 @@ def add_certification(request):
         certification = form.save(commit=False)
         certification.profile = request.user.userprofile
         certification.save()
-        messages.success(request, 'Certification added successfully!')
+        messages.success(request, "Certification added successfully!")
     else:
-        messages.error(request, 'Error adding certification.')
-    return redirect('core:profile')
+        messages.error(request, "Error adding certification.")
+    return redirect("core:profile")
+
 
 @login_required
 @require_POST
@@ -200,10 +217,11 @@ def add_publication(request):
         publication = form.save(commit=False)
         publication.profile = request.user.userprofile
         publication.save()
-        messages.success(request, 'Publication added successfully!')
+        messages.success(request, "Publication added successfully!")
     else:
-        messages.error(request, 'Error adding publication.')
-    return redirect('core:profile')
+        messages.error(request, "Error adding publication.")
+    return redirect("core:profile")
+
 
 @login_required
 @require_POST
@@ -214,74 +232,74 @@ def add_skill(request):
         skill = form.save(commit=False)
         skill.profile = request.user.userprofile
         skill.save()
-        messages.success(request, 'Skill added successfully!')
+        messages.success(request, "Skill added successfully!")
     else:
-        messages.error(request, 'Error adding skill.')
-    return redirect('core:profile')
+        messages.error(request, "Error adding skill.")
+    return redirect("core:profile")
+
 
 @login_required
 def delete_item(request, model_name, item_id):
     """Delete an item from any model"""
     model_map = {
-        'work_experience': WorkExperience,
-        'project': Project,
-        'education': Education,
-        'certification': Certification,
-        'publication': Publication,
-        'skill': Skill,
+        "work_experience": WorkExperience,
+        "project": Project,
+        "education": Education,
+        "certification": Certification,
+        "publication": Publication,
+        "skill": Skill,
     }
-    
+
     model = model_map.get(model_name)
     if model:
         item = get_object_or_404(model, id=item_id, profile=request.user.userprofile)
         item.delete()
         messages.success(request, f'{model_name.replace("_", " ").title()} deleted successfully!')
     else:
-        messages.error(request, 'Invalid model specified.')
-    
-    return redirect('core:profile')
+        messages.error(request, "Invalid model specified.")
+
+    return redirect("core:profile")
+
 
 def parse_pdf_resume(pdf_file):
     """Parse PDF resume and extract text"""
-    text = ''
+    text = ""
     pdf_file_obj = io.BytesIO(pdf_file.read())
-    
+
     try:
         text = pdfminer.high_level.extract_text(pdf_file_obj)
     except Exception as e:
         print(f"Error parsing PDF: {str(e)}")
-    
+
     return text
 
+
 def register(request):
-    if request.method == 'POST':
+    if request.method == "POST":
         form = UserCreationForm(request.POST)
         if form.is_valid():
             user = form.save()
-            messages.success(request, 'Account created successfully!')
-            return redirect('core:login')
+            messages.success(request, "Account created successfully!")
+            return redirect("core:login")
     else:
         form = UserCreationForm()
-    return render(request, 'core/register.html', {'form': form})
+    return render(request, "core/register.html", {"form": form})
+
 
 def test_s3(request):
     """Test S3 connectivity"""
     try:
         test_content = b"This is a test file"
-        path = default_storage.save('test.txt', ContentFile(test_content))
+        path = default_storage.save("test.txt", ContentFile(test_content))
         url = default_storage.url(path)
         default_storage.delete(path)
-        
-        return JsonResponse({
-            'status': 'success',
-            'message': 'S3 connection successful',
-            'test_url': url
-        })
+
+        return JsonResponse(
+            {"status": "success", "message": "S3 connection successful", "test_url": url}
+        )
     except Exception as e:
-        return JsonResponse({
-            'status': 'error',
-            'message': str(e)
-        }, status=500)
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)
+
 
 # API Views
 class IsOwnerOrReadOnly(permissions.BasePermission):
@@ -290,292 +308,313 @@ class IsOwnerOrReadOnly(permissions.BasePermission):
             return True
         return obj.profile.user == request.user
 
+
 class UserProfileViewSet(viewsets.ModelViewSet):
     serializer_class = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['city', 'state', 'country']
-    search_fields = ['headline', 'professional_summary', 'current_position', 'company']
-    ordering_fields = ['years_of_experience', 'created_at', 'updated_at']
+    filterset_fields = ["city", "state", "country"]
+    search_fields = ["headline", "professional_summary", "current_position", "company"]
+    ordering_fields = ["years_of_experience", "created_at", "updated_at"]
 
     def get_queryset(self):
         return UserProfile.objects.filter(user=self.request.user)
 
     @extend_schema(
         parameters=[
-            OpenApiParameter(name='include_related', type=OpenApiTypes.BOOL, description='Include related data')
+            OpenApiParameter(
+                name="include_related", type=OpenApiTypes.BOOL, description="Include related data"
+            )
         ]
     )
-    @action(detail=True, methods=['get'])
+    @action(detail=True, methods=["get"])
     def full_profile(self, request, pk=None):
         profile = self.get_object()
         serializer = ProfileSerializer(profile)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def stats(self, request):
         profile = self.get_queryset().first()
         if not profile:
-            return Response({'error': 'Profile not found'}, status=status.HTTP_404_NOT_FOUND)
-        
+            return Response({"error": "Profile not found"}, status=status.HTTP_404_NOT_FOUND)
+
         stats = {
-            'total_experience': profile.work_experiences.count(),
-            'total_projects': profile.projects.count(),
-            'total_skills': profile.skills.count(),
-            'total_certifications': profile.certifications.count(),
-            'total_publications': profile.publications.count(),
+            "total_experience": profile.work_experiences.count(),
+            "total_projects": profile.projects.count(),
+            "total_skills": profile.skills.count(),
+            "total_certifications": profile.certifications.count(),
+            "total_publications": profile.publications.count(),
         }
         return Response(stats)
+
 
 class WorkExperienceViewSet(viewsets.ModelViewSet):
     serializer_class = WorkExperienceSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['company', 'position', 'location', 'current']
-    search_fields = ['company', 'position', 'description', 'technologies']
-    ordering_fields = ['start_date', 'end_date', 'created_at']
+    filterset_fields = ["company", "position", "location", "current"]
+    search_fields = ["company", "position", "description", "technologies"]
+    ordering_fields = ["start_date", "end_date", "created_at"]
 
     def get_queryset(self):
         return WorkExperience.objects.filter(profile__user=self.request.user)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def current_position(self, request):
         current = self.get_queryset().filter(current=True).first()
         if not current:
-            return Response({'error': 'No current position found'}, status=status.HTTP_404_NOT_FOUND)
+            return Response(
+                {"error": "No current position found"}, status=status.HTTP_404_NOT_FOUND
+            )
         serializer = self.get_serializer(current)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def by_company(self, request):
-        company = request.query_params.get('company')
+        company = request.query_params.get("company")
         if not company:
-            return Response({'error': 'Company parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Company parameter is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         experiences = self.get_queryset().filter(company__icontains=company)
         serializer = self.get_serializer(experiences, many=True)
         return Response(serializer.data)
+
 
 class ProjectViewSet(viewsets.ModelViewSet):
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['technologies']
-    search_fields = ['title', 'description', 'technologies']
-    ordering_fields = ['start_date', 'end_date', 'created_at']
+    filterset_fields = ["technologies"]
+    search_fields = ["title", "description", "technologies"]
+    ordering_fields = ["start_date", "end_date", "created_at"]
 
     def get_queryset(self):
         return Project.objects.filter(profile__user=self.request.user)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def by_technology(self, request):
-        technology = request.query_params.get('technology')
+        technology = request.query_params.get("technology")
         if not technology:
-            return Response({'error': 'Technology parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Technology parameter is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         projects = self.get_queryset().filter(technologies__icontains=technology)
         serializer = self.get_serializer(projects, many=True)
         return Response(serializer.data)
+
 
 class EducationViewSet(viewsets.ModelViewSet):
     serializer_class = EducationSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['institution', 'degree', 'field_of_study', 'current']
-    search_fields = ['institution', 'degree', 'field_of_study', 'achievements']
-    ordering_fields = ['start_date', 'end_date', 'gpa', 'created_at']
+    filterset_fields = ["institution", "degree", "field_of_study", "current"]
+    search_fields = ["institution", "degree", "field_of_study", "achievements"]
+    ordering_fields = ["start_date", "end_date", "gpa", "created_at"]
 
     def get_queryset(self):
         return Education.objects.filter(profile__user=self.request.user)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def by_institution(self, request):
-        institution = request.query_params.get('institution')
+        institution = request.query_params.get("institution")
         if not institution:
-            return Response({'error': 'Institution parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Institution parameter is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         education = self.get_queryset().filter(institution__icontains=institution)
         serializer = self.get_serializer(education, many=True)
         return Response(serializer.data)
+
 
 class CertificationViewSet(viewsets.ModelViewSet):
     serializer_class = CertificationSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['issuer']
-    search_fields = ['name', 'issuer', 'credential_id']
-    ordering_fields = ['issue_date', 'expiry_date', 'created_at']
+    filterset_fields = ["issuer"]
+    search_fields = ["name", "issuer", "credential_id"]
+    ordering_fields = ["issue_date", "expiry_date", "created_at"]
 
     def get_queryset(self):
         return Certification.objects.filter(profile__user=self.request.user)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def by_issuer(self, request):
-        issuer = request.query_params.get('issuer')
+        issuer = request.query_params.get("issuer")
         if not issuer:
-            return Response({'error': 'Issuer parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Issuer parameter is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         certifications = self.get_queryset().filter(issuer__icontains=issuer)
         serializer = self.get_serializer(certifications, many=True)
         return Response(serializer.data)
+
 
 class PublicationViewSet(viewsets.ModelViewSet):
     serializer_class = PublicationSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['publisher', 'journal']
-    search_fields = ['title', 'authors', 'abstract', 'doi']
-    ordering_fields = ['publication_date', 'created_at']
+    filterset_fields = ["publisher", "journal"]
+    search_fields = ["title", "authors", "abstract", "doi"]
+    ordering_fields = ["publication_date", "created_at"]
 
     def get_queryset(self):
         return Publication.objects.filter(profile__user=self.request.user)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def by_publisher(self, request):
-        publisher = request.query_params.get('publisher')
+        publisher = request.query_params.get("publisher")
         if not publisher:
-            return Response({'error': 'Publisher parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Publisher parameter is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         publications = self.get_queryset().filter(publisher__icontains=publisher)
         serializer = self.get_serializer(publications, many=True)
         return Response(serializer.data)
+
 
 class SkillViewSet(viewsets.ModelViewSet):
     serializer_class = SkillSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['category', 'proficiency']
-    search_fields = ['name', 'category']
-    ordering_fields = ['proficiency', 'created_at']
+    filterset_fields = ["category", "proficiency"]
+    search_fields = ["name", "category"]
+    ordering_fields = ["proficiency", "created_at"]
 
     def get_queryset(self):
         return Skill.objects.filter(profile__user=self.request.user)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def by_category(self, request):
-        category = request.query_params.get('category')
+        category = request.query_params.get("category")
         if not category:
-            return Response({'error': 'Category parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Category parameter is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         skills = self.get_queryset().filter(category=category)
         serializer = self.get_serializer(skills, many=True)
         return Response(serializer.data)
 
-    @action(detail=False, methods=['get'])
+    @action(detail=False, methods=["get"])
     def by_proficiency(self, request):
-        proficiency = request.query_params.get('proficiency')
+        proficiency = request.query_params.get("proficiency")
         if not proficiency:
-            return Response({'error': 'Proficiency parameter is required'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Proficiency parameter is required"}, status=status.HTTP_400_BAD_REQUEST
+            )
         skills = self.get_queryset().filter(proficiency=proficiency)
         serializer = self.get_serializer(skills, many=True)
         return Response(serializer.data)
+
 
 @require_http_methods(["POST"])
 def import_github_profile(request):
     """Import profile data from GitHub."""
     try:
         data = json.loads(request.body)
-        github_username = data.get('github_username')
-        
+        github_username = data.get("github_username")
+
         if not github_username:
-            return JsonResponse({'error': 'GitHub username is required'}, status=400)
-        
+            return JsonResponse({"error": "GitHub username is required"}, status=400)
+
         importer = GitHubProfileImporter(github_username)
         profile_data = json.loads(importer.import_profile())
-        
+
         # Save work experiences
-        for exp in profile_data.get('work_experiences', []):
+        for exp in profile_data.get("work_experiences", []):
             WorkExperience.objects.create(
                 profile=request.user.userprofile,
-                company=exp['company'],
-                position=exp['position'],
-                start_date=exp['start_date'],
-                end_date=exp['end_date'],
-                description=exp['description'],
-                technologies=exp['technologies']
+                company=exp["company"],
+                position=exp["position"],
+                start_date=exp["start_date"],
+                end_date=exp["end_date"],
+                description=exp["description"],
+                technologies=exp["technologies"],
             )
-        
+
         # Save skills
-        for skill in profile_data.get('skills', []):
+        for skill in profile_data.get("skills", []):
             Skill.objects.create(
                 profile=request.user.userprofile,
-                name=skill['name'],
-                category=skill['category'],
-                proficiency=skill['proficiency']
+                name=skill["name"],
+                category=skill["category"],
+                proficiency=skill["proficiency"],
             )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Profile imported successfully'
-        })
+
+        return JsonResponse({"success": True, "message": "Profile imported successfully"})
     except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
 
 @require_http_methods(["POST"])
 def import_resume(request):
     """Import profile data from uploaded resume."""
     try:
-        if 'resume' not in request.FILES:
-            return JsonResponse({'error': 'No resume file uploaded'}, status=400)
-        
-        resume_file = request.FILES['resume']
+        if "resume" not in request.FILES:
+            return JsonResponse({"error": "No resume file uploaded"}, status=400)
+
+        resume_file = request.FILES["resume"]
         importer = ResumeImporter(resume_file)
         profile_data = importer.parse_resume()
-        
+
         # Save the raw text and personal info to the user's profile
         user_profile = request.user.userprofile
         user_profile.parsed_resume_data = profile_data
-        
+
         # Update personal information
-        personal_info = profile_data.get('personal_info', {})
-        user_profile.phone = personal_info.get('phone', '')
-        user_profile.address = personal_info.get('address', '')
-        user_profile.city = personal_info.get('city', '')
-        user_profile.state = personal_info.get('state', '')
-        user_profile.country = personal_info.get('country', '')
-        user_profile.postal_code = personal_info.get('postal_code', '')
-        user_profile.website = personal_info.get('website', '')
-        user_profile.linkedin = personal_info.get('linkedin', '')
-        user_profile.github = personal_info.get('github', '')
-        
+        personal_info = profile_data.get("personal_info", {})
+        user_profile.phone = personal_info.get("phone", "")
+        user_profile.address = personal_info.get("address", "")
+        user_profile.city = personal_info.get("city", "")
+        user_profile.state = personal_info.get("state", "")
+        user_profile.country = personal_info.get("country", "")
+        user_profile.postal_code = personal_info.get("postal_code", "")
+        user_profile.website = personal_info.get("website", "")
+        user_profile.linkedin = personal_info.get("linkedin", "")
+        user_profile.github = personal_info.get("github", "")
+
         # Update professional summary if available
-        if personal_info.get('name'):
-            user_profile.headline = personal_info['name']
-        
+        if personal_info.get("name"):
+            user_profile.headline = personal_info["name"]
+
         user_profile.save()
-        
+
         # Save work experiences
-        for exp in profile_data.get('work_experiences', []):
+        for exp in profile_data.get("work_experiences", []):
             # Skip if no start date
-            if not exp.get('start_date'):
+            if not exp.get("start_date"):
                 continue
-                
+
             try:
                 # Parse dates if they're strings
-                start_date = exp.get('start_date')
+                start_date = exp.get("start_date")
                 if isinstance(start_date, str):
-                    start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
-                
-                end_date = exp.get('end_date')
+                    start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+
+                end_date = exp.get("end_date")
                 if isinstance(end_date, str):
-                    end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
-                
+                    end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+
                 WorkExperience.objects.create(
                     profile=request.user.userprofile,
-                    company=exp.get('company', ''),
-                    position=exp.get('position', ''),
+                    company=exp.get("company", ""),
+                    position=exp.get("position", ""),
                     start_date=start_date,
                     end_date=end_date,
-                    current=exp.get('current', False),
-                    description=exp.get('description', ''),
-                    technologies=exp.get('technologies', [])
+                    current=exp.get("current", False),
+                    description=exp.get("description", ""),
+                    technologies=exp.get("technologies", []),
                 )
             except (ValueError, TypeError):
                 # Skip this experience if date parsing fails
                 continue
-        
+
         # Save education
-        for edu in profile_data.get('education', []):
+        for edu in profile_data.get("education", []):
             try:
                 # Parse GPA if it exists and is numeric
-                gpa_str = edu.get('gpa')
+                gpa_str = edu.get("gpa")
                 gpa = None
                 if gpa_str:
                     try:
@@ -587,145 +626,136 @@ def import_resume(request):
                         gpa = None
 
                 # Parse dates
-                start_date = edu.get('start_date')
+                start_date = edu.get("start_date")
                 if isinstance(start_date, str):
                     try:
-                        start_date = datetime.strptime(start_date, '%Y-%m-%d').date()
+                        start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
                     except ValueError:
                         start_date = None
 
-                end_date = edu.get('end_date')
+                end_date = edu.get("end_date")
                 if isinstance(end_date, str):
                     try:
-                        end_date = datetime.strptime(end_date, '%Y-%m-%d').date()
+                        end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
                     except ValueError:
                         end_date = None
 
                 Education.objects.create(
                     profile=request.user.userprofile,
-                    institution=edu.get('institution', ''),
-                    degree=edu.get('degree', ''),
-                    field_of_study=edu.get('field_of_study', ''),
+                    institution=edu.get("institution", ""),
+                    degree=edu.get("degree", ""),
+                    field_of_study=edu.get("field_of_study", ""),
                     start_date=start_date,
                     end_date=end_date,
                     gpa=gpa,
-                    achievements=edu.get('achievements', [])
+                    achievements=edu.get("achievements", []),
                 )
             except Exception as e:
                 # Log the error but continue processing other education entries
                 logger.error(f"Error creating education entry: {str(e)}")
                 continue
-        
+
         # Save skills
-        for skill in profile_data.get('skills', []):
+        for skill in profile_data.get("skills", []):
             Skill.objects.create(
                 profile=request.user.userprofile,
-                name=skill.get('name', ''),
-                category=skill.get('category', ''),
-                proficiency=skill.get('proficiency', 3)
+                name=skill.get("name", ""),
+                category=skill.get("category", ""),
+                proficiency=skill.get("proficiency", 3),
             )
-        
+
         # Save certifications
-        for cert in profile_data.get('certifications', []):
+        for cert in profile_data.get("certifications", []):
             Certification.objects.create(
                 profile=request.user.userprofile,
-                name=cert.get('name', ''),
-                issuer=cert.get('issuer', ''),
-                issue_date=cert.get('issue_date'),
-                expiry_date=cert.get('expiry_date'),
-                credential_id=cert.get('credential_id')
+                name=cert.get("name", ""),
+                issuer=cert.get("issuer", ""),
+                issue_date=cert.get("issue_date"),
+                expiry_date=cert.get("expiry_date"),
+                credential_id=cert.get("credential_id"),
             )
-        
+
         # Save projects
-        for proj in profile_data.get('projects', []):
+        for proj in profile_data.get("projects", []):
             Project.objects.create(
                 profile=request.user.userprofile,
-                title=proj.get('title', ''),
-                description=proj.get('description', ''),
-                start_date=proj.get('start_date'),
-                end_date=proj.get('end_date'),
-                technologies=proj.get('technologies', [])
+                title=proj.get("title", ""),
+                description=proj.get("description", ""),
+                start_date=proj.get("start_date"),
+                end_date=proj.get("end_date"),
+                technologies=proj.get("technologies", []),
             )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Profile imported successfully',
-            'data': profile_data
-        })
-        
+
+        return JsonResponse(
+            {"success": True, "message": "Profile imported successfully", "data": profile_data}
+        )
+
     except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
 
 @require_http_methods(["POST"])
 def import_linkedin_profile(request):
     """Import profile data from LinkedIn."""
     try:
         data = json.loads(request.body)
-        linkedin_url = data.get('linkedin_url')
-        
+        linkedin_url = data.get("linkedin_url")
+
         if not linkedin_url:
-            return JsonResponse({'error': 'LinkedIn URL is required'}, status=400)
-        
+            return JsonResponse({"error": "LinkedIn URL is required"}, status=400)
+
         importer = LinkedInImporter(linkedin_url)
         profile_data = json.loads(importer.parse_profile())
-        
+
         # Save work experiences
-        for exp in profile_data.get('work_experiences', []):
+        for exp in profile_data.get("work_experiences", []):
             WorkExperience.objects.create(
                 profile=request.user.userprofile,
-                company=exp['company'],
-                position=exp['position'],
-                start_date=exp['start_date'],
-                end_date=exp['end_date'],
-                description=exp['description'],
-                technologies=exp['technologies']
+                company=exp["company"],
+                position=exp["position"],
+                start_date=exp["start_date"],
+                end_date=exp["end_date"],
+                description=exp["description"],
+                technologies=exp["technologies"],
             )
-        
+
         # Save education
-        for edu in profile_data.get('education', []):
+        for edu in profile_data.get("education", []):
             Education.objects.create(
                 profile=request.user.userprofile,
-                institution=edu['institution'],
-                degree=edu['degree'],
-                field_of_study=edu['field_of_study'],
-                start_date=edu['start_date'],
-                end_date=edu['end_date'],
-                gpa=edu.get('gpa'),
-                achievements=edu.get('achievements', [])
+                institution=edu["institution"],
+                degree=edu["degree"],
+                field_of_study=edu["field_of_study"],
+                start_date=edu["start_date"],
+                end_date=edu["end_date"],
+                gpa=edu.get("gpa"),
+                achievements=edu.get("achievements", []),
             )
-        
+
         # Save skills
-        for skill in profile_data.get('skills', []):
+        for skill in profile_data.get("skills", []):
             Skill.objects.create(
                 profile=request.user.userprofile,
-                name=skill['name'],
-                category=skill['category'],
-                proficiency=skill['proficiency']
+                name=skill["name"],
+                category=skill["category"],
+                proficiency=skill["proficiency"],
             )
-        
+
         # Save certifications
-        for cert in profile_data.get('certifications', []):
+        for cert in profile_data.get("certifications", []):
             Certification.objects.create(
                 profile=request.user.userprofile,
-                name=cert['name'],
-                issuer=cert['issuer'],
-                issue_date=cert['issue_date'],
-                expiry_date=cert.get('expiry_date'),
-                credential_id=cert.get('credential_id')
+                name=cert["name"],
+                issuer=cert["issuer"],
+                issue_date=cert["issue_date"],
+                expiry_date=cert.get("expiry_date"),
+                credential_id=cert.get("credential_id"),
             )
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Profile imported successfully'
-        })
+
+        return JsonResponse({"success": True, "message": "Profile imported successfully"})
     except Exception as e:
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
 
 @require_http_methods(["POST"])
 @login_required
@@ -733,40 +763,42 @@ def bulk_delete_records(request):
     """Handle bulk deletion of resume records."""
     try:
         data = json.loads(request.body)
-        record_type = data.get('record_type')
-        record_ids = data.get('record_ids', [])
-        
+        record_type = data.get("record_type")
+        record_ids = data.get("record_ids", [])
+
         if not record_type or not record_ids:
-            return JsonResponse({'error': 'Missing required parameters'}, status=400)
-        
+            return JsonResponse({"error": "Missing required parameters"}, status=400)
+
         # Map record types to their models
         model_map = {
-            'work_experience': WorkExperience,
-            'education': Education,
-            'project': Project,
-            'certification': Certification,
-            'publication': Publication,
-            'skill': Skill
+            "work_experience": WorkExperience,
+            "education": Education,
+            "project": Project,
+            "certification": Certification,
+            "publication": Publication,
+            "skill": Skill,
         }
-        
+
         if record_type not in model_map:
-            return JsonResponse({'error': 'Invalid record type'}, status=400)
-        
+            return JsonResponse({"error": "Invalid record type"}, status=400)
+
         model = model_map[record_type]
         deleted_count = model.objects.filter(
-            profile=request.user.userprofile,
-            id__in=record_ids
+            profile=request.user.userprofile, id__in=record_ids
         ).delete()[0]
-        
-        return JsonResponse({
-            'success': True,
-            'message': f'Successfully deleted {deleted_count} records',
-            'deleted_count': deleted_count
-        })
-        
+
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f"Successfully deleted {deleted_count} records",
+                "deleted_count": deleted_count,
+            }
+        )
+
     except Exception as e:
         logger.error(f"Error in bulk delete: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
 
 @require_http_methods(["POST"])
 @login_required
@@ -774,126 +806,134 @@ def edit_record(request, record_type, record_id):
     """Handle editing of a record."""
     try:
         data = json.loads(request.body)
-        
+
         # Map record types to their models
         model_map = {
-            'work_experience': WorkExperience,
-            'education': Education,
-            'project': Project,
-            'certification': Certification,
-            'publication': Publication,
-            'skill': Skill
+            "work_experience": WorkExperience,
+            "education": Education,
+            "project": Project,
+            "certification": Certification,
+            "publication": Publication,
+            "skill": Skill,
         }
-        
+
         if record_type not in model_map:
-            return JsonResponse({'error': 'Invalid record type'}, status=400)
-        
+            return JsonResponse({"error": "Invalid record type"}, status=400)
+
         model = model_map[record_type]
-        record = model.objects.filter(
-            profile=request.user.userprofile,
-            id=record_id
-        ).first()
-        
+        record = model.objects.filter(profile=request.user.userprofile, id=record_id).first()
+
         if not record:
-            return JsonResponse({'error': 'Record not found'}, status=404)
-        
+            return JsonResponse({"error": "Record not found"}, status=404)
+
         # Update record fields
         for field, value in data.items():
             if hasattr(record, field):
-                if field in ['start_date', 'end_date', 'issue_date', 'expiry_date', 'publication_date']:
+                if field in [
+                    "start_date",
+                    "end_date",
+                    "issue_date",
+                    "expiry_date",
+                    "publication_date",
+                ]:
                     try:
-                        value = datetime.strptime(value, '%b %Y').date()
+                        value = datetime.strptime(value, "%b %Y").date()
                     except ValueError:
                         continue
-                elif field == 'technologies':
-                    value = value.split(',') if value else []
+                elif field == "technologies":
+                    value = value.split(",") if value else []
                 setattr(record, field, value)
-        
+
         record.save()
-        
-        return JsonResponse({
-            'success': True,
-            'message': 'Record updated successfully'
-        })
-        
+
+        return JsonResponse({"success": True, "message": "Record updated successfully"})
+
     except Exception as e:
         logger.error(f"Error in edit record: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
 
 @login_required
 def get_profile_stats(request):
     """Get current profile statistics"""
     profile = request.user.userprofile
     stats = {
-        'work_experience': profile.work_experiences.count(),
-        'projects': profile.projects.count(),
-        'skills': profile.skills.count(),
-        'certifications': profile.certifications.count(),
-        'years_of_experience': profile.years_of_experience
+        "work_experience": profile.work_experiences.count(),
+        "projects": profile.projects.count(),
+        "skills": profile.skills.count(),
+        "certifications": profile.certifications.count(),
+        "years_of_experience": profile.years_of_experience,
     }
     return JsonResponse(stats)
 
-@method_decorator(login_required, name='dispatch')
+
+@method_decorator(login_required, name="dispatch")
 class ManualSubmissionView(TemplateView):
-    template_name = 'core/manual_submission.html'
+    template_name = "core/manual_submission.html"
+
 
 @login_required
 @require_http_methods(["POST"])
 def generate_documents(request):
     try:
         data = json.loads(request.body)
-        job_description = data.get('job_description')
-        document_type = data.get('document_type')
-        
+        job_description = data.get("job_description")
+        document_type = data.get("document_type")
+
         if not job_description or not document_type:
-            return JsonResponse({'error': 'Missing required fields'}, status=400)
-            
-        if document_type not in ['resume', 'cover_letter']:
-            return JsonResponse({'error': 'Invalid document type'}, status=400)
-            
+            return HttpResponse(status=400)
+
+        if document_type not in ["resume", "cover_letter"]:
+            return HttpResponse(status=400)
+
         # Create a buffer to store the PDF
         buffer = BytesIO()
-        
+
         try:
-            if document_type == 'resume': 
+            if document_type == "resume":
                 # Create resume composition with user data
                 resume = ResumeComposition(request.user.userprofile)
                 # Build the resume
                 resume.build(buffer, job_description)
-                
+
                 # Get the value of the BytesIO buffer and write it to the response
                 pdf = buffer.getvalue()
                 buffer.close()
-                
+
                 # Create response
-                response = HttpResponse(pdf, content_type='application/pdf')
-                response['Content-Disposition'] = f'attachment; filename="{request.user.username}_resume_{date.today().strftime("%Y%m%d")}.pdf"'
+                response = HttpResponse(pdf, content_type="application/pdf")
+                response["Content-Disposition"] = (
+                    f'attachment; filename="{request.user.username}_resume_{date.today().strftime("%Y%m%d")}.pdf"'
+                )
                 return response
-                
-            elif document_type == 'cover_letter':
+
+            elif document_type == "cover_letter":
                 # Create cover letter using CoverLetterComposition
-                cover_letter_composer = CoverLetterComposition(request.user.userprofile, job_description)
+                cover_letter_composer = CoverLetterComposition(
+                    request.user.userprofile, job_description
+                )
                 buffer = cover_letter_composer.build()
                 cover_letter_bytes = buffer.getvalue()
                 buffer.close()
-                
+
                 # Encode cover letter bytes in base64
                 response_data = {
-                    'documents': {
-                        'cover_letter': base64.b64encode(cover_letter_bytes).decode('utf-8')
+                    "documents": {
+                        "cover_letter": base64.b64encode(cover_letter_bytes).decode("utf-8")
                     }
                 }
-                
-                return JsonResponse(response_data)
+
+                return HttpResponse(json.dumps(response_data), content_type="application/json")
         except Exception as e:
             logger.error(f"Error generating {document_type}: {str(e)}")
-            return JsonResponse({'error': f'Error generating {document_type}: {str(e)}'}, status=500)
-            
+            return HttpResponse(status=500)
+
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+        return HttpResponse(status=400)
     except Exception as e:
         logger.error(f"Unexpected error in generate_documents: {str(e)}")
-        return JsonResponse({'error': f'Unexpected error: {str(e)}'}, status=500)
+        return HttpResponse(status=500)
+
 
 @require_http_methods(["POST"])
 @login_required
@@ -901,48 +941,58 @@ def generate_answers(request):
     """Generate answers for application questions using Ollama."""
     try:
         data = json.loads(request.body)
-        job_description = data.get('job_description')
-        questions = data.get('questions')
+        job_description = data.get("job_description")
+        questions = data.get("questions")
 
         if not job_description or not questions:
-            return JsonResponse({'error': 'Job description and questions are required'}, status=400)
+            return JsonResponse({"error": "Job description and questions are required"}, status=400)
 
         # Get user profile information
         user_profile = request.user.userprofile
-        
+
         # Format user's background information
         work_experiences = []
         if user_profile.work_experiences.exists():
             for exp in user_profile.work_experiences.all():
-                work_experiences.append({
-                    'company': exp.company,
-                    'position': exp.position,
-                    'start_date': exp.start_date.strftime('%Y-%m-%d') if exp.start_date else None,
-                    'end_date': exp.end_date.strftime('%Y-%m-%d') if exp.end_date else None,
-                    'current': exp.current,
-                    'description': exp.description,
-                    'technologies': exp.technologies
-                })
+                work_experiences.append(
+                    {
+                        "company": exp.company,
+                        "position": exp.position,
+                        "start_date": (
+                            exp.start_date.strftime("%Y-%m-%d") if exp.start_date else None
+                        ),
+                        "end_date": exp.end_date.strftime("%Y-%m-%d") if exp.end_date else None,
+                        "current": exp.current,
+                        "description": exp.description,
+                        "technologies": exp.technologies,
+                    }
+                )
 
         skills = []
         if user_profile.skills.exists():
             for skill in user_profile.skills.all():
-                skills.append({
-                    'name': skill.name,
-                    'category': skill.category,
-                    'proficiency': skill.proficiency
-                })
+                skills.append(
+                    {
+                        "name": skill.name,
+                        "category": skill.category,
+                        "proficiency": skill.proficiency,
+                    }
+                )
 
         projects = []
         if user_profile.projects.exists():
             for proj in user_profile.projects.all():
-                projects.append({
-                    'title': proj.title,
-                    'description': proj.description,
-                    'technologies': proj.technologies,
-                    'start_date': proj.start_date.strftime('%Y-%m-%d') if proj.start_date else None,
-                    'end_date': proj.end_date.strftime('%Y-%m-%d') if proj.end_date else None
-                })
+                projects.append(
+                    {
+                        "title": proj.title,
+                        "description": proj.description,
+                        "technologies": proj.technologies,
+                        "start_date": (
+                            proj.start_date.strftime("%Y-%m-%d") if proj.start_date else None
+                        ),
+                        "end_date": proj.end_date.strftime("%Y-%m-%d") if proj.end_date else None,
+                    }
+                )
 
         # Create prompt for Ollama
         prompt = f"""you are excellent at writing cover letters and resumes.
@@ -978,27 +1028,28 @@ E.X.: {{"response": "Question1 : answer1,\n Question2 : answer2"}} """
         ollama_client = OllamaClient(model="phi4:latest", temperature=0.0)
         answers = ollama_client.generate(prompt)
 
-        return JsonResponse({'answers': answers})
+        return JsonResponse({"answers": answers})
 
     except Exception as e:
         logger.error(f"Error generating answers: {str(e)}")
-        return JsonResponse({'error': str(e)}, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
 
 @login_required
 @require_http_methods(["POST"])
 def process_job_application(request):
     try:
         data = json.loads(request.body)
-        job_description = data.get('job_description')
-        questions = data.get('questions', [])
-        document_type = data.get('document_type', 'all')  # 'resume', 'cover_letter', or 'all'
-        
+        job_description = data.get("job_description")
+        questions = data.get("questions", [])
+        document_type = data.get("document_type", "all")  # 'resume', 'cover_letter', or 'all'
+
         if not job_description:
-            return JsonResponse({'error': 'Missing job description'}, status=400)
-        
+            return JsonResponse({"error": "Missing job description"}, status=400)
+
         # Initialize agents
         personal_agent = PersonalAgent(request.user.id)
-        
+
         # Load user background
         background = PersonalBackground(
             profile=request.user.userprofile.__dict__,
@@ -1006,109 +1057,102 @@ def process_job_application(request):
             education=list(request.user.userprofile.education.values()),
             skills=list(request.user.userprofile.skills.values()),
             projects=list(request.user.userprofile.projects.values()),
-            github_data={
-                'repositories': [],
-                'contributions': 0,
-                'languages': []
-            },
+            github_data={"repositories": [], "contributions": 0, "languages": []},
             achievements=[],  # We'll add this field to the model later
-            interests=[]     # We'll add this field to the model later
+            interests=[],  # We'll add this field to the model later
         )
         personal_agent.load_background(background)
-        
+
         # Initialize application agent
         application_agent = ApplicationAgent(request.user.id, personal_agent)
         if document_type is not None:
             # Initialize search agent for job analysis
             search_agent = SearchAgent(request.user.id, personal_agent)
-            
+
             # Analyze job fit
-            job_analysis = search_agent.analyze_job_fit({
-                'description': job_description
-            })
-            
+            job_analysis = search_agent.analyze_job_fit({"description": job_description})
+
             response_data = {
-                'job_analysis': json.loads(job_analysis),
-                'documents': {},
-                'answers': []
+                "job_analysis": json.loads(job_analysis),
+                "documents": {},
+                "answers": [],
             }
 
         # Generate requested documents
-        if document_type in ['resume', 'all']:
+        if document_type in ["resume", "all"]:
             resume_buffer = BytesIO()
             resume = ResumeComposition(personal_agent)
             resume.build(resume_buffer, job_description)
             resume_bytes = resume_buffer.getvalue()
             resume_buffer.close()
             # Encode resume bytes in base64
-            response_data['documents']['resume'] = base64.b64encode(resume_bytes).decode('utf-8')
-        
-        if document_type in ['cover_letter', 'all']:
+            response_data["documents"]["resume"] = base64.b64encode(resume_bytes).decode("utf-8")
+
+        if document_type in ["cover_letter", "all"]:
             # Create cover letter using CoverLetterComposition
-            cover_letter_composer = CoverLetterComposition(request.user.userprofile, job_description)
+            cover_letter_composer = CoverLetterComposition(
+                request.user.userprofile, job_description
+            )
             buffer = cover_letter_composer.build()
             cover_letter_bytes = buffer.getvalue()
             buffer.close()
-            
+
             # Encode cover letter bytes in base64
-            response_data['documents']['cover_letter'] = base64.b64encode(cover_letter_bytes).decode('utf-8')
-        
+            response_data["documents"]["cover_letter"] = base64.b64encode(
+                cover_letter_bytes
+            ).decode("utf-8")
+
         # Handle application questions if provided
         if questions:
             answers = application_agent.handle_screening_questions(questions, job_description)
-            response_data['answers'] = answers
-        
+            response_data["answers"] = answers
+
         # Add interview preparation if requested
-        if data.get('include_interview_prep', False):
+        if data.get("include_interview_prep", False):
             interview_prep = application_agent.prepare_interview_responses(job_description)
-            response_data['interview_prep'] = json.loads(interview_prep)
-        
+            response_data["interview_prep"] = json.loads(interview_prep)
+
         return JsonResponse(response_data)
-        
+
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
     except Exception as e:
         logger.error(f"Error processing job application: {str(e)}")
-        return JsonResponse({'error': f'Error processing application: {str(e)}'}, status=500)
+        return JsonResponse({"error": f"Error processing application: {str(e)}"}, status=500)
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 @permission_classes([AllowAny])  # Temporarily allow any user for testing
 def fill_form(request):
-    try:        
+    try:
         # Get form data from request
         form_data = json.loads(request.body)
-        
-        fields = form_data.get('fields', [])
-        job_description = form_data.get('jobDescription', '')
-        
+
+        fields = form_data.get("fields", [])
+        job_description = form_data.get("jobDescription", "")
+
         # Get current user
         user = request.user
         if not user.is_authenticated:
             print("User not authenticated")
-            return Response({'error': 'User not authenticated'}, status=401)
-        
-        
+            return Response({"error": "User not authenticated"}, status=401)
+
         # Initialize agents
         personal_agent = PersonalAgent(user.id)
         application_agent = ApplicationAgent(user.id, personal_agent)
-        
+
         # Load user's background data
         background = load_user_background(user.id)
         personal_agent.load_background(background)
-        
+
         # Fill form fields
         responses = application_agent.fill_application_form(fields, job_description)
         print("Generated responses:", responses)
-        
-        return Response({
-            'success': True,
-            'responses': responses
-        })
+
+        return Response({"success": True, "responses": responses})
     except Exception as e:
-        return Response({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+        return Response({"success": False, "error": str(e)}, status=500)
+
 
 def load_user_background(user_id):
     """Load user's background data from your database"""
@@ -1124,158 +1168,154 @@ def load_user_background(user_id):
         projects=[],  # Load from your projects model
         github_data={},  # Load from your GitHub data model
         achievements=[],  # Load from your achievements model
-        interests=[]  # Load from your interests model
+        interests=[],  # Load from your interests model
     )
 
-@api_view(['POST'])
+
+@api_view(["POST"])
 @permission_classes([AllowAny])
 def get_token(request):
-    username = request.data.get('username')
-    password = request.data.get('password')
-    
+    username = request.data.get("username")
+    password = request.data.get("password")
+
     if not username or not password:
-        return Response({
-            'error': 'Please provide both username and password'
-        }, status=400)
-    
+        return Response({"error": "Please provide both username and password"}, status=400)
+
     user = authenticate(username=username, password=password)
-    
+
     if not user:
-        return Response({
-            'error': 'Invalid credentials'
-        }, status=401)
-    
+        return Response({"error": "Invalid credentials"}, status=401)
+
     refresh = RefreshToken.for_user(user)
-    
-    return Response({
-        'access': str(refresh.access_token),
-        'refresh': str(refresh),
-    })
+
+    return Response(
+        {
+            "access": str(refresh.access_token),
+            "refresh": str(refresh),
+        }
+    )
+
 
 @login_required
 def jobs_page(request):
     """View for the jobs page"""
     # Get user's job listings
-    job_listings = JobListing.objects.all().order_by('-posted_date', '-match_score')
-    
+    job_listings = JobListing.objects.all().order_by("-posted_date", "-match_score")
+
     # Get search parameters from request
-    role = request.GET.get('role', '')
-    location = request.GET.get('location', '')
-    
+    role = request.GET.get("role", "")
+    location = request.GET.get("location", "")
+
     # Filter job listings if search parameters are provided
     if role or location:
         if role:
             job_listings = job_listings.filter(title__icontains=role)
         if location:
             job_listings = job_listings.filter(location__icontains=location)
-    
+
     context = {
-        'job_listings': job_listings,
-        'role': role,
-        'location': location,
+        "job_listings": job_listings,
+        "role": role,
+        "location": location,
     }
-    return render(request, 'core/jobs.html', context)
+    return render(request, "core/jobs.html", context)
+
 
 @login_required
 def search_jobs(request):
-    if request.method == 'POST':
+    if request.method == "POST":
         try:
             data = json.loads(request.body)
-            role = data.get('role')
-            location = data.get('location')
-            platforms = data.get('platforms', ['linkedin'])  # Default to LinkedIn if no platforms specified
-            
+            role = data.get("role")
+            location = data.get("location")
+
             if not role or not location:
-                return JsonResponse({
-                    'error': 'Role and location are required'
-                }, status=400)
-            
-            # Initialize agents
-            search_agent = SearchAgent()
-            
+                return JsonResponse({"error": "Role and location are required"}, status=400)
+
             # Get user profile for job search
-            user_profile = UserProfile.objects.get(user=request.user)
-            
-            # Search for jobs based on selected platforms
+            user_profile = request.user.userprofile
+
+            # Initialize agents
+            personal_agent = PersonalAgent(request.user.id)
+            search_agent = SearchAgent(request.user.id, personal_agent)
+
+            # Search for jobs using LinkedIn only
             job_listings = []
-            for platform in platforms:
-                try:
-                    platform_jobs = search_agent.search_jobs(role, location, platform)
-                    job_listings.extend(platform_jobs)
-                except Exception as e:
-                    logger.error(f"Error searching {platform}: {str(e)}")
-                    continue
-            
+            try:
+                platform_jobs = search_agent.search_jobs(role, location, "linkedin")
+                job_listings.extend(platform_jobs)
+            except Exception as e:
+                logger.error(f"Error searching LinkedIn: {str(e)}")
+                return JsonResponse({"error": "Error searching jobs"}, status=500)
+
             # Process and save job listings
             processed_jobs = []
             for job_data in job_listings:
                 try:
                     # Check if job already exists
                     existing_job = JobListing.objects.filter(
-                        title=job_data['title'],
-                        company=job_data['company'],
-                        location=job_data['location'],
-                        source_url=job_data['source_url']
+                        title=job_data["title"],
+                        company=job_data["company"],
+                        location=job_data["location"],
+                        source_url=job_data["source_url"],
                     ).first()
-                    
+
                     if existing_job:
                         job = existing_job
                     else:
                         # Create new job listing
                         job = JobListing.objects.create(
-                            title=job_data['title'],
-                            company=job_data['company'],
-                            location=job_data['location'],
-                            description=job_data['description'],
-                            source_url=job_data['source_url'],
-                            source=job_data['source'],
-                            posted_date=job_data.get('posted_date', timezone.now())
+                            title=job_data["title"],
+                            company=job_data["company"],
+                            location=job_data["location"],
+                            description=job_data["description"],
+                            source_url=job_data["source_url"],
+                            source="linkedin",  # Always set to LinkedIn
+                            posted_date=job_data.get("posted_date", timezone.now()),
                         )
-                        
-                        # Trigger document generation for new jobs
-                        generate_job_documents.delay(job.id, user_profile.id)
-                    
-                    processed_jobs.append({
-                        'id': job.id,
-                        'title': job.title,
-                        'company': job.company,
-                        'location': job.location,
-                        'description': job.description,
-                        'source_url': job.source_url,
-                        'source': job.source,
-                        'posted_date': job.posted_date.isoformat(),
-                        'has_tailored_documents': job.has_tailored_documents
-                    })
+
+                        # Trigger asynchronous document generation for new jobs
+                        generate_documents_async.delay(job.id, user_profile.id)
+
+                    processed_jobs.append(
+                        {
+                            "id": job.id,
+                            "title": job.title,
+                            "company": job.company,
+                            "location": job.location,
+                            "description": job.description,
+                            "source_url": job.source_url,
+                            "source": job.source,
+                            "posted_date": job.posted_date.isoformat(),
+                            "has_tailored_documents": job.has_tailored_documents,
+                        }
+                    )
                 except Exception as e:
                     logger.error(f"Error processing job listing: {str(e)}")
                     continue
-            
-            return JsonResponse({
-                'jobs': processed_jobs
-            })
-            
-        except json.JSONDecodeError:
-            return JsonResponse({
-                'error': 'Invalid JSON data'
-            }, status=400)
-        except Exception as e:
-            return JsonResponse({
-                'error': str(e)
-            }, status=500)
-    
-    return render(request, 'core/jobs.html')
 
-@api_view(['POST'])
+            return JsonResponse({"jobs": processed_jobs})
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data"}, status=400)
+        except Exception as e:
+            logger.error(f"Error in search_jobs: {str(e)}")
+            return JsonResponse({"error": str(e)}, status=500)
+
+    return render(request, "core/jobs.html")
+
+
+@api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def generate_job_documents(request, job_id):
     """Generate tailored resume and cover letter for a specific job"""
     try:
         # Get the job listing
         job_listing = get_object_or_404(JobListing, id=job_id)
-        
+
         # Initialize agents
         personal_agent = PersonalAgent(request.user.id)
-        
+
         # Load user background
         background = PersonalBackground(
             profile=request.user.userprofile.__dict__,
@@ -1285,71 +1325,83 @@ def generate_job_documents(request, job_id):
             projects=list(request.user.userprofile.projects.values()),
             github_data={},  # We'll implement GitHub data fetching later
             achievements=[],  # We'll add this field to the model later
-            interests=[]     # We'll add this field to the model later
+            interests=[],  # We'll add this field to the model later
         )
         personal_agent.load_background(background)
-        
+
         # Generate documents
         logger.info(f"Generating documents for job {job_id}")
         success = personal_agent.generate_tailored_documents(job_listing)
-        
+
         if success:
-            return Response({
-                'success': True,
-                'message': 'Documents generated successfully',
-                'has_tailored_documents': True,
-                'resume_url': job_listing.tailored_resume.url if job_listing.tailored_resume else None,
-                'cover_letter_url': job_listing.tailored_cover_letter.url if job_listing.tailored_cover_letter else None
-            })
+            return Response(
+                {
+                    "success": True,
+                    "message": "Documents generated successfully",
+                    "has_tailored_documents": True,
+                    "resume_url": (
+                        job_listing.tailored_resume.url if job_listing.tailored_resume else None
+                    ),
+                    "cover_letter_url": (
+                        job_listing.tailored_cover_letter.url
+                        if job_listing.tailored_cover_letter
+                        else None
+                    ),
+                }
+            )
         else:
-            return Response({
-                'success': False,
-                'message': 'Failed to generate documents',
-                'has_tailored_documents': False
-            }, status=500)
-            
+            return Response(
+                {
+                    "success": False,
+                    "message": "Failed to generate documents",
+                    "has_tailored_documents": False,
+                },
+                status=500,
+            )
+
     except JobListing.DoesNotExist:
-        return Response({
-            'success': False,
-            'message': 'Job not found'
-        }, status=404)
+        return Response({"success": False, "message": "Job not found"}, status=404)
     except Exception as e:
         logger.error(f"Error generating documents: {str(e)}")
-        return Response({
-            'success': False,
-            'message': f'Error generating documents: {str(e)}'
-        }, status=500)
+        return Response(
+            {"success": False, "message": f"Error generating documents: {str(e)}"}, status=500
+        )
 
-@api_view(['GET'])
+
+@api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_job_documents(request, job_id):
     """Get the tailored resume and cover letter for a specific job"""
     try:
         job_listing: JobListing = JobListing.objects.get(id=job_id, user=request.user)
-        
+
         if not job_listing.tailored_resume or not job_listing.tailored_cover_letter:
-            return Response({
-                'message': 'Documents not found',
-                'has_tailored_documents': False
-            }, status=404)
-        
+            return Response(
+                {"message": "Documents not found", "has_tailored_documents": False}, status=404
+            )
+
         # Return URLs to the documents
-        return Response({
-            'message': 'Documents found',
-            'has_tailored_documents': True,
-            'resume_url': job_listing.tailored_resume.url if job_listing.tailored_resume else None,
-            'cover_letter_url': job_listing.tailored_cover_letter.url if job_listing.tailored_cover_letter else None
-        })
-        
+        return Response(
+            {
+                "message": "Documents found",
+                "has_tailored_documents": True,
+                "resume_url": (
+                    job_listing.tailored_resume.url if job_listing.tailored_resume else None
+                ),
+                "cover_letter_url": (
+                    job_listing.tailored_cover_letter.url
+                    if job_listing.tailored_cover_letter
+                    else None
+                ),
+            }
+        )
+
     except JobListing.DoesNotExist:
-        return Response({
-            'message': 'Job not found'
-        }, status=404)
+        return Response({"message": "Job not found"}, status=404)
     except Exception as e:
         logger.error(f"Error getting documents: {str(e)}")
-        return Response({
-            'message': 'An error occurred while getting documents'
-        }, status=500)
+        return Response({"message": "An error occurred while getting documents"}, status=500)
+
 
 @login_required
 @require_http_methods(["POST"])
@@ -1357,62 +1409,90 @@ def apply_to_job(request, job_id) -> JsonResponse:
     """API endpoint to apply to a job"""
     try:
         job: JobListing = JobListing.objects.get(id=job_id)
-        
+
         # Update job status
         job.applied = True
         job.application_date = datetime.now().date()
-        job.application_status = 'Applied'
+        job.application_status = "Applied"
         job.save()
-        
-        return JsonResponse({
-            'message': 'Successfully applied to job',
-            'job': {
-                'id': job.id,
-                'title': job.title,
-                'company': job.company,
-                'application_status': job.application_status
+
+        return JsonResponse(
+            {
+                "message": "Successfully applied to job",
+                "job": {
+                    "id": job.id,
+                    "title": job.title,
+                    "company": job.company,
+                    "application_status": job.application_status,
+                },
             }
-        })
-        
+        )
+
     except JobListing.DoesNotExist:
-        return JsonResponse({
-            'error': 'Job not found'
-        }, status=404)
+        return JsonResponse({"error": "Job not found"}, status=404)
     except Exception as e:
-        return JsonResponse({
-            'error': str(e)
-        }, status=500)
+        return JsonResponse({"error": str(e)}, status=500)
+
 
 @login_required
 def job_detail(request, job_id) -> HttpResponse:
     """View for individual job details"""
     job: JobListing = get_object_or_404(JobListing, id=job_id)
     context: dict[str, JobListing] = {
-        'job': job,
+        "job": job,
     }
-    return render(request, 'core/job_detail.html', context)
+    return render(request, "core/job_detail.html", context)
+
 
 @login_required
-def job_apply(request, job_id) -> HttpResponseRedirect | HttpResponsePermanentRedirect | HttpResponse:
+def job_apply(
+    request, job_id
+) -> HttpResponseRedirect | HttpResponsePermanentRedirect | HttpResponse:
     """View for job application process"""
     job: JobListing = get_object_or_404(JobListing, id=job_id)
-    
-    if request.method == 'POST':
+
+    if request.method == "POST":
         try:
             # Update job status
             job.applied = True
             job.application_date = datetime.now().date()
-            job.application_status = 'Applied'
+            job.application_status = "Applied"
             job.save()
-            
-            messages.success(request, 'Successfully applied to job!')
-            return redirect('core:job_detail', job_id=job.id)
-            
+
+            messages.success(request, "Successfully applied to job!")
+            return redirect("core:job_detail", job_id=job.id)
+
         except Exception as e:
-            messages.error(request, f'Error applying to job: {str(e)}')
-            return redirect('core:job_detail', job_id=job.id)
-    
+            messages.error(request, f"Error applying to job: {str(e)}")
+            return redirect("core:job_detail", job_id=job.id)
+
     context: dict[str, JobListing] = {
-        'job': job,
+        "job": job,
     }
-    return render(request, 'core/job_apply.html', context)
+    return render(request, "core/job_apply.html", context)
+
+
+@login_required
+def job_platform_preferences(request):
+    """View for managing job platform preferences"""
+    user_profile = request.user.userprofile
+    try:
+        preferences = JobPlatformPreference.objects.get(user_profile=user_profile)
+    except JobPlatformPreference.DoesNotExist:
+        preferences = JobPlatformPreference(user_profile=user_profile)
+        preferences.save()
+
+    if request.method == "POST":
+        form = JobPlatformPreferenceForm(request.POST, instance=preferences)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Your job platform preferences have been updated.")
+            return redirect("job_search")  # Assuming you have a job search view
+    else:
+        form = JobPlatformPreferenceForm(instance=preferences)
+
+    return render(
+        request,
+        "core/job_platform_preferences.html",
+        {"form": form, "platforms": JobListing.JOB_SOURCES},
+    )
