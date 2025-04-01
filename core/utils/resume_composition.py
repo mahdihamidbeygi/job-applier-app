@@ -27,7 +27,7 @@ class ResumeComposition:
         self.styles = getSampleStyleSheet()
         self._setup_styles()
         self.elements = []
-        self.ollama_client = OllamaClient(model="phi4:latest", temperature=0.0)
+        self.ollama_client = OllamaClient(model="llama3:latest", temperature=0.0)
 
     def _convert_to_dict(self, user_data):
         """Convert UserProfile model instance to dictionary format"""

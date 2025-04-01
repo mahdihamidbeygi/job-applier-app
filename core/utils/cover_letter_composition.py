@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from io import BytesIO
 from typing import Any, Dict, List
 
@@ -28,7 +29,7 @@ class CoverLetterComposition:
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
         self.grok_client = GrokClient(model="grok-2-1212", temperature=0.0)
-        self.llm = OllamaClient(model="llama3:latest", temperature=0.0)
+        self.llm = OllamaClient(model="phi4:latest", temperature=0.0)
 
     def _setup_styles(self) -> Dict[str, ParagraphStyle]:
         """Set up custom styles for the cover letter."""
@@ -89,25 +90,27 @@ class CoverLetterComposition:
         """Create the letter salutation."""
         elements = []
 
-        try:
-            # Generate hiring manager name
-            response = self.grok_client.generate(
-                f"""
-                here's the job description: {self.job_description}
-                return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description 
-                or 'Hiring Manager' if no name is found. Do not include any explanatory text.
-                """
-            )
-            # Clean the response to ensure it's valid JSON
-            response = response.strip()
-            if response.startswith("{") and response.endswith("}"):
-                hiring_manager = json.loads(response)
-                salutation = f"Dear {hiring_manager.get('hiring_manager_name', 'Hiring Manager')},"
-            else:
-                salutation = "Dear Hiring Manager,"
-        except Exception as e:
-            logger.info(f"Error generating hiring manager: {str(e)}")
-            salutation = "Dear Hiring Manager,"
+        # TODO: add hiring manager name, once I have a fast model
+        # try:
+        #     # Generate hiring manager name
+        #     response = self.llm.generate(
+        #         f"""
+        #         here's the job description: {self.job_description}
+        #         return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description 
+        #         or 'Hiring Manager' if no name is found. Do not include any explanatory text.
+        #         """
+        #     )
+        #     # Clean the response to ensure it's valid JSON
+        #     response = response.strip()
+        #     if response.startswith("{") and response.endswith("}"):
+        #         hiring_manager = json.loads(response)
+        #         salutation = f"Dear {hiring_manager.get('hiring_manager_name', 'Hiring Manager')},"
+        #     else:
+        #         salutation = "Dear Hiring Manager,"
+        # except Exception as e:
+        #     logger.info(f"Error generating hiring manager: {str(e)}")
+        #     salutation = "Dear Hiring Manager,"
+        salutation = "Dear Hiring Manager,"
 
         elements.append(Paragraph(salutation, self.styles["Salutation"]))
         return elements
@@ -244,9 +247,6 @@ class CoverLetterComposition:
                 - Current Position: {user_profile.current_position or 'Not specified'}
                 - Years of Experience: {user_profile.years_of_experience or 'Not specified'}
 
-                GitHub Profile:
-                {json.dumps(user_profile.github_data, indent=2) if user_profile.github_data else 'Not available'}
-
                 Work Experience:
                 {json.dumps(work_experiences, indent=2)}
 
@@ -259,18 +259,17 @@ class CoverLetterComposition:
                 Please provide the content in JSON format with three sections:
                 1. opening : A compelling opening paragraph that introduces the candidate and expresses interest in the position
                 2. main_content : one-paragraph main body of the letter that:
-                - Highlights relevant work experience, GitHub contributions, and projects that align with the job requirements
+                - Highlights relevant work experience and projects that align with the job requirements
                 - Emphasizes specific skills and achievements that match the position
                 - Demonstrates understanding of the company and role
-                - References specific GitHub contributions or projects when relevant
                 3. closing : A strong closing paragraph that expresses enthusiasm for the opportunity
 
                 Make the content specific to the job and company, and ensure it's professional and engaging. 
-                Focus on matching the candidate's experience, GitHub contributions, and skills with the job requirements.
+                Focus on matching the candidate's experience and skills with the job requirements.
                 No Dear hiring manager, or any other salutation. No content field name in the JSON object."""
-
         # try:
-        generated_content = self.grok_client.generate(prompt)
+        generated_content = self.llm.generate(prompt, resp_in_json=True)
+
         # Parse the generated content as JSON
         content = json.loads(generated_content)
 
@@ -309,16 +308,11 @@ class CoverLetterComposition:
             BytesIO: The generated cover letter PDF
         """
         try:
-            # Ensure required_skills is a list and contains strings
-            if not isinstance(required_skills, (list, tuple)):
-                required_skills = []
-            required_skills = [str(skill) for skill in required_skills if skill]
-
             # Update job description for better tailoring
             self.job_description = f"""
             Position: {job_title}
             Company: {company}
-            Required Skills: {', '.join(required_skills) if required_skills else 'Not specified'}
+            Required Skills: {', '.join(required_skills)}
             
             Job Description:
             {job_description}

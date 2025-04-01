@@ -134,14 +134,7 @@ def profile(request):
     github_data = None
     try:
         if request.user.userprofile.github_url:
-            # Check if we need to refresh GitHub data (older than 1 hour)
-            last_github_refresh = request.user.userprofile.last_github_refresh
-            should_refresh = (
-                not last_github_refresh
-                or (timezone.now() - last_github_refresh).total_seconds() > 3600
-            )
-
-            if should_refresh:
+            if request.user.userprofile.github_data:
                 # Extract username from GitHub URL
                 github_url = request.user.userprofile.github_url
                 github_username = github_url.split("/")[-1]
