@@ -525,14 +525,8 @@ class ResumeComposition:
         if job_description:
             # Use AI to analyze and score skills based on job description
             prompt = f"""
-            Analyze these skills and score their relevance to the job description.
-            Return a JSON array of objects with 'skill' and 'score' keys.
-            Score should be between 0 and 1, where:
-            - 1.0 = Perfect match with job requirements
-            - 0.7-0.9 = Strongly relevant
-            - 0.4-0.6 = Moderately relevant
-            - 0.1-0.3 = Slightly relevant
-            - 0.0 = Not relevant
+            Analyze these skills and return only the relevant ones for the job description.
+            Return a JSON array of strings containing only the relevant skill names.
 
             Job Description:
             {job_description}
@@ -540,16 +534,11 @@ class ResumeComposition:
             Job required Skills:
             {', '.join(required_skills) if required_skills and isinstance(required_skills, (list, tuple)) else 'Not specified'}
 
-
             Skills to analyze:
             {', '.join(skill_levels.keys())}
 
             Return ONLY a JSON array in this format:
-            [
-                {{"skill": "skill_name", "score": 0.8}},
-                {{"skill": "skill_name", "score": 0.5}},
-                ...
-            ]
+            ["skill_name1", "skill_name2", ...]
             Rules:
             - Only return skills that are relevant to the job description
             - Only return skills that are in the required skills list
@@ -566,34 +555,33 @@ class ResumeComposition:
                 try:
                     # Remove any extra text or whitespace
                     response = response.strip()
-                    if not response.startswith("["):
-                        response = response[response.find("["):]
-                    if not response.endswith("]"):
-                        response = response[:response.rfind("]") + 1]
+                    
+                    # Find the first '[' and last ']' to extract just the JSON array
+                    start_idx = response.find('[')
+                    end_idx = response.rfind(']')
+                    
+                    if start_idx == -1 or end_idx == -1:
+                        raise ValueError("No valid JSON array found in response")
+                    
+                    # Extract just the JSON array part
+                    json_str = response[start_idx:end_idx + 1]
                     
                     # Parse the JSON
-                    skill_scores = json.loads(response)
+                    relevant_skills = json.loads(json_str)
                     
-                    # Validate and clean the scores
-                    if not isinstance(skill_scores, list):
+                    # Validate and clean the skills
+                    if not isinstance(relevant_skills, list):
                         raise ValueError("Response is not a list")
                     
-                    # Combine AI scores with proficiency levels
+                    # Get the original skill names with their proficiency levels
                     scored_skills = []
-                    for score_data in skill_scores:
-                        if not isinstance(score_data, dict) or "skill" not in score_data or "score" not in score_data:
-                            continue
-                            
-                        skill_name = score_data["skill"].lower()
-                        score = float(score_data["score"])
-                        
-                        if skill_name in skill_levels:
-                            original_name, proficiency = skill_levels[skill_name]
-                            # Combine AI relevance score (70%) with proficiency level (30%)
-                            combined_score = (score * 0.7) + (proficiency / 100 * 0.3)
-                            scored_skills.append((combined_score, original_name))
+                    for skill_name in relevant_skills:
+                        skill_name_lower = skill_name.lower()
+                        if skill_name_lower in skill_levels:
+                            original_name, proficiency = skill_levels[skill_name_lower]
+                            scored_skills.append((proficiency, original_name))
 
-                    # Sort by combined score
+                    # Sort by proficiency level
                     scored_skills.sort(key=lambda x: (-x[0], x[1].lower()))
                     top_skills = [skill[1] for skill in scored_skills[:15]]
                 except (json.JSONDecodeError, ValueError) as e:

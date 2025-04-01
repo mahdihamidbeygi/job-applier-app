@@ -128,11 +128,14 @@
           const byteArray = new Uint8Array(byteNumbers);
           byteArrays.push(byteArray);
         }
-
+        const userName = "{{ request.user.get_full_name }}";
         const blob = new Blob(byteArrays, { type: "application/pdf" });
-        const fileName = `${type === "resume" ? "resume" : "cover_letter"}_${
-          new Date().toISOString().split("T")[0]
-        }.pdf`;
+        const now = new Date();
+        const date = now.toISOString().split("T")[0];
+        const time = now.toTimeString().split(" ")[0].replace(/:/g, "");
+        const fileName = `${
+          type === "resume" ? "resume" : "cover_letter"
+        }_${userName}_${date}_${time}.pdf`;
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;

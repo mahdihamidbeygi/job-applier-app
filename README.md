@@ -9,6 +9,9 @@ A Chrome extension that helps you fill out job application forms using AI-powere
 - Uses your personal profile and experience to generate relevant responses
 - Fills out forms with AI-generated content
 - Maintains consistency across applications
+- Manual job application submission with tailored documents
+- AI-powered cover letter and resume generation
+- Application question answer generation
 
 ## Installation
 
@@ -20,11 +23,27 @@ A Chrome extension that helps you fill out job application forms using AI-powere
 
 ## Usage
 
+### Browser Extension
 1. Navigate to a job application page
 2. Click the extension icon in your Chrome toolbar
 3. Click "Detect Application Form" to analyze the form
 4. Review the detected fields
 5. Click "Fill Form" to automatically fill out the form with AI-generated responses
+
+### Manual Submission
+1. Go to the Manual Submission page
+2. Paste the job description
+3. Choose to generate:
+   - Tailored Resume
+   - Cover Letter
+   - Application Question Answers
+4. Download the generated documents
+
+### Generated Documents
+The system generates the following documents with personalized naming:
+- Resume: `resume_[username]_[date]_[time].pdf`
+- Cover Letter: `cover_letter_[username]_[date]_[time].pdf`
+- Application Answers: Displayed directly on the page
 
 ## Development
 
@@ -76,12 +95,17 @@ The extension communicates with your Django backend through the following endpoi
   - Request body: `{ fields: [...], jobDescription: string }`
   - Response: `{ success: boolean, responses: {...} }`
 
+- `POST /process-application/`: Handles manual document generation
+  - Request body: `{ job_description: string, document_type: string, additional_services: {...} }`
+  - Response: `{ documents: {...}, answers: [...] }`
+
 ## Security
 
 - The extension only runs on job application pages
 - All API requests require authentication
 - Form data is processed securely on the backend
 - No sensitive data is stored in the extension
+- Generated documents are named with user identification for security
 
 ## Contributing
 
