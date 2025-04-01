@@ -1097,7 +1097,7 @@ def process_job_application(request):
             education=list(request.user.userprofile.education.values()),
             skills=list(request.user.userprofile.skills.values()),
             projects=list(request.user.userprofile.projects.values()),
-            github_data={"repositories": [], "contributions": 0, "languages": []},
+            github_data=request.user.userprofile.github_data,
             achievements=[],  # We'll add this field to the model later
             interests=[],  # We'll add this field to the model later
         )
@@ -1363,7 +1363,7 @@ def generate_job_documents(request, job_id):
             education=list(request.user.userprofile.education.values()),
             skills=list(request.user.userprofile.skills.values()),
             projects=list(request.user.userprofile.projects.values()),
-            github_data={},  # We'll implement GitHub data fetching later
+            github_data=request.user.userprofile.github_data,  # We'll implement GitHub data fetching later
             achievements=[],  # We'll add this field to the model later
             interests=[],  # We'll add this field to the model later
         )

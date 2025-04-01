@@ -32,7 +32,7 @@ def generate_documents_async(job_id: int, user_id: int):
             education=list(user_profile.education.values()),
             skills=list(user_profile.skills.values()),
             projects=list(user_profile.projects.values()),
-            github_data={},  # We'll implement GitHub data fetching later
+            github_data=user_profile.github_data,  # We'll implement GitHub data fetching later
             achievements=[],  # We'll add this field to the model later
             interests=[],  # We'll add this field to the model later
         )

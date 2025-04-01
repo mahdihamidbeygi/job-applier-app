@@ -309,11 +309,16 @@ class CoverLetterComposition:
             BytesIO: The generated cover letter PDF
         """
         try:
+            # Ensure required_skills is a list and contains strings
+            if not isinstance(required_skills, (list, tuple)):
+                required_skills = []
+            required_skills = [str(skill) for skill in required_skills if skill]
+
             # Update job description for better tailoring
             self.job_description = f"""
             Position: {job_title}
             Company: {company}
-            Required Skills: {', '.join(required_skills)}
+            Required Skills: {', '.join(required_skills) if required_skills else 'Not specified'}
             
             Job Description:
             {job_description}

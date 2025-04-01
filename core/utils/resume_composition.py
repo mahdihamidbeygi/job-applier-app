@@ -538,7 +538,7 @@ class ResumeComposition:
             {job_description}
             
             Job required Skills:
-            {', '.join(required_skills)}
+            {', '.join(required_skills) if required_skills and isinstance(required_skills, (list, tuple)) else 'Not specified'}
 
 
             Skills to analyze:
@@ -791,6 +791,11 @@ class ResumeComposition:
             BytesIO: The generated resume PDF
         """
         try:
+            # Ensure required_skills is a list and contains strings
+            if not isinstance(required_skills, list):
+                required_skills = []
+            required_skills = [str(skill) for skill in required_skills if skill]
+
             # Clear any existing elements
             self.elements = []
 
