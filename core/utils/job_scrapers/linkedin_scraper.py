@@ -1,21 +1,22 @@
+import asyncio
+import json
+import time
+import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, Dict, List
+
+import aiohttp
 import requests
 from bs4 import BeautifulSoup
-from typing import List, Dict, Any
-import urllib.parse
-from core.utils.local_llms import OllamaClient
-import json
-import asyncio
-import aiohttp
-from concurrent.futures import ThreadPoolExecutor
 from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-import time
 from selenium.common.exceptions import TimeoutException
-from bs4 import BeautifulSoup
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
+from core.utils.local_llms import OllamaClient
 
 
 class LinkedInJobScraper:
@@ -155,7 +156,7 @@ class LinkedInJobScraper:
             encoded_role = urllib.parse.quote(role)
             encoded_location = urllib.parse.quote(location)
             search_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_role}&location={encoded_location}&f_TPR=r86400&f_JT=F%2CP%2CC%2CI&f_WT=2&position=1&pageNum=0"
-
+            print(f"Searching for jobs at {search_url}")
             self.driver.get(search_url)
             time.sleep(3)  # Wait for initial load
 
@@ -168,7 +169,7 @@ class LinkedInJobScraper:
                 for link in job_links:
                     if link in urls_done:
                         continue
-                    print(f"Scraping job details for {link}...")
+                    # print(f"Scraping job details for {link}...")
                     job_details = self._extract_job_details(link)
                     jobs.append(job_details)
                     urls_done.append(link)
