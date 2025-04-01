@@ -1,10 +1,19 @@
 from django import forms
-from django.core.validators import URLValidator, RegexValidator
+from django.core.validators import RegexValidator, URLValidator
 from django.utils import timezone
+
 from .models import (
-    UserProfile, WorkExperience, Project, Education,
-    Certification, Publication, Skill
+    Certification,
+    Education,
+    JobListing,
+    JobPlatformPreference,
+    Project,
+    Publication,
+    Skill,
+    UserProfile,
+    WorkExperience,
 )
+
 
 class UserProfileForm(forms.ModelForm):
     class Meta:
@@ -247,4 +256,17 @@ class PublicationForm(forms.ModelForm):
 class SkillForm(forms.ModelForm):
     class Meta:
         model = Skill
-        fields = ['name', 'category', 'proficiency'] 
+        fields = ['name', 'category', 'proficiency']
+
+class JobPlatformPreferenceForm(forms.ModelForm):
+    """Form for users to select their preferred job platforms"""
+    preferred_platforms = forms.MultipleChoiceField(
+        choices=JobListing.JOB_SOURCES,
+        widget=forms.CheckboxSelectMultiple,
+        required=True,
+        help_text="Select the job platforms you want to search on"
+    )
+
+    class Meta:
+        model = JobPlatformPreference
+        fields = ['preferred_platforms'] 

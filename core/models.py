@@ -1,9 +1,10 @@
-from django.db import models
+from datetime import date
+
+from dateutil.relativedelta import relativedelta
 from django.contrib.auth.models import User
+from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from datetime import date
-from dateutil.relativedelta import relativedelta
 
 # Create your models here.
 
@@ -243,6 +244,27 @@ class JobListing(models.Model):
     def has_tailored_documents(self):
         """Check if both tailored documents exist"""
         return bool(self.tailored_resume and self.tailored_cover_letter)
+
+class JobPlatformPreference(models.Model):
+    """Model to store user preferences for job platforms"""
+    user_profile = models.OneToOneField(UserProfile, on_delete=models.CASCADE, related_name='job_platform_preferences')
+    preferred_platforms = models.JSONField(
+        default=list,
+        help_text="List of preferred job platforms from JOB_SOURCES"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user_profile.user.username}'s job platform preferences"
+
+    def get_preferred_platforms_display(self):
+        """Get human-readable list of preferred platforms"""
+        return [dict(JobListing.JOB_SOURCES)[platform] for platform in self.preferred_platforms]
+
+    class Meta:
+        verbose_name = "Job Platform Preference"
+        verbose_name_plural = "Job Platform Preferences"
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):
