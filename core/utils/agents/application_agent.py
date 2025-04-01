@@ -1,4 +1,5 @@
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
 from core.utils.agents.base_agent import BaseAgent
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.rag.job_knowledge import JobKnowledgeBase
@@ -106,20 +107,24 @@ class ApplicationAgent(BaseAgent):
         Candidate Background:
         {self.personal_agent.get_background_summary()}
         
+        GitHub Profile:
+        {self.personal_agent._format_github_data(self.personal_agent.user_profile.github_data if hasattr(self.personal_agent, 'user_profile') else {})}
+        
         Generate a professional cover letter that:
         1. Opens with a strong hook
-        2. Highlights relevant experience
+        2. Highlights relevant experience and GitHub contributions
         3. Demonstrates understanding of the role
         4. Shows enthusiasm for the company
         5. Closes with a call to action
         6. Reflects company culture and values
+        7. References specific GitHub projects or contributions when relevant
         
         Format Requirements:
         1. Start with "Dear Hiring Manager," on its own line
         2. Add a blank line after the salutation
         3. Write exactly 3 paragraphs:
            - First paragraph: Introduction and hook
-           - Second paragraph: Relevant experience and skills
+           - Second paragraph: Relevant experience, GitHub contributions, and skills
            - Third paragraph: Closing and call to action
         4. End with "Sincerely," followed by a blank line and the candidate's name
         5. Each paragraph must be unique - do not repeat any sentences or content

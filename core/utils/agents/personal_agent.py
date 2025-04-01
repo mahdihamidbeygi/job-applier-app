@@ -1,3 +1,4 @@
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -175,9 +176,8 @@ class PersonalAgent(BaseAgent):
                     c for c in job_listing.company if c.isalnum() or c in (" ", "_")
                 ).strip()
 
-                resume_filename = (
-                    f"{safe_name}_resume_{safe_title}_{safe_company}_{job_listing.id}.pdf"
-                )
+                # Create a shorter filename using a hash of the components
+                resume_filename = f"{safe_name}_{safe_title[:10]}_{safe_company[:10]}_resume.pdf"
                 job_listing.tailored_resume.save(resume_filename, tailored_resume)
 
             # Generate tailored cover letter
@@ -193,8 +193,18 @@ class PersonalAgent(BaseAgent):
             # Save tailored cover letter
             if tailored_cover_letter:
                 # Create a safe filename
+                safe_name = "".join(
+                    c for c in user_profile.name if c.isalnum() or c in (" ", "_")
+                ).strip()
+                safe_title = "".join(
+                    c for c in job_listing.title if c.isalnum() or c in (" ", "_")
+                ).strip()
+                safe_company = "".join(
+                    c for c in job_listing.company if c.isalnum() or c in (" ", "_")
+                ).strip()
+                # Create a safe filename
                 cover_letter_filename = (
-                    f"{safe_name}_cover_letter_{safe_title}_{safe_company}_{job_listing.id}.pdf"
+                    f"{safe_name}_{safe_title[:10]}_{safe_company[:10]}_cover_letter.pdf"
                 )
                 job_listing.tailored_cover_letter.save(cover_letter_filename, tailored_cover_letter)
 

@@ -1,13 +1,15 @@
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
-from io import BytesIO
-from typing import List, Dict, Any
-from core.models import UserProfile
-from core.utils.local_llms import GrokClient, OllamaClient
 import json
 import logging
+from io import BytesIO
+from typing import Any, Dict, List
+
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.units import inch
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+
+from core.models import UserProfile
+from core.utils.local_llms import GrokClient, OllamaClient
 
 logger = logging.getLogger(__name__)
 
@@ -242,6 +244,9 @@ class CoverLetterComposition:
                 - Current Position: {user_profile.current_position or 'Not specified'}
                 - Years of Experience: {user_profile.years_of_experience or 'Not specified'}
 
+                GitHub Profile:
+                {json.dumps(user_profile.github_data, indent=2) if user_profile.github_data else 'Not available'}
+
                 Work Experience:
                 {json.dumps(work_experiences, indent=2)}
 
@@ -254,13 +259,14 @@ class CoverLetterComposition:
                 Please provide the content in JSON format with three sections:
                 1. opening : A compelling opening paragraph that introduces the candidate and expresses interest in the position
                 2. main_content : one-paragraph main body of the letter that:
-                - Highlights relevant work experience and projects that align with the job requirements
+                - Highlights relevant work experience, GitHub contributions, and projects that align with the job requirements
                 - Emphasizes specific skills and achievements that match the position
                 - Demonstrates understanding of the company and role
+                - References specific GitHub contributions or projects when relevant
                 3. closing : A strong closing paragraph that expresses enthusiasm for the opportunity
 
                 Make the content specific to the job and company, and ensure it's professional and engaging. 
-                Focus on matching the candidate's experience and skills with the job requirements.
+                Focus on matching the candidate's experience, GitHub contributions, and skills with the job requirements.
                 No Dear hiring manager, or any other salutation. No content field name in the JSON object."""
 
         # try:

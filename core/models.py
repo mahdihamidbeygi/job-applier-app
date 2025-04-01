@@ -42,6 +42,10 @@ class UserProfile(models.Model):
     resume = models.FileField(upload_to="resumes/", blank=True)
     parsed_resume_data = models.JSONField(default=dict, blank=True)
 
+    # GitHub Data
+    github_data = models.JSONField(default=dict, blank=True)
+    last_github_refresh = models.DateTimeField(null=True, blank=True)
+
     def __str__(self):
         return f"{self.user.username}'s profile"
 

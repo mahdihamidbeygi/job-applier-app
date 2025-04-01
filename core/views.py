@@ -100,7 +100,7 @@ def home(request):
 def profile(request):
     """User profile view"""
     if request.method == "POST":
-        form = UserProfileForm(request.POST, request.FILES, instance=request.user.userprofile)
+        form = UserProfileForm(request.POST, instance=request.user.userprofile)
         if form.is_valid():
             profile = form.save(commit=False)
 
@@ -124,10 +124,44 @@ def profile(request):
                     messages.error(request, f"Error uploading resume: {str(e)}")
 
             profile.save()
+            form.save()
             messages.success(request, "Profile updated successfully!")
             return redirect("core:profile")
     else:
         form = UserProfileForm(instance=request.user.userprofile)
+
+    # Get GitHub data if it exists and needs to be refreshed
+    github_data = None
+    try:
+        if request.user.userprofile.github_url:
+            # Check if we need to refresh GitHub data (older than 1 hour)
+            last_github_refresh = request.user.userprofile.last_github_refresh
+            should_refresh = (
+                not last_github_refresh
+                or (timezone.now() - last_github_refresh).total_seconds() > 3600
+            )
+
+            if should_refresh:
+                # Extract username from GitHub URL
+                github_url = request.user.userprofile.github_url
+                github_username = github_url.split("/")[-1]
+                if github_username == "github.com":
+                    github_username = github_url.split("/")[-2]
+
+                # Import GitHub profile
+                importer = GitHubProfileImporter(github_username)
+                github_data = json.loads(importer.import_profile(github_username))
+                
+                # Update last refresh time
+                request.user.userprofile.github_data = github_data
+                request.user.userprofile.last_github_refresh = timezone.now()
+                request.user.userprofile.save()
+            else:
+                # Use cached GitHub data
+                github_data = request.user.userprofile.github_data
+    except Exception as e:
+        logger.error(f"Error loading GitHub data: {str(e)}")
+        github_data = None
 
     context = {
         "form": form,
@@ -144,6 +178,7 @@ def profile(request):
         "certification_form": CertificationForm(),
         "publication_form": PublicationForm(),
         "skill_form": SkillForm(),
+        "github_data": github_data,
     }
     return render(request, "core/profile.html", context)
 
@@ -518,31 +553,36 @@ def import_github_profile(request):
         if not github_username:
             return JsonResponse({"error": "GitHub username is required"}, status=400)
 
-        importer = GitHubProfileImporter(github_username)
-        profile_data = json.loads(importer.import_profile())
+        # Extract username from URL if a full URL is provided
+        if "github.com" in github_username:
+            # Remove any trailing slashes and get the last part of the URL
+            github_username = github_username.rstrip("/").split("/")[-1]
 
-        # Save work experiences
-        for exp in profile_data.get("work_experiences", []):
-            WorkExperience.objects.create(
-                profile=request.user.userprofile,
-                company=exp["company"],
-                position=exp["position"],
-                start_date=exp["start_date"],
-                end_date=exp["end_date"],
-                description=exp["description"],
-                technologies=exp["technologies"],
-            )
+        with GitHubProfileImporter(github_username) as importer:
+            profile_data = json.loads(importer.import_profile(github_username))
 
-        # Save skills
-        for skill in profile_data.get("skills", []):
-            Skill.objects.create(
-                profile=request.user.userprofile,
-                name=skill["name"],
-                category=skill["category"],
-                proficiency=skill["proficiency"],
-            )
+            # Save work experiences
+            for exp in profile_data.get("work_experiences", []):
+                WorkExperience.objects.create(
+                    profile=request.user.userprofile,
+                    company=exp["company"],
+                    position=exp["position"],
+                    start_date=exp["start_date"],
+                    end_date=exp["end_date"],
+                    description=exp["description"],
+                    technologies=exp["technologies"],
+                )
 
-        return JsonResponse({"success": True, "message": "Profile imported successfully"})
+            # Save skills
+            for skill in profile_data.get("skills", []):
+                Skill.objects.create(
+                    profile=request.user.userprofile,
+                    name=skill["name"],
+                    category=skill["category"],
+                    proficiency=skill["proficiency"],
+                )
+
+            return JsonResponse({"success": True, "message": "Profile imported successfully"})
     except Exception as e:
         return JsonResponse({"success": False, "error": str(e)}, status=500)
 

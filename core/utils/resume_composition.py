@@ -1,16 +1,17 @@
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.enums import TA_CENTER, TA_RIGHT
-
+import json
 from datetime import datetime
+from io import BytesIO
+from typing import List
+
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+
 from core.utils.local_llms import OllamaClient
-import json
-from typing import List
-from io import BytesIO
 
 
 class ResumeComposition:
@@ -501,7 +502,7 @@ class ResumeComposition:
 
         self.elements.append(Spacer(1, 2))
 
-    def _create_skills_section(self):
+    def _create_skills_section(self, job_description=None, required_skills=None):
         """Create the skills section of the resume."""
         if not self.personal_agent.background.skills:
             return
@@ -521,16 +522,98 @@ class ResumeComposition:
             ):
                 skill_levels[name_lower] = (name, level)  # Store original name and level
 
-        # Sort skills by proficiency level (descending) and name
-        sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
+        if job_description:
+            # Use AI to analyze and score skills based on job description
+            prompt = f"""
+            Analyze these skills and score their relevance to the job description.
+            Return a JSON array of objects with 'skill' and 'score' keys.
+            Score should be between 0 and 1, where:
+            - 1.0 = Perfect match with job requirements
+            - 0.7-0.9 = Strongly relevant
+            - 0.4-0.6 = Moderately relevant
+            - 0.1-0.3 = Slightly relevant
+            - 0.0 = Not relevant
 
-        # Take top skills (around 10-15 most relevant) and use original case
-        top_skills = [skill[0] for skill in sorted_skills[:15]]
+            Job Description:
+            {job_description}
+            
+            Job required Skills:
+            {', '.join(required_skills)}
+
+
+            Skills to analyze:
+            {', '.join(skill_levels.keys())}
+
+            Return ONLY a JSON array in this format:
+            [
+                {{"skill": "skill_name", "score": 0.8}},
+                {{"skill": "skill_name", "score": 0.5}},
+                ...
+            ]
+            Rules:
+            - Only return skills that are relevant to the job description
+            - Only return skills that are in the required skills list
+            - Only return skills that are in the skill_levels dictionary
+            - Only return skills that are in the job_description
+            - Only return a JSON array, nothing else or extra.
+            """
+
+            try:
+                # Get AI analysis of skills
+                response = self.ollama_client.generate(prompt, resp_in_json=True)
+                
+                # Clean and parse the response
+                try:
+                    # Remove any extra text or whitespace
+                    response = response.strip()
+                    if not response.startswith("["):
+                        response = response[response.find("["):]
+                    if not response.endswith("]"):
+                        response = response[:response.rfind("]") + 1]
+                    
+                    # Parse the JSON
+                    skill_scores = json.loads(response)
+                    
+                    # Validate and clean the scores
+                    if not isinstance(skill_scores, list):
+                        raise ValueError("Response is not a list")
+                    
+                    # Combine AI scores with proficiency levels
+                    scored_skills = []
+                    for score_data in skill_scores:
+                        if not isinstance(score_data, dict) or "skill" not in score_data or "score" not in score_data:
+                            continue
+                            
+                        skill_name = score_data["skill"].lower()
+                        score = float(score_data["score"])
+                        
+                        if skill_name in skill_levels:
+                            original_name, proficiency = skill_levels[skill_name]
+                            # Combine AI relevance score (70%) with proficiency level (30%)
+                            combined_score = (score * 0.7) + (proficiency / 100 * 0.3)
+                            scored_skills.append((combined_score, original_name))
+
+                    # Sort by combined score
+                    scored_skills.sort(key=lambda x: (-x[0], x[1].lower()))
+                    top_skills = [skill[1] for skill in scored_skills[:15]]
+                except (json.JSONDecodeError, ValueError) as e:
+                    print(f"Error parsing AI response: {str(e)}")
+                    # Fallback to proficiency-based sorting if parsing fails
+                    sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
+                    top_skills = [skill[0] for skill in sorted_skills[:15]]
+            except Exception as e:
+                # Fallback to proficiency-based sorting if AI analysis fails
+                print(f"Error in AI skill analysis: {str(e)}")
+                sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
+                top_skills = [skill[0] for skill in sorted_skills[:15]]
+        else:
+            # If no job description, sort by proficiency level
+            sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
+            top_skills = [skill[0] for skill in sorted_skills[:15]]
 
         # Create a single line of skills
         skills_text = " | ".join(top_skills)
         self.elements.append(Paragraph(skills_text, self.styles["ResumeBullet"]))
-
         self.elements.append(Spacer(1, 2))
 
     def tailor_to_job(self, job_description):
@@ -590,6 +673,9 @@ class ResumeComposition:
         Candidate Background Summary:
         {self.personal_agent.get_background_summary()}   
              
+        GitHub Profile:
+        {self.personal_agent._format_github_data(self.user_data.get('github_data', {}))}
+        
         Projects:
         {[proj for proj in self.personal_agent.background.projects]}
         
@@ -598,12 +684,12 @@ class ResumeComposition:
 
         Instructions:
         1. Analyze the job description and identify key requirements and skills
-        2. Review the candidate's background and identify relevant experience
+        2. Review the candidate's background, GitHub profile, and identify relevant experience
         3. Create a compelling 2-3 sentence summary that:
            - Maintains the candidate's authentic voice and style
-           - Highlights relevant experience and skills from their background
+           - Highlights relevant experience and skills from their background and GitHub profile
            - Emphasizes alignment with the job requirements
-           - Uses specific examples from their work history
+           - Uses specific examples from their work history and GitHub contributions
            - Incorporates relevant technical skills naturally
         4. Keep the tone professional but engaging
         5. Focus on achievements and impact rather than just responsibilities
@@ -663,7 +749,7 @@ class ResumeComposition:
                 Paragraph(self.user_data["professional_summary"], self.styles["ResumeSummary"])
             )
         # Add skills section
-        self._create_skills_section()
+        self._create_skills_section(job_description)
         # Add experience section
         self._create_experience_section()
         # Add relevant projects section
@@ -727,7 +813,7 @@ class ResumeComposition:
                 )
 
             # Add skills section
-            self._create_skills_section()
+            self._create_skills_section(job_description, required_skills)
 
             # Add experience section
             self._create_experience_section()

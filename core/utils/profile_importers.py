@@ -1,22 +1,55 @@
+import ast
+import json
+import logging
 import os
 import tempfile
-import requests
-import ast
-from pathlib import Path
-from typing import Dict, List
-from django.conf import settings
-import git
-from bs4 import BeautifulSoup
-import openai
 from datetime import datetime
+from pathlib import Path
+from typing import Dict, List, Optional
+
+import git
+import openai
+import requests
+from bs4 import BeautifulSoup
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
+from django.utils import timezone
+from pdfminer.high_level import extract_text
+from pdfminer.layout import LAParams
+
 from .local_llms import OllamaClient
 
+logger = logging.getLogger(__name__)
 
 class GitHubProfileImporter:
     def __init__(self, github_username: str):
         self.github_username = github_username
         self.client = OllamaClient()
         self.temp_dir = tempfile.mkdtemp()
+        self.repos = []  # Keep track of Git repo objects
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Cleanup temporary files and Git repositories when the importer is destroyed."""
+        try:
+            # Close all Git repositories first
+            for repo in self.repos:
+                try:
+                    repo.close()
+                except Exception:
+                    pass
+
+            # Then try to remove the temporary directory
+            import shutil
+            try:
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+            except Exception:
+                pass
+        except Exception:
+            pass
 
     def analyze_python_code(self, code: str) -> Dict:
         """Analyze Python code and extract functions, classes, and imports."""
@@ -59,7 +92,8 @@ class GitHubProfileImporter:
 
                 repo_path = os.path.join(self.temp_dir, name)
                 try:
-                    git.Repo.clone_from(clone_url, repo_path)
+                    git_repo = git.Repo.clone_from(clone_url, repo_path)
+                    self.repos.append(git_repo)  # Track the repo for cleanup
                 except Exception as e:
                     print(f"Error cloning {name}: {e}")
                     continue
@@ -100,7 +134,8 @@ class GitHubProfileImporter:
 
             return repo_analyses
         except Exception as e:
-            raise Exception(f"Error fetching repository information: {str(e)}")
+            print(f"Error fetching repository info: {e}")
+            return []
 
     def analyze_repository_structure(self, repo_path: str) -> Dict:
         """Analyze repository structure and organization."""
@@ -183,8 +218,8 @@ class GitHubProfileImporter:
 
             history = {
                 "total_commits": len(commits),
-                "first_commit": commits[-1].committed_datetime if commits else None,
-                "last_commit": commits[0].committed_datetime if commits else None,
+                "first_commit": commits[-1].committed_datetime.isoformat() if commits else None,
+                "last_commit": commits[0].committed_datetime.isoformat() if commits else None,
                 "commit_frequency": {},
                 "contributors": set(),
             }
@@ -204,90 +239,256 @@ class GitHubProfileImporter:
             print(f"Error analyzing commit history: {e}")
             return {}
 
-    def extract_work_experience(self, repo_analyses: List[Dict]) -> List[Dict]:
-        """Use Ollama to extract work experience from repository analyses."""
-        prompt = f"""Based on the following GitHub repository analyses, identify potential work experiences and skills:
+    def extract_skills(self, repo_analyses: List[Dict]) -> List[Dict]:
+        """Extract skills from repository analyses."""
+        try:
+            # Prepare a simplified version of the repository data
+            simplified_repos = []
+            for repo in repo_analyses:
+                simplified_repo = {
+                    "name": repo.get("name", ""),
+                    "description": repo.get("description", ""),
+                    "languages": repo.get("languages", []),
+                    "dependencies": repo.get("dependencies", {}),
+                    "code_analysis": repo.get("code_analysis", [])
+                }
+                simplified_repos.append(simplified_repo)
 
-Repository Analyses:
-{repo_analyses}
+            # Sort repositories by stars and update date to prioritize the most relevant ones
+            simplified_repos.sort(key=lambda x: (x.get("stars", 0), x.get("updated_at", "")), reverse=True)
+            
+            # Take only the top 5 most relevant repositories to reduce input size
+            top_repos = simplified_repos[:5]
 
-Please extract:
-1. Work experiences (company names, roles, technologies used)
-2. Skills (programming languages, frameworks, tools)
-3. Project descriptions and achievements
-4. Technical expertise and specialization areas
-5. Development practices and methodologies
+            prompt = f"""Based on these GitHub repositories, extract technical skills:
 
-Format the response as a JSON object with the following structure:
+Repository Data:
+{json.dumps(top_repos, indent=2)}
+
+Format as JSON:
+{{
+    "skills": [
+        {{
+            "name": "string",
+            "category": "Programming Language/Framework/Tool",
+            "proficiency": 3
+        }}
+    ]
+}}"""
+
+            # Generate response with default parameters since Ollama client doesn't support max_tokens/timeout
+            response = self.client.generate(prompt)
+            try:
+                # Validate JSON response
+                parsed_data = json.loads(response)
+                return parsed_data.get("skills", [])
+            except json.JSONDecodeError:
+                # Return empty skills list if parsing fails
+                return []
+        except Exception as e:
+            logger.error(f"Error extracting skills: {str(e)}")
+            return []
+
+    def extract_work_experience(self, repo_analyses: List[Dict]) -> str:
+        """Extract work experience from repository analyses."""
+        # Prepare a simplified version of the repository data
+        simplified_repos = []
+        for repo in repo_analyses:
+            simplified_repo = {
+                "name": repo.get("name", ""),
+                "description": repo.get("description", ""),
+                "languages": repo.get("languages", []),
+                "topics": repo.get("topics", []),
+                "created_at": repo.get("created_at", ""),
+                "updated_at": repo.get("updated_at", ""),
+                "stars": repo.get("stargazers_count", 0),
+                "forks": repo.get("forks_count", 0)
+            }
+            simplified_repos.append(simplified_repo)
+
+        # Sort repositories by stars and update date to prioritize the most relevant ones
+        simplified_repos.sort(key=lambda x: (x["stars"], x["updated_at"]), reverse=True)
+        
+        # Take only the top 5 most relevant repositories to reduce input size
+        top_repos = simplified_repos[:5]
+
+        prompt = f"""Based on these GitHub repositories, extract professional experience:
+
+Repository Data:
+{json.dumps(top_repos, indent=2)}
+
+Format as JSON:
 {{
     "work_experiences": [
         {{
-            "company": "string",
-            "position": "string",
+            "company": "Personal/Open Source",
+            "position": "Software Developer",
             "start_date": "YYYY-MM",
             "end_date": "YYYY-MM",
             "description": "string",
-            "technologies": ["string"],
-            "achievements": ["string"]
+            "technologies": ["string"]
         }}
     ],
     "skills": [
         {{
             "name": "string",
-            "category": "string",
-            "proficiency": "string",
-            "years_of_experience": "string"
-        }}
-    ],
-    "projects": [
-        {{
-            "title": "string",
-            "description": "string",
-            "technologies": ["string"],
-            "achievements": ["string"],
-            "github_url": "string"
-        }}
-    ],
-    "technical_expertise": [
-        {{
-            "area": "string",
-            "description": "string",
-            "technologies": ["string"]
-        }}
-    ],
-    "development_practices": [
-        {{
-            "practice": "string",
-            "description": "string",
-            "tools": ["string"]
+            "category": "Programming Language/Framework/Tool",
+            "proficiency": 3
         }}
     ]
-}}
-"""
+}}"""
 
         try:
+            # Generate response with default parameters since Ollama client doesn't support max_tokens/timeout
             response = self.client.generate(prompt)
-            return response
+            try:
+                # Validate JSON response
+                parsed_data = json.loads(response)
+                
+                # Add repository stats
+                parsed_data["total_commits"] = sum(repo.get("commits", 0) for repo in repo_analyses)
+                parsed_data["total_stars"] = sum(repo.get("stargazers_count", 0) for repo in repo_analyses)
+                
+                # Aggregate languages across all repositories
+                all_languages = {}
+                for repo in repo_analyses:
+                    for lang, bytes_count in repo.get("languages", {}).items():
+                        all_languages[lang] = all_languages.get(lang, 0) + bytes_count
+                
+                # Calculate language percentages
+                total_bytes = sum(all_languages.values()) if all_languages else 1  # Avoid division by zero
+                parsed_data["languages"] = {
+                    lang: {
+                        "bytes": bytes_count,
+                        "percentage": round((bytes_count / total_bytes) * 100, 2)
+                    }
+                    for lang, bytes_count in all_languages.items()
+                }
+                
+                return json.dumps(parsed_data)
+            except json.JSONDecodeError:
+                # Return a minimal valid response if parsing fails
+                return json.dumps({
+                    "work_experiences": [],
+                    "skills": [],
+                    "total_commits": sum(repo.get("commits", 0) for repo in repo_analyses),
+                    "total_stars": sum(repo.get("stargazers_count", 0) for repo in repo_analyses),
+                    "languages": {}
+                })
         except Exception as e:
             raise Exception(f"Failed to extract work experience: {str(e)}")
 
-    def cleanup(self):
-        """Clean up temporary files."""
+    def get_profile_info(self, username: str) -> Dict:
+        """Fetch user profile information from GitHub API."""
         try:
-            import shutil
-
-            shutil.rmtree(self.temp_dir)
+            url = f"https://api.github.com/users/{username}"
+            headers = {"Accept": "application/vnd.github.v3+json"}
+            
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            
+            return response.json()
         except Exception as e:
-            print(f"Error cleaning up temporary files: {e}")
+            logger.error(f"Error fetching GitHub profile info: {str(e)}")
+            return {}
 
-    def import_profile(self) -> Dict:
-        """Main method to import profile from GitHub."""
+    def get_contribution_data(self, username: str) -> Dict:
+        """Fetch contribution data from GitHub API."""
         try:
-            repo_analyses = self.get_repository_info()
-            profile_data = self.extract_work_experience(repo_analyses)
-            return profile_data
-        finally:
-            self.cleanup()
+            # Get repository languages and stats
+            repos_url = f"https://api.github.com/users/{username}/repos"
+            headers = {"Accept": "application/vnd.github.v3+json"}
+            
+            repos_response = requests.get(repos_url, headers=headers)
+            repos_response.raise_for_status()
+            repos = repos_response.json()
+            
+            # Aggregate languages across repositories
+            languages = {}
+            total_stars = 0
+            total_commits = 0
+            
+            for repo in repos:
+                # Add stars
+                total_stars += repo.get("stargazers_count", 0)
+                
+                # Get language data
+                lang_url = repo.get("languages_url")
+                if lang_url:
+                    try:
+                        lang_response = requests.get(lang_url, headers=headers)
+                        if lang_response.status_code == 200:
+                            repo_langs = lang_response.json()
+                            for lang, bytes_count in repo_langs.items():
+                                languages[lang] = languages.get(lang, 0) + bytes_count
+                    except Exception as e:
+                        logger.warning(f"Error fetching language data for {repo.get('name')}: {str(e)}")
+                        continue
+            
+            # Get contribution graph data (this requires authentication)
+            # For now, we'll just return what we have
+            return {
+                "total_stars": total_stars,
+                "total_commits": total_commits,  # This would require additional API calls to get accurate commit counts
+                "languages": languages
+            }
+        except Exception as e:
+            logger.error(f"Error fetching GitHub contribution data: {str(e)}")
+            return {
+                "total_stars": 0,
+                "total_commits": 0,
+                "languages": {}
+            }
+
+    def import_profile(self, username: str) -> str:
+        """Import profile data from GitHub"""
+        try:
+            # Get user profile info
+            profile_data = self.get_profile_info(username)
+            if not profile_data:
+                return json.dumps({"error": "Failed to fetch GitHub profile data"})
+
+            # Get repository info
+            repo_data = self.get_repository_info()
+            if not repo_data:
+                return json.dumps({"error": "Failed to fetch repository data"})
+
+            # Get contribution data
+            contribution_data = self.get_contribution_data(username)
+            if not contribution_data:
+                return json.dumps({"error": "Failed to fetch contribution data"})
+
+            # Extract skills from repositories
+            skills = self.extract_skills(repo_data)
+
+            # Combine all data
+            combined_data = {
+                "username": username,
+                "profile_url": f"https://github.com/{username}",
+                "avatar_url": profile_data.get("avatar_url"),
+                "bio": profile_data.get("bio"),
+                "location": profile_data.get("location"),
+                "company": profile_data.get("company"),
+                "blog": profile_data.get("blog"),
+                "twitter_username": profile_data.get("twitter_username"),
+                "public_repos": profile_data.get("public_repos", 0),
+                "public_gists": profile_data.get("public_gists", 0),
+                "followers": profile_data.get("followers", 0),
+                "following": profile_data.get("following", 0),
+                "created_at": profile_data.get("created_at"),
+                "updated_at": profile_data.get("updated_at"),
+                "total_commits": contribution_data.get("total_commits", 0),
+                "total_stars": contribution_data.get("total_stars", 0),
+                "languages": contribution_data.get("languages", {}),
+                "skills": skills,
+                "repositories": repo_data
+            }
+
+            return json.dumps(combined_data)
+
+        except Exception as e:
+            logger.error(f"Error in import_profile: {str(e)}")
+            return json.dumps({"error": str(e)})
 
 
 class ResumeImporter:
@@ -656,8 +857,8 @@ class LinkedInImporter:
     def scrape_profile(self) -> Dict:
         """Scrape LinkedIn profile data."""
         try:
-            import time
             import random
+            import time
 
             # Add random delay to avoid rate limiting
             time.sleep(random.uniform(2, 5))

@@ -572,6 +572,344 @@
       gap: 0.35rem;
     }
   }
+
+  /* GitHub Section Styles */
+  .github-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2rem;
+  }
+
+  .github-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .github-stat-card {
+    background: var(--darker-bg);
+    padding: 1.5rem;
+    border-radius: 10px;
+    text-align: center;
+    transition: transform 0.3s ease;
+  }
+
+  .github-stat-card:hover {
+    transform: translateY(-5px);
+  }
+
+  .github-stat-card h3 {
+    color: var(--text-secondary);
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .github-stat-card p {
+    color: var(--primary-color);
+    font-size: 2rem;
+    font-weight: 600;
+  }
+
+  .github-repos-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  .github-repo-card {
+    background: var(--darker-bg);
+    border-radius: 10px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    transition: transform 0.3s ease;
+  }
+
+  .github-repo-card:hover {
+    transform: translateY(-5px);
+  }
+
+  .repo-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .repo-header h4 {
+    color: var(--primary-color);
+    font-size: 1.2rem;
+    margin: 0;
+  }
+
+  .repo-stats {
+    display: flex;
+    gap: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+  }
+
+  .repo-description {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .repo-meta {
+    display: flex;
+    gap: 1rem;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .repo-tech-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .tech-tag {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    padding: 0.2rem 0.5rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+  }
+
+  .repo-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: auto;
+  }
+
+  .repo-link:hover {
+    text-decoration: underline;
+  }
+
+  .github-languages-section {
+    margin-top: 2rem;
+  }
+
+  .language-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .language-bar {
+    background: var(--darker-bg);
+    padding: 1rem;
+    border-radius: 10px;
+  }
+
+  .language-info {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+  }
+
+  .language-name {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  .language-percentage {
+    color: var(--text-secondary);
+  }
+
+  .progress-bar {
+    background: var(--card-bg);
+    height: 6px;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .progress {
+    background: var(--primary-color);
+    height: 100%;
+    transition: width 0.3s ease;
+  }
+
+  .github-empty-state {
+    text-align: center;
+    padding: 3rem;
+    background: var(--darker-bg);
+    border-radius: 10px;
+    margin-top: 1rem;
+  }
+
+  .github-empty-state i {
+    font-size: 4rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+  }
+
+  .github-empty-state h3 {
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+  }
+
+  .github-empty-state p {
+    color: var(--text-secondary);
+    margin-bottom: 1.5rem;
+  }
+
+  .github-import-btn {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .github-import-btn:hover {
+    background: var(--primary-color-dark);
+    transform: translateY(-2px);
+  }
+
+  @media (max-width: 768px) {
+    .github-stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+    }
+
+    .github-repos-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .github-skills-section {
+    margin-top: 2rem;
+  }
+
+  .github-skills-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+  }
+
+  .skill-tag {
+    background: var(--darker-bg);
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .skill-name {
+    color: var(--primary-color);
+    font-weight: 500;
+  }
+
+  .skill-category {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+  }
+
+  .github-profile-header {
+    background: var(--darker-bg);
+    border-radius: 10px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .github-profile-info {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+  }
+
+  .github-avatar {
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    object-fit: cover;
+  }
+
+  .github-profile-details {
+    flex: 1;
+  }
+
+  .github-profile-details h3 {
+    color: var(--primary-color);
+    font-size: 1.8rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .github-bio {
+    color: var(--text-secondary);
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    line-height: 1.5;
+  }
+
+  .github-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .github-meta span {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .github-meta a {
+    color: var(--primary-color);
+    text-decoration: none;
+  }
+
+  .github-meta a:hover {
+    text-decoration: underline;
+  }
+
+  .github-profile-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--primary-color);
+    color: var(--text-primary);
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+  }
+
+  .github-profile-link:hover {
+    background: var(--primary-color-dark);
+    transform: translateY(-2px);
+  }
+
+  @media (max-width: 768px) {
+    .github-profile-info {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .github-meta {
+      justify-content: center;
+    }
+  }
 </style>
 
 <div class="profile-container">
@@ -612,7 +950,7 @@
           <input
             type="text"
             id="github-username"
-            placeholder="Enter your GitHub username"
+            placeholder="Enter your GitHub profile URL"
           />
           <button onclick="importFromGitHub()">Import</button>
         </div>
@@ -713,6 +1051,9 @@
     </button>
     <button class="profile-nav-item" onclick="showSection('skills')">
       Skills
+    </button>
+    <button class="profile-nav-item" onclick="showSection('github')">
+      <i class="fab fa-github"></i> GitHub
     </button>
   </div>
 
@@ -1070,6 +1411,219 @@
         {% endfor %}
       </div>
     </section>
+
+    <!-- GitHub Section -->
+    <section id="github" class="section">
+      <div class="section-header">
+        <h2><i class="fab fa-github"></i> GitHub Profile</h2>
+      </div>
+
+      {% if github_data %}
+      <div class="github-content">
+        <!-- GitHub Profile Header -->
+        <div class="github-profile-header">
+          <div class="github-profile-info">
+            {% if github_data.avatar_url %}
+            <img
+              src="{{ github_data.avatar_url }}"
+              alt="GitHub Avatar"
+              class="github-avatar"
+            />
+            {% endif %}
+            <div class="github-profile-details">
+              <h3>{{ github_data.username }}</h3>
+              {% if github_data.bio %}
+              <p class="github-bio">{{ github_data.bio }}</p>
+              {% endif %}
+              <div class="github-meta">
+                {% if github_data.location %}
+                <span
+                  ><i class="fas fa-map-marker-alt"></i> {{ github_data.location
+                  }}</span
+                >
+                {% endif %} {% if github_data.company %}
+                <span
+                  ><i class="fas fa-building"></i> {{ github_data.company
+                  }}</span
+                >
+                {% endif %} {% if github_data.blog %}
+                <span
+                  ><i class="fas fa-globe"></i>
+                  <a href="{{ github_data.blog }}" target="_blank"
+                    >Website</a
+                  ></span
+                >
+                {% endif %} {% if github_data.twitter_username %}
+                <span
+                  ><i class="fab fa-twitter"></i>
+                  <a
+                    href="https://twitter.com/{{ github_data.twitter_username }}"
+                    target="_blank"
+                    >@{{ github_data.twitter_username }}</a
+                  ></span
+                >
+                {% endif %}
+              </div>
+              <a
+                href="{{ github_data.profile_url }}"
+                target="_blank"
+                class="github-profile-link"
+              >
+                <i class="fab fa-github"></i> View GitHub Profile
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- GitHub Stats -->
+        <div class="github-stats-grid">
+          <div class="github-stat-card">
+            <h3>Repositories</h3>
+            <p>{{ github_data.public_repos|default:"0" }}</p>
+          </div>
+          <div class="github-stat-card">
+            <h3>Gists</h3>
+            <p>{{ github_data.public_gists|default:"0" }}</p>
+          </div>
+          <div class="github-stat-card">
+            <h3>Followers</h3>
+            <p>{{ github_data.followers|default:"0" }}</p>
+          </div>
+          <div class="github-stat-card">
+            <h3>Following</h3>
+            <p>{{ github_data.following|default:"0" }}</p>
+          </div>
+          <div class="github-stat-card">
+            <h3>Total Commits</h3>
+            <p>{{ github_data.total_commits|default:"0" }}</p>
+          </div>
+          <div class="github-stat-card">
+            <h3>Total Stars</h3>
+            <p>{{ github_data.total_stars|default:"0" }}</p>
+          </div>
+        </div>
+
+        <!-- Repositories Section -->
+        {% if github_data.repositories %}
+        <div class="github-repos-section">
+          <h3>Top Repositories</h3>
+          <div class="github-repos-grid">
+            {% for repo in github_data.repositories %}
+            <div class="github-repo-card">
+              <div class="repo-header">
+                <h4>{{ repo.name }}</h4>
+                <div class="repo-stats">
+                  <span><i class="fas fa-star"></i> {{ repo.stars }}</span>
+                  <span
+                    ><i class="fas fa-code-branch"></i> {{ repo.forks }}</span
+                  >
+                </div>
+              </div>
+              <p class="repo-description">
+                {{ repo.description|default:"No description available" }}
+              </p>
+              <div class="repo-meta">
+                <span
+                  ><i class="fas fa-calendar"></i> Updated {{ repo.updated_at
+                  }}</span
+                >
+                {% if repo.language %}
+                <span><i class="fas fa-code"></i> {{ repo.language }}</span>
+                {% endif %}
+              </div>
+              <div class="repo-tech-stack">
+                {% for tech in repo.technologies %}
+                <span class="tech-tag">{{ tech }}</span>
+                {% endfor %}
+              </div>
+              <a href="{{ repo.html_url }}" target="_blank" class="repo-link">
+                <i class="fab fa-github"></i> View Repository
+              </a>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Work Experience from GitHub -->
+        {% if github_data.work_experiences %}
+        <div class="github-repos-section">
+          <h3>Work Experience</h3>
+          <div class="github-repos-grid">
+            {% for exp in github_data.work_experiences %}
+            <div class="github-repo-card">
+              <div class="repo-header">
+                <h4>{{ exp.position }} at {{ exp.company }}</h4>
+              </div>
+              <p class="repo-description">{{ exp.description }}</p>
+              <div class="repo-meta">
+                <span
+                  ><i class="fas fa-calendar"></i> {{ exp.start_date }} - {{
+                  exp.end_date|default:"Present" }}</span
+                >
+              </div>
+              <div class="repo-tech-stack">
+                {% for tech in exp.technologies %}
+                <span class="tech-tag">{{ tech }}</span>
+                {% endfor %}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Languages and Technologies -->
+        {% if github_data.languages %}
+        <div class="github-languages-section">
+          <h3>Languages & Technologies</h3>
+          <div class="language-stats">
+            {% for language, stats in github_data.languages.items %}
+            <div class="language-bar">
+              <div class="language-info">
+                <span class="language-name">{{ language }}</span>
+                <span class="language-percentage"
+                  >{{ stats.percentage|floatformat:1 }}%</span
+                >
+              </div>
+              <div class="progress-bar">
+                <div
+                  class="progress"
+                  style="width: {{ stats.percentage }}%"
+                ></div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Skills from GitHub -->
+        {% if github_data.skills %}
+        <div class="github-skills-section">
+          <h3>Skills</h3>
+          <div class="github-skills-grid">
+            {% for skill in github_data.skills %}
+            <div class="skill-tag">
+              <span class="skill-name">{{ skill.name }}</span>
+              <span class="skill-category">{{ skill.category }}</span>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div class="github-empty-state">
+        <i class="fab fa-github"></i>
+        <h3>No GitHub Data Available</h3>
+        <p>
+          Use the Import from GitHub option in the Import Profile Data section
+          to display your GitHub information here.
+        </p>
+      </div>
+      {% endif %}
+    </section>
   </div>
 </div>
 
@@ -1109,9 +1663,25 @@
   }
 
   async function importFromGitHub() {
-      const username = document.getElementById('github-username').value;
+      const githubUrl = document.getElementById('github-username').value;
+      if (!githubUrl) {
+          alert('Please enter your GitHub profile URL');
+          return;
+      }
+
+      // Extract username from GitHub URL
+      let username;
+      try {
+          const url = new URL(githubUrl);
+          const pathParts = url.pathname.split('/').filter(part => part);
+          username = pathParts[0]; // Get the first part of the path which should be the username
+      } catch (e) {
+          // If URL parsing fails, assume the input is a username
+          username = githubUrl;
+      }
+
       if (!username) {
-          alert('Please enter your GitHub username');
+          alert('Could not extract GitHub username from the URL');
           return;
       }
 
@@ -1128,7 +1698,6 @@
 
           const data = await response.json();
           if (data.success) {
-              alert('Profile imported successfully!');
               location.reload();
           } else {
               alert('Error: ' + data.error);
@@ -1502,8 +2071,13 @@
 
   // Function to update profile statistics
   function updateProfileStats() {
-      fetch('{% url "core:profile_stats" %}')
-          .then(response => response.json())
+      fetch('/profile/stats/')
+          .then(response => {
+              if (!response.ok) {
+                  throw new Error('Network response was not ok');
+              }
+              return response.json();
+          })
           .then(data => {
               document.getElementById('work-experience-count').textContent = data.work_experience;
               document.getElementById('projects-count').textContent = data.projects;
@@ -1511,7 +2085,10 @@
               document.getElementById('certifications-count').textContent = data.certifications;
               document.getElementById('years-of-experience').textContent = data.years_of_experience;
           })
-          .catch(error => console.error('Error fetching profile stats:', error));
+          .catch(error => {
+              console.error('Error fetching profile stats:', error);
+              showNotification('error', 'Failed to update profile statistics');
+          });
   }
 
   // Update stats when any form is submitted
