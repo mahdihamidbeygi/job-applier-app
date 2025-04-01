@@ -1,1718 +1,1563 @@
 {% extends 'core/base.html' %}
-{% load form_tags %}
-
-{% block title %}{{ user.get_full_name|default:user.username }}'s Profile{% endblock %}
-
-{% block content %}
+<!-- template -->
+{% load form_tags %} {% block content %}
 <style>
-    .profile-container {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 2rem;
-    }
-
-    .profile-header {
-        text-align: center;
-        padding: 3rem 2rem;
-        background: linear-gradient(135deg, var(--darker-bg) 0%, var(--card-bg) 100%);
-        border-radius: 15px;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .profile-header h1 {
-        font-size: 2.5rem;
-        margin-bottom: 1rem;
-        color: var(--primary-color);
-    }
-
-    .profile-header p {
-        color: var(--text-secondary);
-        font-size: 1.1rem;
-    }
-
-    .profile-stats {
-        background: var(--card-bg);
-        border-radius: 15px;
-        padding: 2rem;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .profile-stats h2 {
-        color: var(--primary-color);
-        margin-bottom: 1.5rem;
-        font-size: 1.8rem;
-    }
-
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 1rem;
-    }
-
-    .stat-item {
-        background: var(--darker-bg);
-        padding: 1rem;
-        border-radius: 8px;
-        text-align: center;
-        transition: transform 0.3s ease;
-    }
-
-    .stat-item:hover {
-        transform: translateY(-3px);
-    }
-
-    .stat-item h3 {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        margin-bottom: 0.3rem;
-    }
-
-    .stat-item p {
-        color: var(--primary-color);
-        font-size: 1.5rem;
-        font-weight: bold;
-    }
-
-    .profile-nav {
-        display: flex;
-        gap: 1rem;
-        margin-bottom: 2rem;
-        flex-wrap: wrap;
-        justify-content: center;
-    }
-
-    .nav-item {
-        background: var(--card-bg);
-        border: none;
-        padding: 0.8rem 1.5rem;
-        border-radius: 25px;
-        color: var(--text-secondary);
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-
-    .nav-item:hover {
-        background: var(--primary-color);
-        color: white;
-    }
-
-    .nav-item.active {
-        background: var(--primary-color);
-        color: white;
-    }
-
-    .profile-sections {
-        background: var(--card-bg);
-        border-radius: 15px;
-        padding: 2rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .section {
-        display: none;
-        animation: fadeIn 0.5s ease;
-    }
-
-    .section.active {
-        display: block;
-    }
-
-    .section h2 {
-        color: var(--primary-color);
-        margin-bottom: 1.5rem;
-        font-size: 1.8rem;
-    }
-
-    .record-actions {
-        position: absolute;
-        top: 1rem;
-        right: 1rem;
-        display: flex;
-        gap: 0.5rem;
-    }
-
-    .record-actions button {
-        background: none;
-        border: none;
-        color: var(--text-secondary);
-        cursor: pointer;
-        padding: 0.3rem;
-        transition: color 0.3s ease;
-    }
-
-    .record-actions button:hover {
-        color: var(--primary-color);
-    }
-
-    .record-actions .delete-btn:hover {
-        color: var(--danger-color);
-    }
-
-    .experience-item, .project-item, .education-item, .certification-item, .publication-item {
-        position: relative;
-        background: var(--darker-bg);
-        border-radius: 10px;
-        padding: 1.2rem;
-        margin-bottom: 1rem;
-        transition: transform 0.3s ease;
-    }
-
-    .experience-item:hover, .project-item:hover, .education-item:hover, .certification-item:hover, .publication-item:hover {
-        transform: translateX(5px);
-    }
-
-    .experience-item h3, .project-item h3, .education-item h3, .certification-item h3, .publication-item h3 {
-        margin-bottom: 0.3rem;
-        font-size: 1.1rem;
-    }
-
-    .date-range {
-        color: var(--accent-color);
-        font-size: 0.9rem;
-        margin: 0.3rem 0;
-    }
-
-    .location {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        margin-bottom: 0.3rem;
-    }
-
-    .description {
-        color: var(--text-primary);
-        margin: 0.3rem 0;
-    }
-
-    .technologies {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
-        margin: 0.8rem 0;
-    }
-
-    .technologies span {
-        background: var(--primary-color);
-        color: white;
-        padding: 0.3rem 0.8rem;
-        border-radius: 15px;
-        font-size: 0.8rem;
-    }
-
-    .project-links {
-        display: flex;
-        gap: 1rem;
-        margin-top: 0.8rem;
-    }
-
-    .project-links a {
-        color: var(--accent-color);
-        text-decoration: none;
-        transition: color 0.3s ease;
-    }
-
-    .project-links a:hover {
-        color: var(--primary-color);
-    }
-
-    .skills-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-        gap: 1rem;
-    }
-
-    .skill-item {
-        background: var(--darker-bg);
-        border-radius: 10px;
-        padding: 1.2rem;
-        text-align: center;
-        transition: transform 0.3s ease;
-    }
-
-    .skill-item:hover {
-        transform: translateY(-5px);
-    }
-
-    .skill-item h3 {
-        color: var(--primary-color);
-        margin-bottom: 0.3rem;
-        font-size: 1.1rem;
-    }
-
-    .skill-item p {
-        color: var(--text-secondary);
-        margin: 0.2rem 0;
-    }
-
-    .retry-button {
-        background: var(--primary-color);
-        color: white;
-        border: none;
-        padding: 0.8rem 1.5rem;
-        border-radius: 25px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        margin-top: 1rem;
-    }
-
-    .retry-button:hover {
-        background: var(--secondary-color);
-        transform: translateY(-2px);
-    }
-
-    @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-    }
-
-    form {
-        background: var(--darker-bg);
-        padding: 1.5rem;
-        border-radius: 10px;
-        margin-bottom: 1.5rem;
-    }
-
-    form p {
-        margin-bottom: 0.8rem;
-    }
-
-    form label {
-        color: var(--text-secondary);
-        margin-bottom: 0.3rem;
-        display: block;
-        font-size: 0.9rem;
-    }
-
-    form input, form textarea, form select {
-        width: 100%;
-        padding: 0.6rem;
-        border-radius: 5px;
-        border: 1px solid var(--border-color);
-        background: var(--card-bg);
-        color: var(--text-primary);
-        font-size: 0.95rem;
-    }
-
-    /* Compact input fields for specific types */
-    form input[type="tel"],
-    form input[type="email"],
-    form input[type="url"],
-    form input[name="phone"],
-    form input[name="github_url"],
-    form input[name="linkedin_url"],
-    form input[name="credential_url"],
-    form input[name="live_url"],
-    form input[name="gpa"],
-    form input[name="credential_id"],
-    form input[name="doi"] {
-        max-width: 250px;
-    }
-
-    form input[name="position"],
-    form input[name="company"],
-    form input[name="institution"],
-    form input[name="degree"],
-    form input[name="field_of_study"],
-    form input[name="issuer"],
-    form input[name="name"] {
-        max-width: 350px;
-    }
-
-    form input[name="start_date"],
-    form input[name="end_date"],
-    form input[name="issue_date"],
-    form input[name="expiry_date"],
-    form input[name="publication_date"] {
-        max-width: 150px;
-    }
-
-    form input[name="technologies"] {
-        max-width: 400px;
-    }
-
-    /* Basic Info specific fields */
-    form input[name="name"] {
-        max-width: 280px;
-    }
-
-    form input[name="phone"] {
-        max-width: 160px;
-    }
-
-    form input[name="email"] {
-        max-width: 280px;
-    }
-
-    form input[name="github_url"],
-    form input[name="linkedin_url"] {
-        max-width: 300px;
-    }
-
-    form textarea[name="bio"] {
-        max-width: 500px;
-        min-height: 80px;
-    }
-
-    /* Basic Info form layout */
-    #basic-info form {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1.5rem;
-        padding: 1.5rem;
-        background: var(--darker-bg);
-        border-radius: 10px;
-    }
-
-    #basic-info form p {
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-
-    #basic-info form label {
-        color: var(--text-secondary);
-        font-size: 0.9rem;
-        font-weight: 500;
-    }
-
-    #basic-info form input,
-    #basic-info form textarea {
-        width: 100%;
-        padding: 0.8rem;
-        border: 1px solid var(--border-color);
-        border-radius: 5px;
-        background: var(--card-bg);
-        color: var(--text-primary);
-        font-size: 0.95rem;
-        transition: all 0.3s ease;
-    }
-
-    #basic-info form input:focus,
-    #basic-info form textarea:focus {
-        border-color: var(--primary-color);
-        box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.1);
-        outline: none;
-    }
-
-    /* Full width fields */
-    #basic-info form p:has(input[name="name"]),
-    #basic-info form p:has(input[name="title"]),
-    #basic-info form p:has(input[name="location"]),
-    #basic-info form p:has(textarea[name="bio"]),
-    #basic-info form p:has(input[name="github_url"]),
-    #basic-info form p:has(input[name="linkedin_url"]) {
-        grid-column: 1 / -1;
-    }
-
-    /* Contact info in a row */
-    #basic-info form .contact-fields {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
-        grid-column: 1 / -1;
-    }
-
-    /* URLs in a row */
-    #basic-info form .url-fields {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 1rem;
-        grid-column: 1 / -1;
-    }
-
-    #basic-info form textarea[name="bio"] {
-        min-height: 120px;
-        resize: vertical;
-    }
-
-    #basic-info form button[type="submit"] {
-        grid-column: 1 / -1;
-        margin-top: 1rem;
-        padding: 0.8rem 2rem;
-        background: var(--primary-color);
-        color: white;
-        border: none;
-        border-radius: 5px;
-        font-size: 1rem;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-
-    #basic-info form button[type="submit"]:hover {
-        background: var(--secondary-color);
-        transform: translateY(-2px);
-    }
-
-    /* Make sure form fields are visible */
-    #basic-info form input,
-    #basic-info form textarea {
-        display: block;
-        width: 100%;
-        max-width: 100%;
-        opacity: 1;
-        visibility: visible;
-    }
-
-    /* Remove any display: none or visibility: hidden */
-    #basic-info form p {
-        display: flex !important;
-        visibility: visible !important;
-    }
-
-    #basic-info form label {
-        display: block !important;
-        visibility: visible !important;
+  /* Profile Container */
+  .profile-container {
+    max-width: 1200px;
+    margin: 2rem auto;
+    padding: 0 1rem;
+  }
+
+  /* Profile Header */
+  .profile-header {
+    background: linear-gradient(
+      135deg,
+      var(--darker-bg) 0%,
+      var(--card-bg) 100%
+    );
+    border-radius: 15px;
+    padding: 3rem 2rem;
+    text-align: center;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .profile-header h1 {
+    color: var(--primary-color);
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+  }
+
+  .profile-header p {
+    color: var(--text-secondary);
+    font-size: 1.2rem;
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  /* Profile Stats */
+  .profile-stats {
+    background: var(--card-bg);
+    border-radius: 15px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .profile-stats h2 {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+    font-weight: 600;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+  }
+
+  .stat-item {
+    background: var(--darker-bg);
+    padding: 1rem;
+    border-radius: 10px;
+    text-align: center;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100px;
+  }
+
+  .stat-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  .stat-item h3 {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+
+  .stat-item p {
+    color: var(--primary-color);
+    font-size: 1.75rem;
+    font-weight: 600;
+    margin: 0;
+    line-height: 1;
+  }
+
+  /* Navigation */
+  .profile-nav {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .profile-nav-item {
+    background: var(--card-bg);
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 25px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-weight: 500;
+  }
+
+  .profile-nav-item:hover,
+  .profile-nav-item.active {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    transform: translateY(-2px);
+  }
+
+  /* Sections */
+  .profile-sections {
+    background: var(--card-bg);
+    border-radius: var(--border-radius-lg);
+    padding: 1rem;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .section {
+    display: none;
+    animation: fadeIn 0.5s ease;
+  }
+
+  .section.active {
+    display: block;
+  }
+
+  .section h2 {
+    color: var(--primary-color);
+    font-size: 1.8rem;
+    margin-bottom: 1.5rem;
+    font-weight: 600;
+  }
+
+  /* Record Items */
+  .experience-item,
+  .project-item,
+  .education-item,
+  .certification-item,
+  .publication-item {
+    background: var(--darker-bg);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    position: relative;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .experience-item:hover,
+  .project-item:hover,
+  .education-item:hover,
+  .certification-item:hover,
+  .publication-item:hover {
+    transform: translateX(5px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .record-actions {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .record-actions button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.3rem;
+    transition: color 0.3s ease;
+    font-size: 1.1rem;
+  }
+
+  .record-actions button:hover {
+    color: var(--primary-color);
+  }
+
+  .record-actions .delete-btn:hover {
+    color: var(--danger-color, #dc3545);
+  }
+
+  /* Forms */
+  .add-record-form {
+    display: none;
+    background: var(--darker-bg);
+    padding: 1.5rem;
+    border-radius: 10px;
+    margin-bottom: 2rem;
+  }
+
+  .add-record-form.active {
+    display: block;
+  }
+
+  .add-record-form input,
+  .add-record-form textarea,
+  .add-record-form select {
+    width: 100%;
+    padding: 0.8rem;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 5px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    font-size: 1rem;
+  }
+
+  .add-record-form input:focus,
+  .add-record-form textarea:focus,
+  .add-record-form select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.25rem rgba(108, 99, 255, 0.25);
+    outline: none;
+  }
+
+  .add-record-form label {
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+    display: block;
+    font-weight: 500;
+  }
+
+  /* Buttons */
+  .add-record-btn {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    border: none;
+    padding: 0.8rem 1.5rem;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .add-record-btn:hover {
+    background: var(--secondary-color);
+    transform: translateY(-2px);
+  }
+
+  /* Import Section */
+  .import-section {
+    background: var(--card-bg);
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-xl);
+    box-shadow: var(--shadow-md);
+  }
+
+  .import-section h2 {
+    color: var(--primary-color);
+    font-size: 1.8rem;
+    margin-bottom: var(--spacing-xl);
+    text-align: center;
+  }
+
+  .import-options {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: var(--spacing-xl);
+    margin-top: var(--spacing-lg);
+  }
+
+  .import-card {
+    background: var(--darker-bg);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-xl);
+    text-align: center;
+    transition: all var(--transition-speed) var(--transition-timing);
+    border: 1px solid var(--border-color);
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .import-card:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+  }
+
+  .import-card i {
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-lg);
+    transition: transform var(--transition-speed) var(--transition-timing);
+  }
+
+  .import-card:hover i {
+    transform: scale(1.1);
+  }
+
+  .import-card h3 {
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-sm);
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+
+  .import-card p {
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-lg);
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+
+  .import-form {
+    display: none;
+    width: 100%;
+    margin-top: var(--spacing-md);
+  }
+
+  .import-form.active {
+    display: block;
+  }
+
+  .import-form input {
+    width: 100%;
+    padding: var(--spacing-sm) var(--spacing-md);
+    margin-bottom: var(--spacing-sm);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-sm);
+    background: var(--card-bg);
+    color: var(--text-primary);
+  }
+
+  .import-form input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.2);
+  }
+
+  .retry-button {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    border: none;
+    padding: var(--spacing-sm) var(--spacing-lg);
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: all var(--transition-speed) var(--transition-timing);
+    font-weight: 500;
+    width: 100%;
+  }
+
+  .retry-button:hover {
+    background: var(--secondary-color);
+    transform: translateY(-2px);
+  }
+
+  .file-upload {
+    border: 2px dashed var(--border-color);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-lg);
+    text-align: center;
+    margin-bottom: var(--spacing-md);
+    cursor: pointer;
+    transition: all var(--transition-speed) var(--transition-timing);
+  }
+
+  .file-upload:hover {
+    border-color: var(--primary-color);
+    background: rgba(108, 99, 255, 0.1);
+  }
+
+  .file-upload input[type="file"] {
+    display: none;
+  }
+
+  .file-upload label {
+    color: var(--text-secondary);
+    cursor: pointer;
+  }
+
+  @media (max-width: 992px) {
+    .import-options {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .import-options {
+      grid-template-columns: 1fr;
     }
 
     .import-section {
-        background: var(--card-bg);
-        border-radius: 15px;
-        padding: 2rem;
-        margin-bottom: 2rem;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    }
-
-    .import-section h2 {
-        color: var(--primary-color);
-        margin-bottom: 1.5rem;
-        font-size: 1.8rem;
-    }
-
-    .import-options {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-        gap: 1.5rem;
+      padding: var(--spacing-lg);
     }
 
     .import-card {
-        background: var(--darker-bg);
-        border-radius: 10px;
-        padding: 1.5rem;
-        text-align: center;
-        transition: transform 0.3s ease;
+      padding: var(--spacing-lg);
     }
 
-    .import-card:hover {
-        transform: translateY(-5px);
+    .stats-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 0.75rem;
     }
 
-    .import-card i {
-        font-size: 2.5rem;
-        color: var(--primary-color);
-        margin-bottom: 1rem;
+    .stat-item {
+      min-height: 90px;
+      padding: 0.75rem;
     }
 
-    .import-card h3 {
-        color: var(--text-primary);
-        margin-bottom: 0.5rem;
+    .stat-item h3 {
+      font-size: 0.85rem;
     }
 
-    .import-card p {
-        color: var(--text-secondary);
-        margin-bottom: 1rem;
-        font-size: 0.9rem;
+    .stat-item p {
+      font-size: 1.5rem;
+    }
+  }
+
+  /* Loading Overlay */
+  .loading-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+  }
+
+  .loading-spinner {
+    width: 50px;
+    height: 50px;
+    border: 5px solid var(--primary-color);
+    border-top: 5px solid transparent;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  /* Animations */
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes spin {
+    0% {
+      transform: rotate(0deg);
+    }
+    100% {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* Responsive Design */
+  @media (max-width: 768px) {
+    .profile-container {
+      padding: 0 0.5rem;
     }
 
-    .import-form {
-        display: none;
-        margin-top: 1rem;
+    .profile-header {
+      padding: 2rem 1rem;
     }
 
-    .import-form.active {
-        display: block;
+    .profile-header h1 {
+      font-size: 2rem;
     }
 
-    .import-form input {
-        width: 100%;
-        padding: 0.8rem;
-        border-radius: 5px;
-        border: 1px solid var(--border-color);
-        background: var(--card-bg);
-        color: var(--text-primary);
-        margin-bottom: 1rem;
+    .profile-sections {
+      padding: 1rem;
+    }
+  }
+
+  /* Basic Information Section */
+  #basic-info {
+    width: 100%;
+    padding: 0;
+  }
+
+  #basic-info h2 {
+    color: var(--primary-color);
+    font-size: 1.25rem;
+    margin-bottom: 0.75rem;
+  }
+
+  #basic-info form {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+    width: 100%;
+    margin: 0;
+  }
+
+  #basic-info .name-title-row {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.4rem;
+  }
+
+  #basic-info .full-width {
+    grid-column: 1 / -1;
+  }
+
+  #basic-info label {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    font-weight: 400;
+    margin-bottom: 0.1rem;
+  }
+
+  #basic-info input,
+  #basic-info textarea {
+    width: 100%;
+    padding: 0.25rem 0.4rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background: var(--darker-bg);
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  #basic-info textarea {
+    min-height: 60px;
+    max-height: 120px;
+    resize: vertical;
+  }
+
+  #basic-info button[type="submit"] {
+    grid-column: 1 / -1;
+    width: 100%;
+    background: var(--primary-color);
+    color: var(--text-primary);
+    border: none;
+    padding: 0.35rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 0.4rem;
+  }
+
+  @media (max-width: 768px) {
+    #basic-info form {
+      grid-template-columns: 1fr;
+      gap: 0.35rem;
     }
 
-    .import-form button {
-        background: var(--primary-color);
-        color: white;
-        border: none;
-        padding: 0.8rem 1.5rem;
-        border-radius: 25px;
-        cursor: pointer;
-        transition: all 0.3s ease;
+    #basic-info .name-title-row {
+      grid-template-columns: 1fr;
+      gap: 0.35rem;
     }
-
-    .import-form button:hover {
-        background: var(--secondary-color);
-        transform: translateY(-2px);
-    }
-
-    .file-upload {
-        position: relative;
-        display: inline-block;
-        width: 100%;
-    }
-
-    .file-upload input[type="file"] {
-        display: none;
-    }
-
-    .file-upload label {
-        display: block;
-        padding: 1rem;
-        background: var(--card-bg);
-        border: 2px dashed var(--border-color);
-        border-radius: 5px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
-
-    .file-upload label:hover {
-        border-color: var(--primary-color);
-        background: var(--darker-bg);
-    }
-
-    .loading-overlay {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.8);
-        z-index: 1000;
-        justify-content: center;
-        align-items: center;
-    }
-
-    .loading-spinner {
-        width: 50px;
-        height: 50px;
-        border: 5px solid var(--border-color);
-        border-top: 5px solid var(--primary-color);
-        border-radius: 50%;
-        animation: spin 1s linear infinite;
-    }
-
-    @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-    }
-
-    .edit-form {
-        display: none;
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: var(--darker-bg);
-        padding: 1rem;
-        border-radius: 10px;
-        z-index: 1;
-        overflow-y: auto;
-    }
-
-    .edit-form.active {
-        display: block;
-    }
-
-    .edit-form-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1rem;
-        padding-bottom: 0.8rem;
-        border-bottom: 1px solid var(--border-color);
-    }
-
-    .edit-form-header h3 {
-        margin: 0;
-        color: var(--primary-color);
-        font-size: 1.1rem;
-    }
-
-    .edit-form-header .close-btn {
-        background: none;
-        border: none;
-        color: var(--text-secondary);
-        cursor: pointer;
-        padding: 0.5rem;
-        font-size: 1.2rem;
-    }
-
-    .edit-form-header .close-btn:hover {
-        color: var(--danger-color);
-    }
-
-    .edit-form .form-content {
-        display: grid;
-        gap: 0.8rem;
-        margin-bottom: 1rem;
-    }
-
-    .edit-form .form-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.3rem;
-    }
-
-    .edit-form label {
-        color: var(--text-secondary);
-        font-size: 0.85rem;
-    }
-
-    .edit-form input,
-    .edit-form textarea,
-    .edit-form select {
-        width: 100%;
-        padding: 0.6rem;
-        border-radius: 5px;
-        border: 1px solid var(--border-color);
-        background: var(--card-bg);
-        color: var(--text-primary);
-        font-size: 0.9rem;
-    }
-
-    /* Edit form specific fields */
-    .edit-form input[type="tel"],
-    .edit-form input[type="email"],
-    .edit-form input[type="url"],
-    .edit-form input[name="phone"],
-    .edit-form input[name="github_url"],
-    .edit-form input[name="linkedin_url"],
-    .edit-form input[name="credential_url"],
-    .edit-form input[name="live_url"],
-    .edit-form input[name="gpa"],
-    .edit-form input[name="credential_id"],
-    .edit-form input[name="doi"] {
-        max-width: 250px;
-    }
-
-    .edit-form input[name="position"],
-    .edit-form input[name="company"],
-    .edit-form input[name="institution"],
-    .edit-form input[name="degree"],
-    .edit-form input[name="field_of_study"],
-    .edit-form input[name="issuer"],
-    .edit-form input[name="name"] {
-        max-width: 350px;
-    }
-
-    .edit-form input[name="start_date"],
-    .edit-form input[name="end_date"],
-    .edit-form input[name="issue_date"],
-    .edit-form input[name="expiry_date"],
-    .edit-form input[name="publication_date"] {
-        max-width: 150px;
-    }
-
-    .edit-form input[name="technologies"] {
-        max-width: 400px;
-    }
-
-    /* Keep textareas and description fields full width */
-    .edit-form textarea,
-    .edit-form input[name="description"],
-    .edit-form input[name="abstract"],
-    .edit-form input[name="achievements"] {
-        width: 100%;
-        max-width: none;
-    }
-
-    .edit-form input:focus,
-    .edit-form textarea:focus,
-    .edit-form select:focus {
-        border-color: var(--primary-color);
-        outline: none;
-        box-shadow: 0 0 0 2px rgba(108, 99, 255, 0.2);
-    }
-
-    .edit-form-actions {
-        display: flex;
-        gap: 0.8rem;
-        margin-top: 1rem;
-        padding-top: 0.8rem;
-        border-top: 1px solid var(--border-color);
-    }
-
-    .edit-form-actions button {
-        padding: 0.6rem 1.2rem;
-        border: none;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-size: 0.9rem;
-    }
-
-    .edit-form-actions .save-btn {
-        background: var(--primary-color);
-        color: white;
-    }
-
-    .edit-form-actions .save-btn:hover {
-        background: var(--secondary-color);
-        transform: translateY(-2px);
-    }
-
-    .edit-form-actions .cancel-btn {
-        background: var(--text-secondary);
-        color: white;
-    }
-
-    .edit-form-actions .cancel-btn:hover {
-        background: var(--danger-color);
-        transform: translateY(-2px);
-    }
-
-    /* Ensure record items have proper positioning */
-    .experience-item,
-    .project-item,
-    .education-item,
-    .certification-item,
-    .publication-item,
-    .skill-item {
-        position: relative;
-        min-height: 200px; /* Minimum height to accommodate edit form */
-    }
-
-    /* Add styles for form toggle */
-    .section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 1.5rem;
-    }
-
-    .section-header h2 {
-        margin: 0;
-    }
-
-    .add-record-btn {
-        background: var(--primary-color);
-        color: white;
-        border: none;
-        padding: 0.6rem 1.2rem;
-        border-radius: 5px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        font-size: 0.9rem;
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-    }
-
-    .add-record-btn:hover {
-        background: var(--secondary-color);
-        transform: translateY(-2px);
-    }
-
-    .add-record-btn i {
-        font-size: 0.9rem;
-    }
-
-    .add-record-form {
-        display: none;
-        margin-bottom: 2rem;
-    }
-
-    .add-record-form.active {
-        display: block;
-    }
+  }
 </style>
 
 <div class="profile-container">
-    <div class="profile-header">
-        <h1>{{ user.get_full_name|default:user.username }}'s Profile</h1>
-        <p>{{ user.userprofile.headline|default:"Add your professional headline" }}</p>
-    </div>
+  <div class="profile-header">
+    <h1>{{ user.get_full_name|default:user.username }}'s Profile</h1>
+    <p>{{ user.userprofile.title|default:"Add your professional title" }}</p>
+  </div>
 
-    {% if parsed_resume_data %}
-    <div class="parsed-resume-section">
-        <h2>Parsed Resume Data</h2>
-        <div class="parsed-data">
-            <pre>{{ parsed_resume_data.raw_text }}</pre>
+  {% if parsed_resume_data %}
+  <div class="parsed-resume-section">
+    <h2>Parsed Resume Data</h2>
+    <div class="parsed-data">
+      <pre>{{ parsed_resume_data.raw_text }}</pre>
+    </div>
+    <div class="parsed-actions">
+      <button onclick="prefillWorkExperiences()">Fill Work Experiences</button>
+      <button onclick="prefillEducation()">Fill Education</button>
+      <button onclick="prefillSkills()">Fill Skills</button>
+      <button onclick="prefillProjects()">Fill Projects</button>
+      <button onclick="prefillCertifications()">Fill Certifications</button>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Import Section -->
+  <div class="import-section">
+    <h2>Import Profile Data</h2>
+    <div class="import-options">
+      <!-- GitHub Import -->
+      <div class="import-card">
+        <i class="fab fa-github"></i>
+        <h3>Import from GitHub</h3>
+        <p>Import your work experience and skills from your GitHub profile</p>
+        <button onclick="showImportForm('github')" class="retry-button">
+          Import from GitHub
+        </button>
+        <div id="github-form" class="import-form">
+          <input
+            type="text"
+            id="github-username"
+            placeholder="Enter your GitHub username"
+          />
+          <button onclick="importFromGitHub()">Import</button>
         </div>
-        <div class="parsed-actions">
-            <button onclick="prefillWorkExperiences()">Fill Work Experiences</button>
-            <button onclick="prefillEducation()">Fill Education</button>
-            <button onclick="prefillSkills()">Fill Skills</button>
-            <button onclick="prefillProjects()">Fill Projects</button>
-            <button onclick="prefillCertifications()">Fill Certifications</button>
+      </div>
+
+      <!-- Resume Import -->
+      <div class="import-card">
+        <i class="fas fa-file-alt"></i>
+        <h3>Import from Resume</h3>
+        <p>Upload your resume to automatically fill your profile</p>
+        <button onclick="showImportForm('resume')" class="retry-button">
+          Upload Resume
+        </button>
+        <div id="resume-form" class="import-form">
+          <div class="file-upload">
+            <input type="file" id="resume-file" accept=".pdf,.doc,.docx" />
+            <label for="resume-file">Choose a file or drag it here</label>
+          </div>
+          <button onclick="importFromResume()">Import</button>
         </div>
-    </div>
-    {% endif %}
+      </div>
 
-    <!-- Import Section -->
-    <div class="import-section">
-        <h2>Import Profile Data</h2>
-        <div class="import-options">
-            <!-- GitHub Import -->
-            <div class="import-card">
-                <i class="fab fa-github"></i>
-                <h3>Import from GitHub</h3>
-                <p>Import your work experience and skills from your GitHub profile</p>
-                <button onclick="showImportForm('github')" class="retry-button">Import from GitHub</button>
-                <div id="github-form" class="import-form">
-                    <input type="text" id="github-username" placeholder="Enter your GitHub username">
-                    <button onclick="importFromGitHub()">Import</button>
-                </div>
-            </div>
-
-            <!-- Resume Import -->
-            <div class="import-card">
-                <i class="fas fa-file-alt"></i>
-                <h3>Import from Resume</h3>
-                <p>Upload your resume to automatically fill your profile</p>
-                <button onclick="showImportForm('resume')" class="retry-button">Upload Resume</button>
-                <div id="resume-form" class="import-form">
-                    <div class="file-upload">
-                        <input type="file" id="resume-file" accept=".pdf,.doc,.docx">
-                        <label for="resume-file">Choose a file or drag it here</label>
-                    </div>
-                    <button onclick="importFromResume()">Import</button>
-                </div>
-            </div>
-
-            <!-- LinkedIn Import -->
-            <div class="import-card">
-                <i class="fab fa-linkedin"></i>
-                <h3>Import from LinkedIn</h3>
-                <p>Import your professional information from LinkedIn</p>
-                <button onclick="showImportForm('linkedin')" class="retry-button">Import from LinkedIn</button>
-                <div id="linkedin-form" class="import-form">
-                    <input type="url" id="linkedin-url" placeholder="Enter your LinkedIn profile URL">
-                    <button onclick="importFromLinkedIn()">Import</button>
-                </div>
-            </div>
+      <!-- LinkedIn Import -->
+      <div class="import-card">
+        <i class="fab fa-linkedin"></i>
+        <h3>Import from LinkedIn</h3>
+        <p>Import your professional information from LinkedIn</p>
+        <button onclick="showImportForm('linkedin')" class="retry-button">
+          Import from LinkedIn
+        </button>
+        <div id="linkedin-form" class="import-form">
+          <input
+            type="url"
+            id="linkedin-url"
+            placeholder="Enter your LinkedIn profile URL"
+          />
+          <button onclick="importFromLinkedIn()">Import</button>
         </div>
+      </div>
     </div>
+  </div>
 
-    <!-- Loading Overlay -->
-    <div id="loading-overlay" class="loading-overlay">
-        <div class="loading-spinner"></div>
+  <!-- Loading Overlay -->
+  <div id="loading-overlay" class="loading-overlay">
+    <div class="loading-spinner"></div>
+  </div>
+
+  <div class="profile-stats">
+    <h2>Profile Statistics</h2>
+    <div class="stats-grid">
+      <div class="stat-item">
+        <h3>Work Experience</h3>
+        <p id="work-experience-count">
+          {{ user.userprofile.work_experiences.count }}
+        </p>
+      </div>
+      <div class="stat-item">
+        <h3>Projects</h3>
+        <p id="projects-count">{{ user.userprofile.projects.count }}</p>
+      </div>
+      <div class="stat-item">
+        <h3>Skills</h3>
+        <p id="skills-count">{{ user.userprofile.skills.count }}</p>
+      </div>
+      <div class="stat-item">
+        <h3>Certifications</h3>
+        <p id="certifications-count">
+          {{ user.userprofile.certifications.count }}
+        </p>
+      </div>
+      <div class="stat-item">
+        <h3>Years of Experience</h3>
+        <p id="years-of-experience">
+          {{ user.userprofile.years_of_experience }}
+        </p>
+      </div>
     </div>
+  </div>
 
-    <div class="profile-stats">
-        <h2>Profile Statistics</h2>
-        <div class="stats-grid">
-            <div class="stat-item">
-                <h3>Work Experience</h3>
-                <p id="work-experience-count">{{ user.userprofile.work_experiences.count }}</p>
-            </div>
-            <div class="stat-item">
-                <h3>Projects</h3>
-                <p id="projects-count">{{ user.userprofile.projects.count }}</p>
-            </div>
-            <div class="stat-item">
-                <h3>Skills</h3>
-                <p id="skills-count">{{ user.userprofile.skills.count }}</p>
-            </div>
-            <div class="stat-item">
-                <h3>Certifications</h3>
-                <p id="certifications-count">{{ user.userprofile.certifications.count }}</p>
-            </div>
-            <div class="stat-item">
-                <h3>Years of Experience</h3>
-                <p id="years-of-experience">{{ user.userprofile.years_of_experience }}</p>
-            </div>
+  <div class="profile-nav">
+    <button class="profile-nav-item active" onclick="showSection('basic-info')">
+      Basic Info
+    </button>
+    <button class="profile-nav-item" onclick="showSection('experience')">
+      Experience
+    </button>
+    <button class="profile-nav-item" onclick="showSection('projects')">
+      Projects
+    </button>
+    <button class="profile-nav-item" onclick="showSection('education')">
+      Education
+    </button>
+    <button class="profile-nav-item" onclick="showSection('certifications')">
+      Certifications
+    </button>
+    <button class="profile-nav-item" onclick="showSection('publications')">
+      Publications
+    </button>
+    <button class="profile-nav-item" onclick="showSection('skills')">
+      Skills
+    </button>
+  </div>
+
+  <div class="profile-sections">
+    <!-- Basic Information Section -->
+    <section id="basic-info" class="section active">
+      <h2>Basic Information</h2>
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="name-title-row">
+          <div>
+            <label for="id_name">Name</label>
+            {{ form.name }}
+          </div>
+          <div>
+            <label for="id_title">Professional Title</label>
+            {{ form.title }}
+          </div>
         </div>
-    </div>
+        <div>
+          <label for="id_phone">Phone</label>
+          {{ form.phone }}
+        </div>
+        <div>
+          <label for="id_email">Email</label>
+          {{ form.email }}
+        </div>
+        <div class="full-width">
+          <label for="id_location">Location</label>
+          {{ form.location }}
+        </div>
+        <div class="full-width">
+          <label for="id_bio">Bio</label>
+          {{ form.bio }}
+        </div>
+        <div>
+          <label for="id_github_url">GitHub URL</label>
+          {{ form.github_url }}
+        </div>
+        <div>
+          <label for="id_linkedin_url">LinkedIn URL</label>
+          {{ form.linkedin_url }}
+        </div>
+        <button type="submit">Save Changes</button>
+      </form>
+    </section>
 
-    <div class="profile-nav">
-        <button class="nav-item active" onclick="showSection('basic-info')">Basic Info</button>
-        <button class="nav-item" onclick="showSection('experience')">Experience</button>
-        <button class="nav-item" onclick="showSection('projects')">Projects</button>
-        <button class="nav-item" onclick="showSection('education')">Education</button>
-        <button class="nav-item" onclick="showSection('certifications')">Certifications</button>
-        <button class="nav-item" onclick="showSection('publications')">Publications</button>
-        <button class="nav-item" onclick="showSection('skills')">Skills</button>
-    </div>
+    <!-- Work Experience Section -->
+    <section id="experience" class="section">
+      <div class="section-header">
+        <h2>Work Experience</h2>
+        <button class="add-record-btn" onclick="toggleForm('experience-form')">
+          <i class="fas fa-plus"></i> Add Experience
+        </button>
+      </div>
+      <form
+        id="experience-form"
+        class="add-record-form"
+        method="post"
+        action="{% url 'core:add_work_experience' %}"
+        onsubmit="return validateWorkExperienceForm(this)"
+      >
+        {% csrf_token %} {{ work_experience_form.as_p }}
+        <button type="submit" class="retry-button">Add Experience</button>
+      </form>
 
-    <div class="profile-sections">
-        <!-- Basic Information Section -->
-        <section id="basic-info" class="section active">
-            <h2>Basic Information</h2>
-            <form method="post" enctype="multipart/form-data">
-                {% csrf_token %}
-                <p>
-                    <label for="id_name">Name</label>
-                    {{ form.name }}
-                </p>
-                <p>
-                    <label for="id_title">Professional Title</label>
-                    {{ form.title }}
-                </p>
-                <div class="contact-fields">
-                    <p>
-                        <label for="id_phone">Phone</label>
-                        {{ form.phone }}
-                    </p>
-                    <p>
-                        <label for="id_email">Email</label>
-                        {{ form.email }}
-                    </p>
-                </div>
-                <p>
-                    <label for="id_location">Location</label>
-                    {{ form.location }}
-                </p>
-                <p>
-                    <label for="id_bio">Bio</label>
-                    {{ form.bio }}
-                </p>
-                <div class="url-fields">
-                    <p>
-                        <label for="id_github_url">GitHub URL</label>
-                        {{ form.github_url }}
-                    </p>
-                    <p>
-                        <label for="id_linkedin_url">LinkedIn URL</label>
-                        {{ form.linkedin_url }}
-                    </p>
-                </div>
-                <button type="submit">Save Changes</button>
-            </form>
-        </section>
+      {% for experience in work_experiences %}
+      <div class="experience-item" data-record-id="{{ experience.id }}">
+        <div class="record-actions">
+          <button
+            onclick="editRecord('work_experience', {{ experience.id }})"
+            title="Edit"
+          >
+            <i class="fas fa-edit"></i>
+          </button>
+          <button
+            onclick="deleteRecord('work_experience', {{ experience.id }})"
+            class="delete-btn"
+            title="Delete"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        <h3>{{ experience.position }}</h3>
+        <div class="date-range">
+          {{ experience.start_date|date:"M Y" }} - {% if experience.current %}
+          Present {% else %} {{ experience.end_date }}
+          <!-- Debug -->
+          {% endif %}
+          <!-- Debug info: End Date: {{ experience.end_date }}, Current: {{ experience.current }} -->
+        </div>
+        <div class="location">{{ experience.company }}</div>
+        <p class="description">{{ experience.description }}</p>
+        {% if experience.achievements %}
+        <div class="achievements">{{ experience.achievements }}</div>
+        {% endif %} {% if experience.technologies %}
+        <div class="technologies">{{ experience.technologies }}</div>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p>No work experience added yet.</p>
+      {% endfor %}
+    </section>
 
-        <!-- Work Experience Section -->
-        <section id="experience" class="section">
-            <div class="section-header">
-                <h2>Work Experience</h2>
-                <button class="add-record-btn" onclick="toggleForm('experience-form')">
-                    <i class="fas fa-plus"></i> Add Experience
-                </button>
-            </div>
-            <form id="experience-form" class="add-record-form" method="post" action="{% url 'core:add_work_experience' %}" onsubmit="return validateWorkExperienceForm(this)">
-                {% csrf_token %}
-                {{ work_experience_form.as_p }}
-                <button type="submit" class="retry-button">Add Experience</button>
-            </form>
-            
-            {% for experience in work_experiences %}
-            <div class="experience-item" data-record-id="{{ experience.id }}">
-                        <div class="record-actions">
-                    <button onclick="editRecord('work_experience', {{ experience.id }})" title="Edit">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                    <button onclick="deleteRecord('work_experience', {{ experience.id }})" class="delete-btn" title="Delete">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                <h3>{{ experience.position }}</h3>
-                <div class="date-range">{{ experience.start_date|date:"M Y" }} - {{ experience.end_date|date:"M Y" }}</div>
-                <div class="location">{{ experience.company }}</div>
-                <p class="description">{{ experience.description }}</p>
-                {% if experience.achievements %}
-                <div class="achievements">{{ experience.achievements }}</div>
-                {% endif %}
-                {% if experience.technologies %}
-                <div class="technologies">{{ experience.technologies }}</div>
-                {% endif %}
-                        </div>
-            {% empty %}
-            <p>No work experience added yet.</p>
-            {% endfor %}
-        </section>
+    <!-- Projects Section -->
+    <section id="projects" class="section">
+      <div class="section-header">
+        <h2>Projects</h2>
+        <button class="add-record-btn" onclick="toggleForm('project-form')">
+          <i class="fas fa-plus"></i> Add Project
+        </button>
+      </div>
+      <form
+        id="project-form"
+        class="add-record-form"
+        method="post"
+        action="{% url 'core:add_project' %}"
+      >
+        {% csrf_token %} {{ project_form.as_p }}
+        <button type="submit" class="retry-button">Add Project</button>
+      </form>
 
-        <!-- Projects Section -->
-        <section id="projects" class="section">
-        <div class="section-header">
-            <h2>Projects</h2>
-            <button class="add-record-btn" onclick="toggleForm('project-form')">
-                <i class="fas fa-plus"></i> Add Project
+      {% for project in projects %}
+      <div class="project-item" data-record-id="{{ project.id }}">
+        <div class="record-actions">
+          <button
+            onclick="editRecord('project', {{ project.id }})"
+            title="Edit"
+          >
+            <i class="fas fa-edit"></i>
+          </button>
+          <button
+            onclick="deleteRecord('project', {{ project.id }})"
+            class="delete-btn"
+            title="Delete"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        <h3>{{ project.title }}</h3>
+        <p class="description">{{ project.description }}</p>
+        {% if project.technologies %}
+        <div class="technologies">{{ project.technologies }}</div>
+        {% endif %}
+        <div class="project-links">
+          {% if project.github_url %}
+          <a href="{{ project.github_url }}" target="_blank">GitHub</a>
+          {% endif %} {% if project.live_url %}
+          <a href="{{ project.live_url }}" target="_blank">Live Demo</a>
+          {% endif %}
+        </div>
+      </div>
+      {% empty %}
+      <p>No projects added yet.</p>
+      {% endfor %}
+    </section>
+
+    <!-- Education Section -->
+    <section id="education" class="section">
+      <div class="section-header">
+        <h2>Education</h2>
+        <button class="add-record-btn" onclick="toggleForm('education-form')">
+          <i class="fas fa-plus"></i> Add Education
+        </button>
+      </div>
+      <form
+        id="education-form"
+        class="add-record-form"
+        method="post"
+        action="{% url 'core:add_education' %}"
+      >
+        {% csrf_token %} {{ education_form.as_p }}
+        <button type="submit" class="retry-button">Add Education</button>
+      </form>
+
+      {% for edu in education %}
+      <div class="education-item" data-record-id="{{ edu.id }}">
+        <div class="record-actions">
+          <button onclick="editRecord('education', {{ edu.id }})" title="Edit">
+            <i class="fas fa-edit"></i>
+          </button>
+          <button
+            onclick="deleteRecord('education', {{ edu.id }})"
+            class="delete-btn"
+            title="Delete"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        <div class="degree">{{ edu.degree }}</div>
+        <div class="location">{{ edu.institution }}</div>
+        <div class="date-range">
+          {{ edu.start_date|date:"M Y" }} - {{ edu.end_date|date:"M Y" }}
+        </div>
+        <p class="description">{{ edu.field_of_study }}</p>
+        {% if edu.gpa %}
+        <div class="gpa">GPA: {{ edu.gpa }}</div>
+        {% endif %} {% if edu.achievements %}
+        <div class="achievements">{{ edu.achievements }}</div>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p>No education added yet.</p>
+      {% endfor %}
+    </section>
+
+    <!-- Certifications Section -->
+    <section id="certifications" class="section">
+      <div class="section-header">
+        <h2>Certifications</h2>
+        <button
+          class="add-record-btn"
+          onclick="toggleForm('certification-form')"
+        >
+          <i class="fas fa-plus"></i> Add Certification
+        </button>
+      </div>
+      <form
+        id="certification-form"
+        class="add-record-form"
+        method="post"
+        action="{% url 'core:add_certification' %}"
+      >
+        {% csrf_token %} {{ certification_form.as_p }}
+        <button type="submit" class="retry-button">Add Certification</button>
+      </form>
+
+      {% for cert in certifications %}
+      <div class="certification-item" data-record-id="{{ cert.id }}">
+        <div class="record-actions">
+          <button
+            onclick="editRecord('certification', {{ cert.id }})"
+            title="Edit"
+          >
+            <i class="fas fa-edit"></i>
+          </button>
+          <button
+            onclick="deleteRecord('certification', {{ cert.id }})"
+            class="delete-btn"
+            title="Delete"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        <h3>{{ cert.name }}</h3>
+        <div class="location">{{ cert.issuer }}</div>
+        <div class="date-range">Issued: {{ cert.issue_date|date:"M Y" }}</div>
+        {% if cert.expiry_date %}
+        <div class="date-range">Expires: {{ cert.expiry_date|date:"M Y" }}</div>
+        {% endif %} {% if cert.credential_id %}
+        <p class="description">Credential ID: {{ cert.credential_id }}</p>
+        {% endif %} {% if cert.credential_url %}
+        <a href="{{ cert.credential_url }}" target="_blank">View Credential</a>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p>No certifications added yet.</p>
+      {% endfor %}
+    </section>
+
+    <!-- Publications Section -->
+    <section id="publications" class="section">
+      <div class="section-header">
+        <h2>Publications</h2>
+        <button class="add-record-btn" onclick="toggleForm('publication-form')">
+          <i class="fas fa-plus"></i> Add Publication
+        </button>
+      </div>
+      <form
+        id="publication-form"
+        class="add-record-form"
+        method="post"
+        action="{% url 'core:add_publication' %}"
+      >
+        {% csrf_token %} {{ publication_form.as_p }}
+        <button type="submit" class="retry-button">Add Publication</button>
+      </form>
+
+      {% for pub in publications %}
+      <div class="publication-item" data-record-id="{{ pub.id }}">
+        <div class="record-actions">
+          <button
+            onclick="editRecord('publication', {{ pub.id }})"
+            title="Edit"
+          >
+            <i class="fas fa-edit"></i>
+          </button>
+          <button
+            onclick="deleteRecord('publication', {{ pub.id }})"
+            class="delete-btn"
+            title="Delete"
+          >
+            <i class="fas fa-trash"></i>
+          </button>
+        </div>
+        <h3>{{ pub.title }}</h3>
+        <p class="description">{{ pub.authors }}</p>
+        <div class="date-range">{{ pub.publication_date|date:"M Y" }}</div>
+        {% if pub.publisher %}
+        <p class="description">Publisher: {{ pub.publisher }}</p>
+        {% endif %} {% if pub.journal %}
+        <p class="description">Journal: {{ pub.journal }}</p>
+        {% endif %} {% if pub.doi %}
+        <p class="description">DOI: {{ pub.doi }}</p>
+        {% endif %} {% if pub.abstract %}
+        <div class="abstract">{{ pub.abstract }}</div>
+        {% endif %} {% if pub.url %}
+        <a href="{{ pub.url }}" target="_blank">View Publication</a>
+        {% endif %}
+      </div>
+      {% empty %}
+      <p>No publications added yet.</p>
+      {% endfor %}
+    </section>
+
+    <!-- Skills Section -->
+    <section id="skills" class="section">
+      <div class="section-header">
+        <h2>Skills</h2>
+        <button class="add-record-btn" onclick="toggleForm('skill-form')">
+          <i class="fas fa-plus"></i> Add Skill
+        </button>
+      </div>
+      <form
+        id="skill-form"
+        class="add-record-form"
+        method="post"
+        action="{% url 'core:add_skill' %}"
+      >
+        {% csrf_token %} {{ skill_form.as_p }}
+        <button type="submit" class="retry-button">Add Skill</button>
+      </form>
+
+      <div class="skills-grid">
+        {% for skill in skills %}
+        <div class="skill-item" data-record-id="{{ skill.id }}">
+          <div class="record-actions">
+            <button onclick="editRecord('skill', {{ skill.id }})" title="Edit">
+              <i class="fas fa-edit"></i>
             </button>
-        </div>
-        <form id="project-form" class="add-record-form" method="post" action="{% url 'core:add_project' %}">
-            {% csrf_token %}
-                {{ project_form.as_p }}
-            <button type="submit" class="retry-button">Add Project</button>
-        </form>
-            
-            {% for project in projects %}
-            <div class="project-item" data-record-id="{{ project.id }}">
-                    <div class="record-actions">
-                    <button onclick="editRecord('project', {{ project.id }})" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    <button onclick="deleteRecord('project', {{ project.id }})" class="delete-btn" title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                <h3>{{ project.title }}</h3>
-                <div class="date-range">{{ project.start_date|date:"M Y" }} - {{ project.end_date|date:"M Y" }}</div>
-                <p class="description">{{ project.description }}</p>
-                {% if project.technologies %}
-                <div class="technologies">{{ project.technologies }}</div>
-                {% endif %}
-                    <div class="project-links">
-                    {% if project.github_url %}
-                    <a href="{{ project.github_url }}" target="_blank">GitHub</a>
-                    {% endif %}
-                    {% if project.live_url %}
-                    <a href="{{ project.live_url }}" target="_blank">Live Demo</a>
-                    {% endif %}
-                    </div>
-                </div>
-            {% empty %}
-            <p>No projects added yet.</p>
-            {% endfor %}
-        </section>
-
-        <!-- Education Section -->
-        <section id="education" class="section">
-        <div class="section-header">
-            <h2>Education</h2>
-            <button class="add-record-btn" onclick="toggleForm('education-form')">
-                <i class="fas fa-plus"></i> Add Education
+            <button
+              onclick="deleteRecord('skill', {{ skill.id }})"
+              class="delete-btn"
+              title="Delete"
+            >
+              <i class="fas fa-trash"></i>
             </button>
+          </div>
+          <h3>{{ skill.name }}</h3>
+          <p>{{ skill.category }}</p>
+          <p>Proficiency: {{ skill.proficiency }}</p>
         </div>
-        <form id="education-form" class="add-record-form" method="post" action="{% url 'core:add_education' %}">
-            {% csrf_token %}
-                {{ education_form.as_p }}
-            <button type="submit" class="retry-button">Add Education</button>
-        </form>
-            
-            {% for edu in education %}
-            <div class="education-item" data-record-id="{{ edu.id }}">
-                    <div class="record-actions">
-                    <button onclick="editRecord('education', {{ edu.id }})" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    <button onclick="deleteRecord('education', {{ edu.id }})" class="delete-btn" title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                <div class="degree">{{ edu.degree }}</div>
-                <div class="location">{{ edu.institution }}</div>
-                <div class="date-range">{{ edu.start_date|date:"M Y" }} - {{ edu.end_date|date:"M Y" }}</div>
-                <p class="description">{{ edu.field_of_study }}</p>
-                {% if edu.gpa %}
-                <div class="gpa">GPA: {{ edu.gpa }}</div>
-                {% endif %}
-                {% if edu.achievements %}
-                <div class="achievements">{{ edu.achievements }}</div>
-                {% endif %}
-                </div>
-            {% empty %}
-            <p>No education added yet.</p>
-            {% endfor %}
-        </section>
-
-        <!-- Certifications Section -->
-        <section id="certifications" class="section">
-        <div class="section-header">
-            <h2>Certifications</h2>
-            <button class="add-record-btn" onclick="toggleForm('certification-form')">
-                <i class="fas fa-plus"></i> Add Certification
-            </button>
-        </div>
-        <form id="certification-form" class="add-record-form" method="post" action="{% url 'core:add_certification' %}">
-            {% csrf_token %}
-                {{ certification_form.as_p }}
-            <button type="submit" class="retry-button">Add Certification</button>
-        </form>
-            
-            {% for cert in certifications %}
-            <div class="certification-item" data-record-id="{{ cert.id }}">
-                    <div class="record-actions">
-                    <button onclick="editRecord('certification', {{ cert.id }})" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    <button onclick="deleteRecord('certification', {{ cert.id }})" class="delete-btn" title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                <h3>{{ cert.name }}</h3>
-                <div class="location">{{ cert.issuer }}</div>
-                <div class="date-range">Issued: {{ cert.issue_date|date:"M Y" }}</div>
-                {% if cert.expiry_date %}
-                <div class="date-range">Expires: {{ cert.expiry_date|date:"M Y" }}</div>
-                {% endif %}
-                {% if cert.credential_id %}
-                <p class="description">Credential ID: {{ cert.credential_id }}</p>
-                {% endif %}
-                {% if cert.credential_url %}
-                <a href="{{ cert.credential_url }}" target="_blank">View Credential</a>
-                {% endif %}
-                </div>
-            {% empty %}
-            <p>No certifications added yet.</p>
-            {% endfor %}
-        </section>
-
-        <!-- Publications Section -->
-        <section id="publications" class="section">
-        <div class="section-header">
-            <h2>Publications</h2>
-            <button class="add-record-btn" onclick="toggleForm('publication-form')">
-                <i class="fas fa-plus"></i> Add Publication
-            </button>
-        </div>
-        <form id="publication-form" class="add-record-form" method="post" action="{% url 'core:add_publication' %}">
-            {% csrf_token %}
-                {{ publication_form.as_p }}
-            <button type="submit" class="retry-button">Add Publication</button>
-        </form>
-            
-            {% for pub in publications %}
-            <div class="publication-item" data-record-id="{{ pub.id }}">
-                    <div class="record-actions">
-                    <button onclick="editRecord('publication', {{ pub.id }})" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                    <button onclick="deleteRecord('publication', {{ pub.id }})" class="delete-btn" title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                <h3>{{ pub.title }}</h3>
-                <p class="description">{{ pub.authors }}</p>
-                <div class="date-range">{{ pub.publication_date|date:"M Y" }}</div>
-                {% if pub.publisher %}
-                <p class="description">Publisher: {{ pub.publisher }}</p>
-                {% endif %}
-                {% if pub.journal %}
-                <p class="description">Journal: {{ pub.journal }}</p>
-                {% endif %}
-                {% if pub.doi %}
-                <p class="description">DOI: {{ pub.doi }}</p>
-                {% endif %}
-                {% if pub.abstract %}
-                <div class="abstract">{{ pub.abstract }}</div>
-                {% endif %}
-                {% if pub.url %}
-                <a href="{{ pub.url }}" target="_blank">View Publication</a>
-                {% endif %}
-                </div>
-            {% empty %}
-            <p>No publications added yet.</p>
-            {% endfor %}
-        </section>
-
-        <!-- Skills Section -->
-        <section id="skills" class="section">
-        <div class="section-header">
-            <h2>Skills</h2>
-            <button class="add-record-btn" onclick="toggleForm('skill-form')">
-                <i class="fas fa-plus"></i> Add Skill
-            </button>
-        </div>
-        <form id="skill-form" class="add-record-form" method="post" action="{% url 'core:add_skill' %}">
-            {% csrf_token %}
-                {{ skill_form.as_p }}
-            <button type="submit" class="retry-button">Add Skill</button>
-        </form>
-            
-            <div class="skills-grid">
-                {% for skill in skills %}
-                <div class="skill-item" data-record-id="{{ skill.id }}">
-                    <div class="record-actions">
-                        <button onclick="editRecord('skill', {{ skill.id }})" title="Edit">
-                            <i class="fas fa-edit"></i>
-                        </button>
-                        <button onclick="deleteRecord('skill', {{ skill.id }})" class="delete-btn" title="Delete">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
-                    <h3>{{ skill.name }}</h3>
-                    <p>{{ skill.category }}</p>
-                    <p>Proficiency: {{ skill.proficiency }}</p>
-                </div>
-                {% empty %}
-                <p>No skills added yet.</p>
-                {% endfor %}
-            </div>
-        </section>
-    </div>
+        {% empty %}
+        <p>No skills added yet.</p>
+        {% endfor %}
+      </div>
+    </section>
+  </div>
 </div>
 
 <script>
-function showSection(sectionId) {
-    // Hide all sections
-    document.querySelectorAll('.section').forEach(section => {
-        section.classList.remove('active');
-    });
-    
-    // Show selected section
-    document.getElementById(sectionId).classList.add('active');
-    
-    // Update navigation
-    document.querySelectorAll('.nav-item').forEach(item => {
-        item.classList.remove('active');
-    });
-    event.target.classList.add('active');
-}
+  function showSection(sectionId) {
+      // Hide all sections
+      document.querySelectorAll('.section').forEach(section => {
+          section.classList.remove('active');
+      });
 
-function showImportForm(type) {
-    // Hide all forms
-    document.querySelectorAll('.import-form').forEach(form => {
-        form.classList.remove('active');
-    });
-    
-    // Show selected form
-    document.getElementById(`${type}-form`).classList.add('active');
-}
+      // Show selected section
+      document.getElementById(sectionId).classList.add('active');
 
-function showLoading() {
-    document.getElementById('loading-overlay').style.display = 'flex';
-}
+      // Update navigation
+      document.querySelectorAll('.profile-nav-item').forEach(item => {
+          item.classList.remove('active');
+      });
+      event.target.classList.add('active');
+  }
 
-function hideLoading() {
-    document.getElementById('loading-overlay').style.display = 'none';
-}
+  function showImportForm(type) {
+      // Hide all forms
+      document.querySelectorAll('.import-form').forEach(form => {
+          form.classList.remove('active');
+      });
 
-async function importFromGitHub() {
-    const username = document.getElementById('github-username').value;
-    if (!username) {
-        alert('Please enter your GitHub username');
-        return;
-    }
+      // Show selected form
+      document.getElementById(`${type}-form`).classList.add('active');
+  }
 
-    showLoading();
-    try {
-        const response = await fetch('{% url "core:import_github_profile" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ github_username: username })
-        });
+  function showLoading() {
+      document.getElementById('loading-overlay').style.display = 'flex';
+  }
 
-        const data = await response.json();
-        if (data.success) {
-            alert('Profile imported successfully!');
-            location.reload();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    } catch (error) {
-        alert('Error importing profile: ' + error.message);
-    } finally {
-        hideLoading();
-    }
-}
+  function hideLoading() {
+      document.getElementById('loading-overlay').style.display = 'none';
+  }
 
-async function importFromResume() {
-    const fileInput = document.getElementById('resume-file');
-    const file = fileInput.files[0];
-    if (!file) {
-        alert('Please select a resume file');
-        return;
-    }
+  async function importFromGitHub() {
+      const username = document.getElementById('github-username').value;
+      if (!username) {
+          alert('Please enter your GitHub username');
+          return;
+      }
 
-    showLoading();
-    const formData = new FormData();
-    formData.append('resume', file);
+      showLoading();
+      try {
+          const response = await fetch('{% url "core:import_github_profile" %}', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': getCookie('csrftoken')
+              },
+              body: JSON.stringify({ github_username: username })
+          });
 
-    try {
-        const response = await fetch('{% url "core:import_resume" %}', {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: formData
-        });
+          const data = await response.json();
+          if (data.success) {
+              alert('Profile imported successfully!');
+              location.reload();
+          } else {
+              alert('Error: ' + data.error);
+          }
+      } catch (error) {
+          alert('Error importing profile: ' + error.message);
+      } finally {
+          hideLoading();
+      }
+  }
 
-        const data = await response.json();
-        if (data.success) {
-            alert('Profile imported successfully!');
-            location.reload();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    } catch (error) {
-        alert('Error importing profile: ' + error.message);
-    } finally {
-        hideLoading();
-    }
-}
+  async function importFromResume() {
+      const fileInput = document.getElementById('resume-file');
+      const file = fileInput.files[0];
+      if (!file) {
+          alert('Please select a resume file');
+          return;
+      }
 
-async function importFromLinkedIn() {
-    const url = document.getElementById('linkedin-url').value;
-    if (!url) {
-        alert('Please enter your LinkedIn profile URL');
-        return;
-    }
+      showLoading();
+      const formData = new FormData();
+      formData.append('resume', file);
 
-    showLoading();
-    try {
-        const response = await fetch('{% url "core:import_linkedin_profile" %}', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify({ linkedin_url: url })
-        });
+      try {
+          const response = await fetch('{% url "core:import_resume" %}', {
+              method: 'POST',
+              headers: {
+                  'X-CSRFToken': getCookie('csrftoken')
+              },
+              body: formData
+          });
 
-        const data = await response.json();
-        if (data.success) {
-            alert('Profile imported successfully!');
-            location.reload();
-        } else {
-            alert('Error: ' + data.error);
-        }
-    } catch (error) {
-        alert('Error importing profile: ' + error.message);
-    } finally {
-        hideLoading();
-    }
-}
+          const data = await response.json();
+          if (data.success) {
+              alert('Profile imported successfully!');
+              location.reload();
+          } else {
+              alert('Error: ' + data.error);
+          }
+      } catch (error) {
+          alert('Error importing profile: ' + error.message);
+      } finally {
+          hideLoading();
+      }
+  }
 
-// Helper function to get CSRF token
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
+  async function importFromLinkedIn() {
+      const url = document.getElementById('linkedin-url').value;
+      if (!url) {
+          alert('Please enter your LinkedIn profile URL');
+          return;
+      }
 
-function prefillWorkExperiences() {
-    const workExperiences = {{ parsed_resume_data.work_experiences|default:'[]'|safe }};
-    workExperiences.forEach(exp => {
-        const form = document.querySelector('#work-experience-form');
-        if (form) {
-            form.querySelector('[name="company"]').value = exp.company || '';
-            form.querySelector('[name="position"]').value = exp.position || '';
-            form.querySelector('[name="start_date"]').value = exp.start_date || '';
-            form.querySelector('[name="end_date"]').value = exp.end_date || '';
-            form.querySelector('[name="description"]').value = exp.description || '';
-            form.querySelector('[name="technologies"]').value = exp.technologies?.join(', ') || '';
-            form.submit();
-        }
-    });
-}
+      showLoading();
+      try {
+          const response = await fetch('{% url "core:import_linkedin_profile" %}', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': getCookie('csrftoken')
+              },
+              body: JSON.stringify({ linkedin_url: url })
+          });
 
-function prefillEducation() {
-    const education = {{ parsed_resume_data.education|default:'[]'|safe }};
-    education.forEach(edu => {
-        const form = document.querySelector('#education-form');
-        if (form) {
-            form.querySelector('[name="institution"]').value = edu.institution || '';
-            form.querySelector('[name="degree"]').value = edu.degree || '';
-            form.querySelector('[name="field_of_study"]').value = edu.field_of_study || '';
-            form.querySelector('[name="start_date"]').value = edu.start_date || '';
-            form.querySelector('[name="end_date"]').value = edu.end_date || '';
-            form.querySelector('[name="gpa"]').value = edu.gpa || '';
-            form.querySelector('[name="achievements"]').value = edu.achievements?.join(', ') || '';
-            form.submit();
-        }
-    });
-}
+          const data = await response.json();
+          if (data.success) {
+              alert('Profile imported successfully!');
+              location.reload();
+          } else {
+              alert('Error: ' + data.error);
+          }
+      } catch (error) {
+          alert('Error importing profile: ' + error.message);
+      } finally {
+          hideLoading();
+      }
+  }
 
-function prefillSkills() {
-    const skills = {{ parsed_resume_data.skills|default:'[]'|safe }};
-    skills.forEach(skill => {
-        const form = document.querySelector('#skill-form');
-        if (form) {
-            form.querySelector('[name="name"]').value = skill.name || '';
-            form.querySelector('[name="category"]').value = skill.category || '';
-            form.querySelector('[name="proficiency"]').value = skill.proficiency || '';
-            form.submit();
-        }
-    });
-}
+  // Helper function to get CSRF token
+  function getCookie(name) {
+      let cookieValue = null;
+      if (document.cookie && document.cookie !== '') {
+          const cookies = document.cookie.split(';');
+          for (let i = 0; i < cookies.length; i++) {
+              const cookie = cookies[i].trim();
+              if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                  cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                  break;
+              }
+          }
+      }
+      return cookieValue;
+  }
 
-function prefillProjects() {
-    const projects = {{ parsed_resume_data.projects|default:'[]'|safe }};
-    projects.forEach(proj => {
-        const form = document.querySelector('#project-form');
-        if (form) {
-            form.querySelector('[name="title"]').value = proj.title || '';
-            form.querySelector('[name="description"]').value = proj.description || '';
-            form.querySelector('[name="start_date"]').value = proj.start_date || '';
-            form.querySelector('[name="end_date"]').value = proj.end_date || '';
-            form.querySelector('[name="technologies"]').value = proj.technologies?.join(', ') || '';
-            form.submit();
-        }
-    });
-}
+  function prefillWorkExperiences() {
+      const workExperiences = {{ parsed_resume_data.work_experiences|default:'[]'|safe }};
+      workExperiences.forEach(exp => {
+          const form = document.querySelector('#work-experience-form');
+          if (form) {
+              form.querySelector('[name="company"]').value = exp.company || '';
+              form.querySelector('[name="position"]').value = exp.position || '';
+              form.querySelector('[name="start_date"]').value = exp.start_date || '';
+              form.querySelector('[name="end_date"]').value = exp.end_date || '';
+              form.querySelector('[name="description"]').value = exp.description || '';
+              form.querySelector('[name="technologies"]').value = exp.technologies?.join(', ') || '';
+              form.submit();
+          }
+      });
+  }
 
-function prefillCertifications() {
-    const certifications = {{ parsed_resume_data.certifications|default:'[]'|safe }};
-    certifications.forEach(cert => {
-        const form = document.querySelector('#certification-form');
-        if (form) {
-            form.querySelector('[name="name"]').value = cert.name || '';
-            form.querySelector('[name="issuer"]').value = cert.issuer || '';
-            form.querySelector('[name="issue_date"]').value = cert.issue_date || '';
-            form.querySelector('[name="expiry_date"]').value = cert.expiry_date || '';
-            form.querySelector('[name="credential_id"]').value = cert.credential_id || '';
-            form.submit();
-        }
-    });
-}
+  function prefillEducation() {
+      const education = {{ parsed_resume_data.education|default:'[]'|safe }};
+      education.forEach(edu => {
+          const form = document.querySelector('#education-form');
+          if (form) {
+              form.querySelector('[name="institution"]').value = edu.institution || '';
+              form.querySelector('[name="degree"]').value = edu.degree || '';
+              form.querySelector('[name="field_of_study"]').value = edu.field_of_study || '';
+              form.querySelector('[name="start_date"]').value = edu.start_date || '';
+              form.querySelector('[name="end_date"]').value = edu.end_date || '';
+              form.querySelector('[name="gpa"]').value = edu.gpa || '';
+              form.querySelector('[name="achievements"]').value = edu.achievements?.join(', ') || '';
+              form.submit();
+          }
+      });
+  }
 
-async function deleteRecord(recordType, recordId) {
-    try {
-        const response = await fetch(`/profile/delete/${recordType}/${recordId}/`, {
-            method: 'POST',
-            headers: {
-                'X-CSRFToken': getCookie('csrftoken')
-            }
-        });
+  function prefillSkills() {
+      const skills = {{ parsed_resume_data.skills|default:'[]'|safe }};
+      skills.forEach(skill => {
+          const form = document.querySelector('#skill-form');
+          if (form) {
+              form.querySelector('[name="name"]').value = skill.name || '';
+              form.querySelector('[name="category"]').value = skill.category || '';
+              form.querySelector('[name="proficiency"]').value = skill.proficiency || '';
+              form.submit();
+          }
+      });
+  }
 
-        if (response.ok) {
-            const element = document.querySelector(`[data-record-id="${recordId}"]`);
-            if (element) element.remove();
-            showNotification('success', 'Record deleted successfully');
-        } else {
-            showNotification('error', 'Failed to delete record');
-        }
-    } catch (error) {
-        showNotification('error', 'An error occurred while deleting the record');
-    }
-}
+  function prefillProjects() {
+      const projects = {{ parsed_resume_data.projects|default:'[]'|safe }};
+      projects.forEach(proj => {
+          const form = document.querySelector('#project-form');
+          if (form) {
+              form.querySelector('[name="title"]').value = proj.title || '';
+              form.querySelector('[name="description"]').value = proj.description || '';
+              form.querySelector('[name="start_date"]').value = proj.start_date || '';
+              form.querySelector('[name="end_date"]').value = proj.end_date || '';
+              form.querySelector('[name="technologies"]').value = proj.technologies?.join(', ') || '';
+              form.submit();
+          }
+      });
+  }
 
-function editRecord(recordType, recordId) {
-    const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
-    const recordContent = recordElement.innerHTML;
-    
-    // Create edit form
-    const editForm = document.createElement('div');
-    editForm.className = 'edit-form';
-    editForm.innerHTML = `
-        <div class="edit-form-header">
-            <h3>Edit ${recordType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h3>
-            <button onclick="closeEditForm(${recordId})" class="close-btn">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <form id="edit-form-${recordId}" onsubmit="submitEditForm(event, '${recordType}', ${recordId})">
-            <div class="form-content">
-                ${getEditFormFields(recordType, recordElement)}
-            </div>
-            <div class="edit-form-actions">
-                <button type="submit" class="save-btn">Save Changes</button>
-                <button type="button" class="cancel-btn" onclick="closeEditForm(${recordId})">Cancel</button>
-            </div>
-        </form>
-    `;
-    
-    // Store original content
-    recordElement.dataset.originalContent = recordContent;
-    
-    // Replace content with edit form
-    recordElement.innerHTML = '';
-    recordElement.appendChild(editForm);
-    
-    // Show form
-    editForm.classList.add('active');
-    
-    // Focus first input field
-    const firstInput = editForm.querySelector('input, textarea, select');
-    if (firstInput) {
-        firstInput.focus();
-    }
-}
+  function prefillCertifications() {
+      const certifications = {{ parsed_resume_data.certifications|default:'[]'|safe }};
+      certifications.forEach(cert => {
+          const form = document.querySelector('#certification-form');
+          if (form) {
+              form.querySelector('[name="name"]').value = cert.name || '';
+              form.querySelector('[name="issuer"]').value = cert.issuer || '';
+              form.querySelector('[name="issue_date"]').value = cert.issue_date || '';
+              form.querySelector('[name="expiry_date"]').value = cert.expiry_date || '';
+              form.querySelector('[name="credential_id"]').value = cert.credential_id || '';
+              form.submit();
+          }
+      });
+  }
 
-function closeEditForm(recordId) {
-    const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
-    if (recordElement.dataset.originalContent) {
-        recordElement.innerHTML = recordElement.dataset.originalContent;
-    }
-}
+  async function deleteRecord(recordType, recordId) {
+      try {
+          const response = await fetch(`/profile/delete/${recordType}/${recordId}/`, {
+              method: 'POST',
+              headers: {
+                  'X-CSRFToken': getCookie('csrftoken')
+              }
+          });
 
-function getEditFormFields(recordType, recordElement) {
-    const fields = {
-        work_experience: {
-            position: recordElement.querySelector('h3')?.textContent || '',
-            company: recordElement.querySelector('.location')?.textContent || '',
-            start_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[0] || '',
-            end_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[1] || '',
-            description: recordElement.querySelector('.description')?.textContent || '',
-            achievements: recordElement.querySelector('.achievements')?.textContent || '',
-            technologies: recordElement.querySelector('.technologies')?.textContent || ''
-        },
-        project: {
-            title: recordElement.querySelector('h3')?.textContent || '',
-            start_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[0] || '',
-            end_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[1] || '',
-            description: recordElement.querySelector('.description')?.textContent || '',
-            technologies: recordElement.querySelector('.technologies')?.textContent || '',
-            github_url: recordElement.querySelector('.project-links a[href*="github"]')?.href || '',
-            live_url: recordElement.querySelector('.project-links a[href*="demo"]')?.href || ''
-        },
-        education: {
-            degree: recordElement.querySelector('.degree')?.textContent || '',
-            institution: recordElement.querySelector('.location')?.textContent || '',
-            start_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[0] || '',
-            end_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[1] || '',
-            field_of_study: recordElement.querySelector('.description')?.textContent || '',
-            gpa: recordElement.querySelector('.gpa')?.textContent.replace('GPA: ', '') || '',
-            achievements: recordElement.querySelector('.achievements')?.textContent || ''
-        },
-        certification: {
-            name: recordElement.querySelector('h3')?.textContent || '',
-            issuer: recordElement.querySelector('.location')?.textContent || '',
-            issue_date: recordElement.querySelector('.date-range')?.textContent.replace('Issued: ', '') || '',
-            expiry_date: recordElement.querySelector('.date-range:nth-child(2)')?.textContent.replace('Expires: ', '') || '',
-            credential_id: recordElement.querySelector('.description')?.textContent.replace('Credential ID: ', '') || '',
-            credential_url: recordElement.querySelector('a')?.href || ''
-        },
-        publication: {
-            title: recordElement.querySelector('h3')?.textContent || '',
-            authors: recordElement.querySelector('.description')?.textContent || '',
-            publication_date: recordElement.querySelector('.date-range')?.textContent || '',
-            publisher: recordElement.querySelector('.description:nth-child(2)')?.textContent.replace('Publisher: ', '') || '',
-            journal: recordElement.querySelector('.description:nth-child(3)')?.textContent.replace('Journal: ', '') || '',
-            doi: recordElement.querySelector('.description:nth-child(4)')?.textContent.replace('DOI: ', '') || '',
-            abstract: recordElement.querySelector('.abstract')?.textContent || '',
-            url: recordElement.querySelector('a')?.href || ''
-        },
-        skill: {
-            name: recordElement.querySelector('h3')?.textContent || '',
-            category: recordElement.querySelector('p')?.textContent || '',
-            proficiency: recordElement.querySelector('p:last-child')?.textContent.replace('Proficiency: ', '') || ''
-        }
-    };
+          if (response.ok) {
+              const element = document.querySelector(`[data-record-id="${recordId}"]`);
+              if (element) element.remove();
+              showNotification('success', 'Record deleted successfully');
+          } else {
+              showNotification('error', 'Failed to delete record');
+          }
+      } catch (error) {
+          showNotification('error', 'An error occurred while deleting the record');
+      }
+  }
 
-    const recordFields = fields[recordType];
-    let formHTML = '';
+  function editRecord(recordType, recordId) {
+      const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
+      const recordContent = recordElement.innerHTML;
 
-    for (const [field, value] of Object.entries(recordFields)) {
-        formHTML += `
-            <div class="form-group">
-                <label for="${field}">${field.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
-                ${getInputField(field, value)}
-            </div>
-        `;
-    }
+      // Create edit form
+      const editForm = document.createElement('div');
+      editForm.className = 'edit-form';
+      editForm.innerHTML = `
+          <div class="edit-form-header">
+              <h3>Edit ${recordType.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h3>
+              <button onclick="closeEditForm(${recordId})" class="close-btn">
+                  <i class="fas fa-times"></i>
+              </button>
+          </div>
+          <form id="edit-form-${recordId}" onsubmit="submitEditForm(event, '${recordType}', ${recordId})">
+              <div class="form-content">
+                  ${getEditFormFields(recordType, recordElement)}
+              </div>
+              <div class="edit-form-actions">
+                  <button type="submit" class="save-btn">Save Changes</button>
+                  <button type="button" class="cancel-btn" onclick="closeEditForm(${recordId})">Cancel</button>
+              </div>
+          </form>
+      `;
 
-    return formHTML;
-}
+      // Store original content
+      recordElement.dataset.originalContent = recordContent;
 
-function getInputField(field, value) {
-    if (field === 'description' || field === 'abstract' || field === 'achievements') {
-        return `<textarea name="${field}" id="${field}" placeholder="Enter ${field.replace('_', ' ')}">${value}</textarea>`;
-    } else if (field === 'technologies') {
-        return `<input type="text" name="${field}" id="${field}" value="${value}" placeholder="Comma-separated values">`;
-    } else if (field === 'proficiency') {
-        return `
-            <select name="${field}" id="${field}">
-                <option value="1" ${value === '1' ? 'selected' : ''}>Beginner</option>
-                <option value="2" ${value === '2' ? 'selected' : ''}>Intermediate</option>
-                <option value="3" ${value === '3' ? 'selected' : ''}>Advanced</option>
-                <option value="4" ${value === '4' ? 'selected' : ''}>Expert</option>
-                <option value="5" ${value === '5' ? 'selected' : ''}>Master</option>
-            </select>
-        `;
-    } else {
-        return `<input type="text" name="${field}" id="${field}" value="${value}" placeholder="Enter ${field.replace('_', ' ')}">`;
-    }
-}
+      // Replace content with edit form
+      recordElement.innerHTML = '';
+      recordElement.appendChild(editForm);
 
-async function submitEditForm(event, recordType, recordId) {
-    event.preventDefault();
-    
-    const form = event.target;
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
+      // Show form
+      editForm.classList.add('active');
 
-    try {
-        const response = await fetch(`/profile/edit/${recordType}/${recordId}/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken': getCookie('csrftoken')
-            },
-            body: JSON.stringify(data)
-        });
+      // Focus first input field
+      const firstInput = editForm.querySelector('input, textarea, select');
+      if (firstInput) {
+          firstInput.focus();
+      }
+  }
 
-        if (response.ok) {
-            const result = await response.json();
-            if (result.success) {
-                location.reload();
-            } else {
-                showNotification('error', result.error || 'Failed to update record');
-            }
-        } else {
-            showNotification('error', 'Failed to update record');
-        }
-    } catch (error) {
-        showNotification('error', 'An error occurred while updating the record');
-    }
-}
+  function closeEditForm(recordId) {
+      const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
+      if (recordElement.dataset.originalContent) {
+          recordElement.innerHTML = recordElement.dataset.originalContent;
+      }
+  }
 
-function toggleForm(formId) {
-    const form = document.getElementById(formId);
-    form.classList.toggle('active');
-    
-    // Scroll to form if it's being shown
-    if (form.classList.contains('active')) {
-        form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-}
+  function getEditFormFields(recordType, recordElement) {
+      const fields = {
+          work_experience: {
+              position: recordElement.querySelector('h3')?.textContent || '',
+              company: recordElement.querySelector('.location')?.textContent || '',
+              start_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[0] || '',
+              end_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[1] || '',
+              description: recordElement.querySelector('.description')?.textContent || '',
+              achievements: recordElement.querySelector('.achievements')?.textContent || '',
+              technologies: recordElement.querySelector('.technologies')?.textContent || ''
+          },
+          project: {
+              title: recordElement.querySelector('h3')?.textContent || '',
+              start_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[0] || '',
+              end_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[1] || '',
+              description: recordElement.querySelector('.description')?.textContent || '',
+              technologies: recordElement.querySelector('.technologies')?.textContent || '',
+              github_url: recordElement.querySelector('.project-links a[href*="github"]')?.href || '',
+              live_url: recordElement.querySelector('.project-links a[href*="demo"]')?.href || ''
+          },
+          education: {
+              degree: recordElement.querySelector('.degree')?.textContent || '',
+              institution: recordElement.querySelector('.location')?.textContent || '',
+              start_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[0] || '',
+              end_date: recordElement.querySelector('.date-range')?.textContent.split(' - ')[1] || '',
+              field_of_study: recordElement.querySelector('.description')?.textContent || '',
+              gpa: recordElement.querySelector('.gpa')?.textContent.replace('GPA: ', '') || '',
+              achievements: recordElement.querySelector('.achievements')?.textContent || ''
+          },
+          certification: {
+              name: recordElement.querySelector('h3')?.textContent || '',
+              issuer: recordElement.querySelector('.location')?.textContent || '',
+              issue_date: recordElement.querySelector('.date-range')?.textContent.replace('Issued: ', '') || '',
+              expiry_date: recordElement.querySelector('.date-range:nth-child(2)')?.textContent.replace('Expires: ', '') || '',
+              credential_id: recordElement.querySelector('.description')?.textContent.replace('Credential ID: ', '') || '',
+              credential_url: recordElement.querySelector('a')?.href || ''
+          },
+          publication: {
+              title: recordElement.querySelector('h3')?.textContent || '',
+              authors: recordElement.querySelector('.description')?.textContent || '',
+              publication_date: recordElement.querySelector('.date-range')?.textContent || '',
+              publisher: recordElement.querySelector('.description:nth-child(2)')?.textContent.replace('Publisher: ', '') || '',
+              journal: recordElement.querySelector('.description:nth-child(3)')?.textContent.replace('Journal: ', '') || '',
+              doi: recordElement.querySelector('.description:nth-child(4)')?.textContent.replace('DOI: ', '') || '',
+              abstract: recordElement.querySelector('.abstract')?.textContent || '',
+              url: recordElement.querySelector('a')?.href || ''
+          },
+          skill: {
+              name: recordElement.querySelector('h3')?.textContent || '',
+              category: recordElement.querySelector('p')?.textContent || '',
+              proficiency: recordElement.querySelector('p:last-child')?.textContent.replace('Proficiency: ', '') || ''
+          }
+      };
 
-// Function to update profile statistics
-function updateProfileStats() {
-    fetch('{% url "core:profile_stats" %}')
-        .then(response => response.json())
-        .then(data => {
-            document.getElementById('work-experience-count').textContent = data.work_experience;
-            document.getElementById('projects-count').textContent = data.projects;
-            document.getElementById('skills-count').textContent = data.skills;
-            document.getElementById('certifications-count').textContent = data.certifications;
-            document.getElementById('years-of-experience').textContent = data.years_of_experience;
-        })
-        .catch(error => console.error('Error fetching profile stats:', error));
-}
+      const recordFields = fields[recordType];
+      let formHTML = '';
 
-// Update stats when any form is submitted
-document.addEventListener('DOMContentLoaded', function() {
-    const forms = document.querySelectorAll('form');
-    forms.forEach(form => {
-        form.addEventListener('submit', function() {
-            // Wait a bit for the server to process the form
-            setTimeout(updateProfileStats, 500);
-        });
-    });
-});
+      for (const [field, value] of Object.entries(recordFields)) {
+          formHTML += `
+              <div class="form-group">
+                  <label for="${field}">${field.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</label>
+                  ${getInputField(field, value)}
+              </div>
+          `;
+      }
 
-// Update stats when any delete button is clicked
-document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('delete-btn')) {
-        // Wait a bit for the server to process the deletion
-        setTimeout(updateProfileStats, 500);
-    }
-});
+      return formHTML;
+  }
 
-// Initial stats update
-updateProfileStats();
+  function getInputField(field, value) {
+      if (field === 'description' || field === 'abstract' || field === 'achievements') {
+          return `<textarea name="${field}" id="${field}" placeholder="Enter ${field.replace('_', ' ')}">${value}</textarea>`;
+      } else if (field === 'technologies') {
+          return `<input type="text" name="${field}" id="${field}" value="${value}" placeholder="Comma-separated values">`;
+      } else if (field === 'proficiency') {
+          return `
+              <select name="${field}" id="${field}">
+                  <option value="1" ${value === '1' ? 'selected' : ''}>Beginner</option>
+                  <option value="2" ${value === '2' ? 'selected' : ''}>Intermediate</option>
+                  <option value="3" ${value === '3' ? 'selected' : ''}>Advanced</option>
+                  <option value="4" ${value === '4' ? 'selected' : ''}>Expert</option>
+                  <option value="5" ${value === '5' ? 'selected' : ''}>Master</option>
+              </select>
+          `;
+      } else {
+          return `<input type="text" name="${field}" id="${field}" value="${value}" placeholder="Enter ${field.replace('_', ' ')}">`;
+      }
+  }
 
-function validateWorkExperienceForm(form) {
-    const startDate = form.querySelector('input[name="start_date"]');
-    if (!startDate.value) {
-        alert('Start date is required');
-        startDate.focus();
-        return false;
-    }
-    
-    const endDate = form.querySelector('input[name="end_date"]');
-    const current = form.querySelector('input[name="current"]');
-    
-    if (!current.checked && !endDate.value) {
-        alert('Please either provide an end date or mark as current position');
-        return false;
-    }
-    
-    if (endDate.value && new Date(endDate.value) < new Date(startDate.value)) {
-        alert('End date cannot be earlier than start date');
-        return false;
-    }
-    
-    return true;
-}
+  async function submitEditForm(event, recordType, recordId) {
+      event.preventDefault();
+
+      const form = event.target;
+      const formData = new FormData(form);
+      const data = Object.fromEntries(formData.entries());
+
+      try {
+          const response = await fetch(`/profile/edit/${recordType}/${recordId}/`, {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+                  'X-CSRFToken': getCookie('csrftoken')
+              },
+              body: JSON.stringify(data)
+          });
+
+          if (response.ok) {
+              const result = await response.json();
+              if (result.success) {
+                  location.reload();
+              } else {
+                  showNotification('error', result.error || 'Failed to update record');
+              }
+          } else {
+              showNotification('error', 'Failed to update record');
+          }
+      } catch (error) {
+          showNotification('error', 'An error occurred while updating the record');
+      }
+  }
+
+  function toggleForm(formId) {
+      const form = document.getElementById(formId);
+      form.classList.toggle('active');
+
+      // Scroll to form if it's being shown
+      if (form.classList.contains('active')) {
+          form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+  }
+
+  // Function to update profile statistics
+  function updateProfileStats() {
+      fetch('{% url "core:profile_stats" %}')
+          .then(response => response.json())
+          .then(data => {
+              document.getElementById('work-experience-count').textContent = data.work_experience;
+              document.getElementById('projects-count').textContent = data.projects;
+              document.getElementById('skills-count').textContent = data.skills;
+              document.getElementById('certifications-count').textContent = data.certifications;
+              document.getElementById('years-of-experience').textContent = data.years_of_experience;
+          })
+          .catch(error => console.error('Error fetching profile stats:', error));
+  }
+
+  // Update stats when any form is submitted
+  document.addEventListener('DOMContentLoaded', function() {
+      const forms = document.querySelectorAll('form');
+      forms.forEach(form => {
+          form.addEventListener('submit', function() {
+              // Wait a bit for the server to process the form
+              setTimeout(updateProfileStats, 500);
+          });
+      });
+  });
+
+  // Update stats when any delete button is clicked
+  document.addEventListener('click', function(e) {
+      if (e.target.classList.contains('delete-btn')) {
+          // Wait a bit for the server to process the deletion
+          setTimeout(updateProfileStats, 500);
+      }
+  });
+
+  // Initial stats update
+  updateProfileStats();
+
+  function validateWorkExperienceForm(form) {
+      const startDate = form.querySelector('input[name="start_date"]');
+      if (!startDate.value) {
+          alert('Start date is required');
+          startDate.focus();
+          return false;
+      }
+
+      const endDate = form.querySelector('input[name="end_date"]');
+      const current = form.querySelector('input[name="current"]');
+
+      if (!current.checked && !endDate.value) {
+          alert('Please either provide an end date or mark as current position');
+          return false;
+      }
+
+      if (endDate.value && new Date(endDate.value) < new Date(startDate.value)) {
+          alert('End date cannot be earlier than start date');
+          return false;
+      }
+
+      return true;
+  }
 </script>
-{% endblock %} 
+{% endblock %}
