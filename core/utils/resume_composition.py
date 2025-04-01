@@ -502,7 +502,7 @@ class ResumeComposition:
 
         self.elements.append(Spacer(1, 2))
 
-    def _create_skills_section(self, job_description=None, required_skills=None):
+    def _create_skills_section(self, job_description, required_skills=None):
         """Create the skills section of the resume."""
         if not self.personal_agent.background.skills:
             return
@@ -522,82 +522,71 @@ class ResumeComposition:
             ):
                 skill_levels[name_lower] = (name, level)  # Store original name and level
 
-        if job_description:
-            # Use AI to analyze and score skills based on job description
-            prompt = f"""
-            Analyze these skills and return only the relevant ones for the job description.
-            Return a JSON array of strings containing only the relevant skill names.
+        # Use AI to analyze and score skills based on job description
+        prompt = f"""
+        Analyze the job description and extract relevant skills from the candidate's work experiences.
+        Return a JSON array of strings containing only the relevant skill names.
 
-            Job Description:
-            {job_description}
-            
-            Job required Skills:
-            {', '.join(required_skills) if required_skills and isinstance(required_skills, (list, tuple)) else 'Not specified'}
+        Job Description:
+        {job_description}
+        
+        Candidate's Work Experiences:
+        {', '.join([f"{exp.get('position', '')} at {exp.get('company', '')}: {exp.get('description', '')}" for exp in self.personal_agent.background.work_experience])}
 
-            Skills to analyze:
-            {', '.join(skill_levels.keys())}
+        ⚠️ STRICT RESPONSE FORMAT REQUIREMENTS ⚠️
+        Your response must be EXACTLY in this format, with no additional text:
+        ["skill_name1", "skill_name2", ...]
 
-            Return ONLY a JSON array in this format:
-            ["skill_name1", "skill_name2", ...]
-            Rules:
-            - Only return skills that are relevant to the job description
-            - Only return skills that are in the required skills list
-            - Only return skills that are in the skill_levels dictionary
-            - Only return skills that are in the job_description
-            - Only return a JSON array, nothing else or extra.
-            """
+        Rules:
+        - Only return skills that are directly mentioned in the job description
+        - Only return skills that are demonstrated in the candidate's work experiences
+        - Prioritize technical skills over soft skills
+        - Return skills in order of relevance to the job
+        - Maximum 15 skills
+        - DO NOT include any explanatory text before or after the JSON array
+        - DO NOT include any notes or comments
+        - DO NOT include any "Here is" or similar phrases
+        - ONLY return the JSON array, nothing else
 
-            try:
-                # Get AI analysis of skills
-                response = self.ollama_client.generate(prompt, resp_in_json=True)
+        ❌ FORBIDDEN:
+        1. NO introductory text
+        2. NO explanatory text
+        3. NO notes or comments
+        4. NO "Here is" or similar phrases
+        5. NO additional context
+
+        ✅ REQUIRED:
+        1. Response must start with [ and end with ]
+        2. Response must be valid JSON
+        3. Response must contain only the array of skill names
+        4. Response must be parseable by a JSON parser
+        """
+
+        # Get AI analysis of skills
+        response = self.ollama_client.generate(prompt, resp_in_json=True)
                 
-                # Clean and parse the response
-                try:
-                    # Remove any extra text or whitespace
-                    response = response.strip()
-                    
-                    # Find the first '[' and last ']' to extract just the JSON array
-                    start_idx = response.find('[')
-                    end_idx = response.rfind(']')
-                    
-                    if start_idx == -1 or end_idx == -1:
-                        raise ValueError("No valid JSON array found in response")
-                    
-                    # Extract just the JSON array part
-                    json_str = response[start_idx:end_idx + 1]
-                    
-                    # Parse the JSON
-                    relevant_skills = json.loads(json_str)
-                    
-                    # Validate and clean the skills
-                    if not isinstance(relevant_skills, list):
-                        raise ValueError("Response is not a list")
-                    
-                    # Get the original skill names with their proficiency levels
-                    scored_skills = []
-                    for skill_name in relevant_skills:
-                        skill_name_lower = skill_name.lower()
-                        if skill_name_lower in skill_levels:
-                            original_name, proficiency = skill_levels[skill_name_lower]
-                            scored_skills.append((proficiency, original_name))
-
-                    # Sort by proficiency level
-                    scored_skills.sort(key=lambda x: (-x[0], x[1].lower()))
-                    top_skills = [skill[1] for skill in scored_skills[:15]]
-                except (json.JSONDecodeError, ValueError) as e:
-                    print(f"Error parsing AI response: {str(e)}")
-                    # Fallback to proficiency-based sorting if parsing fails
-                    sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
-                    top_skills = [skill[0] for skill in sorted_skills[:15]]
-            except Exception as e:
-                # Fallback to proficiency-based sorting if AI analysis fails
-                print(f"Error in AI skill analysis: {str(e)}")
-                sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
-                top_skills = [skill[0] for skill in sorted_skills[:15]]
-        else:
-            # If no job description, sort by proficiency level
-            sorted_skills = sorted(skill_levels.values(), key=lambda x: (-x[1], x[0].lower()))
-            top_skills = [skill[0] for skill in sorted_skills[:15]]
+        # Remove any extra text or whitespace
+        response = response.strip()
+        
+        # Find the first '[' and last ']' to extract just the JSON array
+        start_idx = response.find('[')
+        end_idx = response.rfind(']')
+        
+        if start_idx == -1 or end_idx == -1:
+            raise ValueError("No valid JSON array found in response")
+        
+        # Extract just the JSON array part
+        json_str = response[start_idx:end_idx + 1]
+        
+        # Parse the JSON
+        relevant_skills = json.loads(json_str)
+        
+        # Validate and clean the skills
+        if not isinstance(relevant_skills, list):
+            raise ValueError("Response is not a list")
+        
+        # Use the skills directly from the model's response
+        top_skills = relevant_skills[:15]
 
         # Create a single line of skills
         skills_text = " | ".join(top_skills)
