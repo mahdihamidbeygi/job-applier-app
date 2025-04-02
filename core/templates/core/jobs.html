@@ -98,8 +98,9 @@ Applier{% endblock %} {% block content %}
               target="_blank"
               class="btn btn-sm btn-outline-secondary"
             >
-              <i class="fab fa-{{ job.source|lower }}"></i> View on {{
-              job.source|title }}
+              <i class="fab fa-{{ job.source|lower }}"></i> View on
+              <!---->
+              {{ job.source|title }}
             </a>
           </div>
         </div>
