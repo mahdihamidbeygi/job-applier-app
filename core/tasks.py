@@ -1,14 +1,13 @@
 import logging
 
-from celery import shared_task
-
 from core.models import JobListing, UserProfile
 from core.utils.agents.personal_agent import PersonalAgent, PersonalBackground
+from job_applier.celery_config import app
 
 logger = logging.getLogger(__name__)
 
 
-@shared_task
+@app.task
 def generate_documents_async(job_id: int, user_id: int):
     """
     Asynchronously generate tailored documents for a job listing.
@@ -44,6 +43,8 @@ def generate_documents_async(job_id: int, user_id: int):
 
         if not success:
             print(f"Failed to generate documents for job {job_id}")
+            return False
+        return True
 
     except Exception as e:
         print(f"Error in generate_documents_async task: {str(e)}")
