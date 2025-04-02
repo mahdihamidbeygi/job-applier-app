@@ -205,17 +205,17 @@ class JobListing(models.Model):
         ("other", "Other"),
     ]
 
-    title = models.CharField(max_length=200)
-    company = models.CharField(max_length=200)
-    location = models.CharField(max_length=200)
+    title = models.CharField(max_length=500)
+    company = models.CharField(max_length=500)
+    location = models.CharField(max_length=500)
     description = models.TextField()
     requirements = models.TextField(blank=True)
     source = models.CharField(max_length=20, choices=JOB_SOURCES)
     source_url = models.URLField()
     posted_date = models.DateField()
     salary_range = models.CharField(max_length=100, blank=True)
-    job_type = models.CharField(max_length=50, blank=True)  # Full-time, Part-time, Contract, etc.
-    experience_level = models.CharField(max_length=50, blank=True)
+    job_type = models.CharField(max_length=200, blank=True)  # Full-time, Part-time, Contract, etc.
+    experience_level = models.CharField(max_length=200, blank=True)
     required_skills = models.JSONField(default=list)
     preferred_skills = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -228,9 +228,7 @@ class JobListing(models.Model):
     )
     applied = models.BooleanField(default=False)
     application_date = models.DateField(null=True, blank=True)
-    application_status = models.CharField(
-        max_length=50, blank=True
-    )  # Applied, Interviewing, Rejected, etc.
+    application_status = models.CharField(max_length=200, blank=True)
 
     class Meta:
         ordering = ["-posted_date", "-match_score"]

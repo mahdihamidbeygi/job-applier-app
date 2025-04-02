@@ -19,6 +19,9 @@
 
 # production
 /build
+/media
+/static
+/job_vectors
 
 # misc
 .DS_Store

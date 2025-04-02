@@ -131,30 +131,24 @@ def profile(request):
         form = UserProfileForm(instance=request.user.userprofile)
 
     # Get GitHub data if it exists and needs to be refreshed
-    github_data = None
-    try:
-        if request.user.userprofile.github_url:
-            if request.user.userprofile.github_data:
-                # Extract username from GitHub URL
-                github_url = request.user.userprofile.github_url
-                github_username = github_url.split("/")[-1]
-                if github_username == "github.com":
-                    github_username = github_url.split("/")[-2]
+    github_data = request.user.userprofile.github_data
+    if request.user.userprofile.github_url:
+        if not github_data:
+            # Extract username from GitHub URL
+            github_url = request.user.userprofile.github_url
+            github_username = github_url.split("/")[-1]
+            if github_username == "github.com":
+                github_username = github_url.split("/")[-2]
 
-                # Import GitHub profile
-                importer = GitHubProfileImporter(github_username)
-                github_data = json.loads(importer.import_profile(github_username))
-                
-                # Update last refresh time
-                request.user.userprofile.github_data = github_data
-                request.user.userprofile.last_github_refresh = timezone.now()
-                request.user.userprofile.save()
-            else:
-                # Use cached GitHub data
-                github_data = request.user.userprofile.github_data
-    except Exception as e:
-        logger.error(f"Error loading GitHub data: {str(e)}")
-        github_data = None
+            # Import GitHub profile
+            importer = GitHubProfileImporter(github_username)
+            github_data = json.loads(importer.import_profile(github_username))
+            
+            # Update last refresh time
+            request.user.userprofile.github_data = github_data
+            request.user.userprofile.last_github_refresh = timezone.now()
+            request.user.userprofile.save()
+
 
     context = {
         "form": form,
