@@ -9,82 +9,121 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'job_applier.settings')
 django.setup()
 
 from core.models import JobListing, UserProfile
-from core.tasks import generate_documents_async
+from core.utils.agents.personal_agent import PersonalAgent, PersonalBackground
+from core.utils.agents.search_agent import SearchAgent
 
 
-def process_unhandled_jobs():
-    """
-    Process all job listings that don't have documents or match scores.
-    Process one job at a time sequentially.
-    """
+def calculate_match_score(job, user):
+    """Calculate match score for a job using PersonalAgent and SearchAgent"""
     try:
-        # Get all jobs that need processing (no documents or no match score)
-        unprocessed_jobs = JobListing.objects.filter(
-            Q(tailored_resume='') | 
-            Q(tailored_cover_letter='') |
-            Q(match_score__isnull=True)
+        # Initialize personal agent first
+        personal_agent = PersonalAgent(user.id)
+        
+        # Initialize search agent with user_id and personal_agent
+        search_agent = SearchAgent(user.id, personal_agent)
+
+        # Get user profile
+        user_profile = UserProfile.objects.get(user_id=user.id)
+
+        # Create PersonalBackground object
+        background = PersonalBackground(
+            profile=user_profile.__dict__,
+            work_experience=list(user_profile.work_experiences.values()),
+            education=list(user_profile.education.values()),
+            skills=list(user_profile.skills.values()),
+            projects=list(user_profile.projects.values()),
+            github_data=user_profile.github_data,
+            achievements=[],  # We'll add this field to the model later
+            interests=[],  # We'll add this field to the model later
         )
+
+        # Load background first
+        personal_agent.load_background(background)
+
+        # Get job details
+        job_details = {
+            "title": job.title,
+            "company": job.company,
+            "description": job.description,
+            "location": job.location,
+            "requirements": job.requirements,
+            "source": job.source,
+            "source_url": job.source_url,
+            "posted_date": job.posted_date,
+            "applied": job.applied,
+            "match_score": job.match_score,
+            "id": job.id,
+        }
+
+        # Analyze job fit using search agent
+        analysis = search_agent.analyze_job_fit(job_details)
         
-        total_jobs = unprocessed_jobs.count()
-        print(f"Found {total_jobs} unprocessed job listings")
+        # Extract match score from analysis
+        match_score = float(analysis.get("match_score", 0))
         
-        if total_jobs == 0:
-            print("No jobs need processing")
+        return match_score
+    except Exception as e:
+        print(f"Error calculating match score: {str(e)}")
+        return 0.0
+
+def process_job(job, user):
+    """Process a single job by calculating and saving its match score"""
+    try:
+        # Calculate match score
+        match_score = calculate_match_score(job, user)
+        
+        # Save match score to database
+        job.match_score = match_score
+        job.save()
+        
+        print(f"✓ Match score calculated successfully!")
+        print(f"Match Score: {match_score:.2f}%")
+        
+        return True
+    except Exception as e:
+        print(f"Error processing job: {str(e)}")
+        return False
+
+def process_unscored_jobs():
+    """Process all jobs that don't have a match score"""
+    try:
+        # Get all users
+        users = UserProfile.objects.all()
+        
+        if not users.exists():
+            print("No users found in the database.")
             return
+            
+        # Get all jobs without match scores
+        jobs = JobListing.objects.filter(match_score__isnull=True)
         
-        # Get the default user profile (assuming single user system for now)
-        user_profile = UserProfile.objects.first()
-        if not user_profile:
-            print("No user profile found. Please create a user profile first.")
+        if not jobs.exists():
+            print("No jobs found without match scores.")
             return
+            
+        print(f"Found {jobs.count()} jobs without match scores")
         
-        # Process jobs one at a time
-        processed_count = 0
-        for job in unprocessed_jobs:
-            processed_count += 1
-            print(f"\nProcessing job {processed_count} of {total_jobs}")
+        # Process each job
+        for i, job in enumerate(jobs, 1):
+            print(f"\nProcessing job {i} of {jobs.count()}")
             print(f"Job: {job.title} at {job.company}")
             
-            try:
-                # Process single job
-                result = generate_documents_async.delay(job.id, user_profile.user.id)
+            # Process with first user (assuming single user system for now)
+            success = process_job(job, users.first())
+            
+            if not success:
+                print("Failed to process job")
                 
-                # Wait for job to complete with timeout
-                result.get(timeout=300)  # 5 minutes timeout per job
-                print(f"✓ Job processed successfully!")
+            # Add delay between jobs to avoid overwhelming the system
+            if i < jobs.count():
+                print("Waiting 10 seconds before next job...")
+                time.sleep(10)
                 
-                # Show updated match score
-                job.refresh_from_db()
-                if job.match_score is not None:
-                    print(f"Match Score: {job.match_score:.2f}%")
-                
-                # Add a small delay between jobs
-                if processed_count < total_jobs:
-                    print("Waiting 10 seconds before next job...")
-                    time.sleep(10)
-                
-            except Exception as e:
-                print(f"✗ Error processing job: {str(e)}")
-                print("Continuing with next job...")
-                continue
+        print("\nFinished processing all jobs!")
         
-        # Print final summary
-        print("\nFinal Processing Summary:")
-        print("-----------------------")
-        print(f"Total jobs processed: {processed_count}")
-        
-        # Show top overall matches
-        top_matches = JobListing.objects.filter(
-            match_score__isnull=False
-        ).order_by('-match_score')[:5]
-        
-        print("\nTop Overall Matches:")
-        for job in top_matches:
-            print(f"{job.title} at {job.company}: {job.match_score:.2f}%")
-    
     except Exception as e:
-        print(f"Error processing job listings: {str(e)}")
+        print(f"Error in process_unscored_jobs: {str(e)}")
 
 if __name__ == '__main__':
-    print("Starting job processing...")
-    process_unhandled_jobs() 
+    print("Starting match score calculation...")
+    process_unscored_jobs() 

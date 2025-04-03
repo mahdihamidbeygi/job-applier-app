@@ -68,4 +68,6 @@ urlpatterns = [
     path(
         "job-platform-preferences/", views.job_platform_preferences, name="job_platform_preferences"
     ),
+    path("jobs/search/", views.search_jobs, name="search_jobs"),
+    path("api/jobs/remove/", views.remove_job, name="remove_job"),
 ]

@@ -77,7 +77,21 @@ Applier{% endblock %} {% block content %}
             >
             {% if job.applied %}
             <span class="badge bg-success ms-2">Applied</span>
+            {% endif %} {% if job.has_tailored_documents %}
+            <span
+              class="badge bg-info ms-2"
+              title="Resume and cover letter are ready"
+            >
+              <i class="fas fa-file-alt"></i> Documents Ready
+            </span>
             {% endif %}
+            <button
+              class="btn btn-outline-danger ms-2 remove-job"
+              data-job-id="{{ job.id }}"
+              title="Remove from results"
+            >
+              <i class="fas fa-times"></i>
+            </button>
           </div>
         </div>
 
@@ -154,6 +168,70 @@ Applier{% endblock %} {% block content %}
   function getAuthToken() {
     return localStorage.getItem("authToken");
   }
+
+  // Function to remove a job from results
+  function removeJob(jobId) {
+    const authToken = getAuthToken();
+    if (!authToken) {
+      alert("Please log in to remove jobs.");
+      window.location.href = "{% url 'core:login' %}";
+      return;
+    }
+
+    fetch("/api/jobs/remove/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCookie("csrftoken"),
+        Authorization: `Bearer ${authToken}`,
+      },
+      credentials: "include",
+      body: JSON.stringify({
+        job_id: jobId,
+      }),
+    })
+      .then((response) => {
+        if (response.status === 401) {
+          localStorage.removeItem("authToken");
+          window.location.href = "{% url 'core:login' %}";
+          return Promise.reject("Authentication required");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        // Find and remove the job card from the DOM
+        const jobCard = document
+          .querySelector(`[data-job-id="${jobId}"]`)
+          .closest(".card");
+        jobCard.remove();
+
+        // If no jobs left, show empty state
+        const jobListings = document.getElementById("jobListings");
+        if (jobListings.children.length === 0) {
+          jobListings.innerHTML = `
+            <div class="alert alert-info">
+              No jobs found. Try adjusting your search criteria.
+            </div>
+          `;
+        }
+      })
+      .catch((error) => {
+        console.error("Error:", error);
+        if (error !== "Authentication required") {
+          alert("An error occurred while removing the job.");
+        }
+      });
+  }
+
+  // Add click event listeners to all remove buttons
+  document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".remove-job").forEach((button) => {
+      button.addEventListener("click", function () {
+        const jobId = this.getAttribute("data-job-id");
+        removeJob(jobId);
+      });
+    });
+  });
 
   document
     .getElementById("jobSearchForm")
