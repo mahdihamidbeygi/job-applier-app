@@ -1,6 +1,7 @@
-import requests
 import json
 import re
+
+import requests
 from django.conf import settings
 
 
@@ -59,9 +60,33 @@ class OllamaClient:
 
             response_text = result["response"]
             if resp_in_json:
-                # Remove any markdown code block markers
+                # Remove any markdown code block markers and clean the response
                 response_text = response_text.replace("```json", "").replace("```", "").strip()
-
+                
+                # Remove any explanatory text before the JSON
+                if "Here is the response in the required format:" in response_text:
+                    response_text = response_text.split("Here is the response in the required format:")[1].strip()
+                
+                # Try to find the first occurrence of { or [ and the last occurrence of } or ]
+                start_idx = min(
+                    response_text.find("{"),
+                    response_text.find("[")
+                )
+                end_idx = max(
+                    response_text.rfind("}"),
+                    response_text.rfind("]")
+                )
+                
+                if start_idx != -1 and end_idx != -1:
+                    response_text = response_text[start_idx:end_idx + 1]
+                else:
+                    # If no JSON structure found, try to clean the response as a simple array
+                    response_text = response_text.strip()
+                    if response_text.startswith("["):
+                        response_text = response_text[:response_text.rfind("]") + 1]
+                    elif response_text.startswith("{"):
+                        response_text = response_text[:response_text.rfind("}") + 1]
+                
                 # Validate the JSON structure
                 try:
                     json.loads(response_text)  # Test if it's valid JSON
