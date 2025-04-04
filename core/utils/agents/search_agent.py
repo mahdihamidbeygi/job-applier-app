@@ -28,7 +28,7 @@ class SearchAgent(BaseAgent):
         self.monster_scraper = MonsterScraper()
         self.jobbank_scraper = JobBankScraper()
 
-    def search_jobs(self, role: str, location: str, platform: str = "linkedin") -> List[Dict]:
+    def search_jobs(self, role: str, location: str, platform: str = "linkedin", request=None) -> List[Dict]:
         """
         Search for jobs on the specified platform
 
@@ -36,6 +36,7 @@ class SearchAgent(BaseAgent):
             role: Job title or role to search for
             location: Location to search in
             platform: Platform to search on (linkedin, indeed, glassdoor, monster, jobbank)
+            request: Django request object for session access
 
         Returns:
             List of job listings
@@ -43,7 +44,7 @@ class SearchAgent(BaseAgent):
         platform = platform.lower()
 
         if platform == "linkedin":
-            return self.linkedin_scraper.search_jobs(role, location)
+            return self.linkedin_scraper.search_jobs(role, location, request=request)
         elif platform == "indeed":
             return self.indeed_scraper.search_jobs(role, location)
         elif platform == "glassdoor":

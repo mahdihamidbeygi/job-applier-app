@@ -1,10 +1,8 @@
-from typing import List, Dict, Any
-from langchain_ollama import OllamaEmbeddings
-from langchain_chroma import Chroma
+from typing import Any, Dict, List
+
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import TextLoader, PyPDFLoader
-import json
-import os
+from langchain_chroma import Chroma
+from langchain_ollama import OllamaEmbeddings
 
 
 class JobKnowledgeBase:

@@ -88,6 +88,7 @@ __all__ = [
     "apply_to_job",
     "search_jobs",
     "job_platform_preferences",
+    "remove_job",
 ]
 
 
@@ -131,30 +132,24 @@ def profile(request):
         form = UserProfileForm(instance=request.user.userprofile)
 
     # Get GitHub data if it exists and needs to be refreshed
-    github_data = None
-    try:
-        if request.user.userprofile.github_url:
-            if request.user.userprofile.github_data:
-                # Extract username from GitHub URL
-                github_url = request.user.userprofile.github_url
-                github_username = github_url.split("/")[-1]
-                if github_username == "github.com":
-                    github_username = github_url.split("/")[-2]
+    github_data = request.user.userprofile.github_data
+    if request.user.userprofile.github_url:
+        if not github_data:
+            # Extract username from GitHub URL
+            github_url = request.user.userprofile.github_url
+            github_username = github_url.split("/")[-1]
+            if github_username == "github.com":
+                github_username = github_url.split("/")[-2]
 
-                # Import GitHub profile
-                importer = GitHubProfileImporter(github_username)
-                github_data = json.loads(importer.import_profile(github_username))
-                
-                # Update last refresh time
-                request.user.userprofile.github_data = github_data
-                request.user.userprofile.last_github_refresh = timezone.now()
-                request.user.userprofile.save()
-            else:
-                # Use cached GitHub data
-                github_data = request.user.userprofile.github_data
-    except Exception as e:
-        logger.error(f"Error loading GitHub data: {str(e)}")
-        github_data = None
+            # Import GitHub profile
+            importer = GitHubProfileImporter(github_username)
+            github_data = json.loads(importer.import_profile(github_username))
+            
+            # Update last refresh time
+            request.user.userprofile.github_data = github_data
+            request.user.userprofile.last_github_refresh = timezone.now()
+            request.user.userprofile.save()
+
 
     context = {
         "form": form,
@@ -1246,6 +1241,24 @@ def jobs_page(request):
         if location:
             job_listings = job_listings.filter(location__icontains=location)
 
+    # Annotate job listings with has_tailored_documents
+    job_listings = [
+        {
+            'id': job.id,
+            'title': job.title,
+            'company': job.company,
+            'location': job.location,
+            'description': job.description,
+            'source': job.source,
+            'source_url': job.source_url,
+            'posted_date': job.posted_date,
+            'match_score': job.match_score,
+            'applied': job.applied,
+            'has_tailored_documents': job.has_tailored_documents,
+        }
+        for job in job_listings
+    ]
+
     context = {
         "job_listings": job_listings,
         "role": role,
@@ -1275,7 +1288,7 @@ def search_jobs(request):
             # Search for jobs using LinkedIn only
             job_listings = []
             try:
-                platform_jobs = search_agent.search_jobs(role, location, "linkedin")
+                platform_jobs = search_agent.search_jobs(role, location, "linkedin", request)
                 job_listings.extend(platform_jobs)
             except Exception as e:
                 logger.error(f"Error searching LinkedIn: {str(e)}")
@@ -1529,3 +1542,34 @@ def job_platform_preferences(request):
         "core/job_platform_preferences.html",
         {"form": form, "platforms": JobListing.JOB_SOURCES},
     )
+
+
+@login_required
+@require_POST
+def remove_job(request):
+    """Remove a job from the frontend display"""
+    try:
+        data = json.loads(request.body)
+        job_id = data.get("job_id")
+        
+        if not job_id:
+            return JsonResponse({"error": "Job ID is required"}, status=400)
+            
+        # Get the job listing
+        job = JobListing.objects.filter(id=job_id).first()
+        if not job:
+            return JsonResponse({"error": "Job not found"}, status=404)
+            
+        # Store the job ID in user's session to hide it from future searches
+        hidden_jobs = request.session.get("hidden_jobs", [])
+        if job_id not in hidden_jobs:
+            hidden_jobs.append(job_id)
+            request.session["hidden_jobs"] = hidden_jobs
+            
+        return JsonResponse({"message": "Job removed successfully"})
+        
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON data"}, status=400)
+    except Exception as e:
+        logger.error(f"Error removing job: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=500)

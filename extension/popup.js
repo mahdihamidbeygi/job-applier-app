@@ -1,10 +1,14 @@
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
   const detectButton = document.getElementById('detectForm');
   const fillButton = document.getElementById('fillForm');
   const statusDiv = document.getElementById('status');
   const detectLoading = document.getElementById('detectLoading');
   const fillLoading = document.getElementById('fillLoading');
   const settingsLink = document.getElementById('openSettings');
+
+  // Disable buttons initially
+  detectButton.disabled = true;
+  fillButton.disabled = true;
 
   // Load settings
   chrome.storage.local.get(['autoDetect', 'autoFill'], function(result) {
@@ -19,20 +23,80 @@ document.addEventListener('DOMContentLoaded', function() {
     chrome.runtime.openOptionsPage();
   });
 
-  // Check if we're on a job application page
-  chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-    chrome.tabs.sendMessage(tabs[0].id, {action: "checkForm"}, function(response) {
+  // Initialize the extension
+  await initializeExtension();
+
+  // Add event listeners
+  detectButton.addEventListener('click', detectForm);
+  fillButton.addEventListener('click', fillForm);
+
+  async function initializeExtension() {
+    try {
+      // Get current tab
+      const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+      const currentTab = tabs[0];
+      
+      if (!currentTab) {
+        throw new Error('No active tab found');
+      }
+
+      // Check if we can inject scripts
+      if (!currentTab.url.startsWith('http')) {
+        throw new Error('Extension can only work on web pages');
+      }
+
+      // Try to inject content scripts
+      try {
+        await injectContentScripts(currentTab.id);
+      } catch (error) {
+        console.error('Failed to inject content scripts:', error);
+        throw new Error('Failed to initialize extension');
+      }
+
+      // Check for form
+      const response = await chrome.tabs.sendMessage(currentTab.id, {action: "checkForm"});
       if (response && response.hasForm) {
         detectButton.disabled = false;
         updateStatus('Form detected! Click "Detect Application Form" to analyze.', 'success');
       } else {
         updateStatus('No job application form detected on this page.', 'error');
       }
-    });
-  });
+    } catch (error) {
+      console.error('Initialization error:', error);
+      updateStatus(error.message, 'error');
+    }
+  }
 
-  detectButton.addEventListener('click', detectForm);
-  fillButton.addEventListener('click', fillForm);
+  async function injectContentScripts(tabId) {
+    // Check if content scripts are already loaded
+    try {
+      await chrome.tabs.sendMessage(tabId, {action: "ping"});
+      console.log('Content scripts already loaded');
+      return;
+    } catch (error) {
+      console.log('Content scripts not loaded, injecting...');
+    }
+
+    // Inject utils.js first
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: ['utils.js']
+    });
+
+    // Then inject content.js
+    await chrome.scripting.executeScript({
+      target: { tabId: tabId },
+      files: ['content.js']
+    });
+
+    // Verify injection
+    try {
+      await chrome.tabs.sendMessage(tabId, {action: "ping"});
+      console.log('Content scripts successfully injected');
+    } catch (error) {
+      throw new Error('Failed to verify content script injection');
+    }
+  }
 
   async function detectForm() {
     setLoading(detectButton, detectLoading, true);
@@ -40,6 +104,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     try {
       const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+      if (!tabs[0]) {
+        throw new Error('No active tab found');
+      }
+
+      // Ensure content scripts are loaded
+      await injectContentScripts(tabs[0].id);
+
       const analysis = await chrome.tabs.sendMessage(tabs[0].id, {action: "analyzeForm"});
       
       if (analysis && analysis.success) {
@@ -49,6 +120,7 @@ document.addEventListener('DOMContentLoaded', function() {
         throw new Error(analysis?.error || 'Form analysis failed');
       }
     } catch (error) {
+      console.error('Error:', error);
       updateStatus('Failed to analyze form: ' + error.message, 'error');
     } finally {
       setLoading(detectButton, detectLoading, false);
@@ -61,6 +133,13 @@ document.addEventListener('DOMContentLoaded', function() {
 
     try {
       const tabs = await chrome.tabs.query({active: true, currentWindow: true});
+      if (!tabs[0]) {
+        throw new Error('No active tab found');
+      }
+
+      // Ensure content scripts are loaded
+      await injectContentScripts(tabs[0].id);
+
       const fillResult = await chrome.tabs.sendMessage(tabs[0].id, {action: "fillForm"});
       
       if (fillResult && fillResult.success) {
@@ -69,6 +148,7 @@ document.addEventListener('DOMContentLoaded', function() {
         throw new Error(fillResult?.error || 'Form filling failed');
       }
     } catch (error) {
+      console.error('Error:', error);
       updateStatus('Failed to fill form: ' + error.message, 'error');
     } finally {
       setLoading(fillButton, fillLoading, false);

@@ -16,6 +16,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+from core.models import JobListing
 from core.utils.local_llms import OllamaClient
 
 
@@ -148,17 +149,23 @@ class LinkedInJobScraper:
         self.driver.execute_script("window.scrollTo(0, 0);")  # scroll back to the top
         time.sleep(1)
 
-    def search_jobs(self, role: str, location: str, max_pages: int = 3) -> List[Dict[str, Any]]:
+    def search_jobs(self, role: str, location: str, max_pages: int = 3, request=None) -> List[Dict[str, Any]]:
         jobs = []
         urls_done = []
         try:
             self.setup_driver()
             encoded_role = urllib.parse.quote(role)
             encoded_location = urllib.parse.quote(location)
-            search_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_role}&location={encoded_location}&f_TPR=r86400&f_JT=F%2CP%2CC%2CI&f_WT=2&position=1&pageNum=0"
+            # Remove filters to get more general results
+            search_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_role}&location={encoded_location}&position=1&pageNum=0"
             print(f"Searching for jobs at {search_url}")
             self.driver.get(search_url)
             time.sleep(3)  # Wait for initial load
+
+            # Get hidden jobs from session if request is provided
+            hidden_jobs = []
+            if request:
+                hidden_jobs = request.session.get("hidden_jobs", [])
 
             page = 0
             while page <= max_pages:
@@ -171,14 +178,28 @@ class LinkedInJobScraper:
                         continue
                     # print(f"Scraping job details for {link}...")
                     job_details = self._extract_job_details(link)
-                    jobs.append(job_details)
-                    urls_done.append(link)
-                    time.sleep(2)  # Avoid overwhelming the server
-
-                # if job_links:
-                #     # Process all job URLs in parallel
-                #     page_jobs = asyncio.run(self._process_job_urls(job_links))
-                #     jobs.extend(page_jobs)
+                    if job_details:
+                        # Check if we have tailored documents for this job
+                        existing_job = JobListing.objects.filter(
+                            title=job_details["title"],
+                            company=job_details["company"],
+                            location=job_details["location"],
+                            source_url=job_details["source_url"]
+                        ).first()
+                        
+                        if existing_job:
+                            # Skip if job is in hidden jobs list
+                            if existing_job.id in hidden_jobs:
+                                continue
+                            job_details["has_tailored_documents"] = existing_job.has_tailored_documents
+                            job_details["id"] = existing_job.id  # Add job ID for frontend
+                        else:
+                            job_details["has_tailored_documents"] = False
+                            job_details["id"] = None
+                            
+                        jobs.append(job_details)
+                        urls_done.append(link)
+                        time.sleep(2)  # Avoid overwhelming the server
 
                 # Check if there's a next page
                 try:
