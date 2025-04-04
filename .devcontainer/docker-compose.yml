@@ -1,0 +1,79 @@
+version: "3.8"
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    volumes:
+      - ..:/workspace:cached
+      - ~/.gitconfig:/home/vscode/.gitconfig
+      - ~/.ssh:/home/vscode/.ssh
+    command: sleep infinity
+    environment:
+      - DJANGO_DEBUG=True
+      - DATABASE_URL=postgres://jobapplier:jobapplier@db:5432/db_jobapplier
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/workspace
+      - DJANGO_SETTINGS_MODULE=job_applier.settings
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    user: vscode
+
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: jobapplier
+      POSTGRES_DB: db_jobapplier
+      POSTGRES_PASSWORD: jobapplier
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U jobapplier"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    ports:
+      - "6379:6379"
+
+  celery:
+    build:
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
+    command: celery -A job_applier worker -l info
+    volumes:
+      - ..:/workspace:cached
+    environment:
+      - DJANGO_DEBUG=True
+      - DATABASE_URL=postgres://jobapplier:jobapplier@db:5432/db_jobapplier
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/workspace
+      - DJANGO_SETTINGS_MODULE=job_applier.settings
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  redis-data:
