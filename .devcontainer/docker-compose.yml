@@ -1,79 +1,66 @@
-version: "3.8"
+FROM python:3.11-slim
 
-services:
-  app:
-    build:
-      context: ..
-      dockerfile: .devcontainer/Dockerfile
-    volumes:
-      - ..:/workspace:cached
-      - ~/.gitconfig:/home/vscode/.gitconfig
-      - ~/.ssh:/home/vscode/.ssh
-    command: sleep infinity
-    environment:
-      - DJANGO_DEBUG=True
-      - DATABASE_URL=postgres://jobapplier:jobapplier@db:5432/db_jobapplier
-      - REDIS_URL=redis://redis:6379/0
-      - PYTHONPATH=/workspace
-      - DJANGO_SETTINGS_MODULE=job_applier.settings
-    ports:
-      - "8000:8000"
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    user: vscode
+# Avoid warnings by switching to noninteractive
+ENV DEBIAN_FRONTEND=noninteractive
 
-  db:
-    image: postgres:15
-    restart: unless-stopped
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-    environment:
-      POSTGRES_USER: jobapplier
-      POSTGRES_DB: db_jobapplier
-      POSTGRES_PASSWORD: jobapplier
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U jobapplier"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "5432:5432"
+# Create a non-root user
+ARG USERNAME=vscode
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
 
-  redis:
-    image: redis:7
-    restart: unless-stopped
-    volumes:
-      - redis-data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    ports:
-      - "6379:6379"
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    build-essential \
+    libpq-dev \
+    wget \
+    gnupg2 \
+    # Add development tools
+    vim \
+    htop \
+    # Clean up
+    && rm -rf /var/lib/apt/lists/*
 
-  celery:
-    build:
-      context: ..
-      dockerfile: .devcontainer/Dockerfile
-    command: celery -A job_applier worker -l info
-    volumes:
-      - ..:/workspace:cached
-    environment:
-      - DJANGO_DEBUG=True
-      - DATABASE_URL=postgres://jobapplier:jobapplier@db:5432/db_jobapplier
-      - REDIS_URL=redis://redis:6379/0
-      - PYTHONPATH=/workspace
-      - DJANGO_SETTINGS_MODULE=job_applier.settings
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+# Install Chrome and its dependencies for Selenium
+RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
 
-volumes:
-  postgres-data:
-  redis-data:
+# Create the user
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
+    # Add sudo support
+    && apt-get update \
+    && apt-get install -y sudo \
+    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
+    && chmod 0440 /etc/sudoers.d/$USERNAME \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set work directory
+WORKDIR /workspace
+
+# Install Python development tools
+RUN pip install --no-cache-dir \
+    black \
+    flake8 \
+    isort \
+    pytest \
+    pytest-django \
+    ipython \
+    django-debug-toolbar \
+    celery \
+    redis
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    DJANGO_SETTINGS_MODULE=job_applier.settings \
+    PATH="${PATH}:/home/${USERNAME}/.local/bin" \
+    DEBIAN_FRONTEND=dialog \
+    HOME=/home/${USERNAME}
+
+# Switch to non-root user
+USER $USERNAME 

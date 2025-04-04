@@ -50,14 +50,17 @@ RUN pip install --no-cache-dir \
     pytest \
     pytest-django \
     ipython \
-    django-debug-toolbar
+    django-debug-toolbar \
+    celery \
+    redis
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE=job_applier.settings \
     PATH="${PATH}:/home/${USERNAME}/.local/bin" \
-    DEBIAN_FRONTEND=dialog
+    DEBIAN_FRONTEND=dialog \
+    HOME=/home/${USERNAME}
 
 # Switch to non-root user
 USER $USERNAME 
