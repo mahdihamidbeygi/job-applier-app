@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "core",
     "rest_framework",
+    "rest_framework_simplejwt",
     "storages",
     "django_filters",
     "drf_spectacular",
@@ -91,7 +92,7 @@ WSGI_APPLICATION = "job_applier.wsgi.application"
 
 DATABASES = {
     'default': dj_database_url.config(
-        default=os.getenv('DATABASE_URL', 'postgres://jobapplier:jobapplier@127.0.0.1:5432/db_jobapplier'),
+        default=os.getenv('DATABASE_URL', 'postgres://postgres:postgres@localhost:5432/jobapplier'),
         conn_max_age=600
     )
 }
@@ -216,10 +217,14 @@ SPECTACULAR_SETTINGS = {
 TEMPERATURE = 0.0
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development, restrict in production
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "https://jobs.lever.co",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
 ]
 
 # CSRF settings
@@ -228,10 +233,11 @@ CSRF_TRUSTED_ORIGINS = [
     'chrome-extension://gjhaikeodndcnemkibilnmbplmicjnif',
     'http://localhost:8000',
     'http://127.0.0.1:8000',
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
 ]
 
 # Disable CSRF for API endpoints
-CSRF_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_USE_SESSIONS = False
