@@ -143,6 +143,68 @@
     font-weight: 600;
   }
 
+  /* Section Header */
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-actions {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .section-actions .retry-button {
+    width: auto;
+    min-width: 120px;
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    background: var(--primary-color);
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+  }
+
+  .action-btn:hover {
+    background: var(--primary-color-dark);
+    transform: translateY(-2px);
+  }
+
+  .add-record-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 5px;
+    background: var(--primary-color);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.3s ease;
+  }
+
+  .add-record-btn:hover {
+    background: var(--primary-color-dark);
+    transform: translateY(-2px);
+  }
+
   /* Record Items */
   .experience-item,
   .project-item,
@@ -1379,9 +1441,18 @@
     <section id="skills" class="section">
       <div class="section-header">
         <h2>Skills</h2>
-        <button class="add-record-btn" onclick="toggleForm('skill-form')">
-          <i class="fas fa-plus"></i> Add Skill
-        </button>
+        <div class="section-actions">
+          <button
+            onclick="window.location.href='{% url 'core:deduplicate_skills' %}'"
+            class="retry-button"
+            type="button"
+          >
+            <i class="fas fa-magic"></i> Clean Up Skills
+          </button>
+          <button class="retry-button" onclick="toggleForm('skill-form')">
+            <i class="fas fa-plus"></i> Add Skill
+          </button>
+        </div>
       </div>
       <form
         id="skill-form"

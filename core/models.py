@@ -182,13 +182,34 @@ class Skill(models.Model):
     ]
 
     profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="skills")
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, db_index=True)
     category = models.CharField(max_length=20, choices=SKILL_CATEGORIES)
     proficiency = models.IntegerField(choices=[(i, i) for i in range(1, 6)], default=3)
     order = models.IntegerField(default=0)
 
     class Meta:
         ordering = ["category", "-proficiency", "name"]
+        unique_together = ['profile', 'category']
+
+    def save(self, *args, **kwargs):
+        # Capitalize the first letter of each word in the skill name
+        self.name = self.name.title()
+        
+        # Check for existing skills case-insensitively
+        existing_skill = Skill.objects.filter(
+            profile=self.profile,
+            category=self.category,
+            name__iexact=self.name
+        ).exclude(pk=self.pk).first()
+        
+        if existing_skill:
+            # Update proficiency of existing skill if this one has higher proficiency
+            if self.proficiency > existing_skill.proficiency:
+                existing_skill.proficiency = self.proficiency
+                existing_skill.save()
+            return  # Don't save the new skill
+        
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.name} ({self.get_category_display()})"

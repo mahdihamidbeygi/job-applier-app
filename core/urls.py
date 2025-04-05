@@ -34,6 +34,8 @@ urlpatterns = [
     path("profile/add-skill/", views.add_skill, name="add_skill"),
     # Delete items
     path("profile/delete/<str:model_name>/<int:item_id>/", views.delete_item, name="delete_item"),
+    # Deduplicate skills
+    path("profile/deduplicate-skills/", views.deduplicate_skills, name="deduplicate_skills"),
     # Profile import URLs
     path("profile/import/github/", views.import_github_profile, name="import_github_profile"),
     path("profile/import/resume/", views.import_resume, name="import_resume"),

@@ -89,6 +89,7 @@ __all__ = [
     "search_jobs",
     "job_platform_preferences",
     "remove_job",
+    "deduplicate_skills",
 ]
 
 
@@ -609,6 +610,7 @@ def import_github_profile(request):
 
             # Save skills
             for skill in profile_data.get("skills", []):
+                # The save method in Skill model will handle duplicates and case normalization
                 Skill.objects.create(
                     profile=request.user.userprofile,
                     name=skill["name"],
@@ -731,6 +733,7 @@ def import_resume(request):
 
         # Save skills
         for skill in profile_data.get("skills", []):
+            # The save method in Skill model will handle duplicates and case normalization
             Skill.objects.create(
                 profile=request.user.userprofile,
                 name=skill.get("name", ""),
@@ -808,6 +811,7 @@ def import_linkedin_profile(request):
 
         # Save skills
         for skill in profile_data.get("skills", []):
+            # The save method in Skill model will handle duplicates and case normalization
             Skill.objects.create(
                 profile=request.user.userprofile,
                 name=skill["name"],
@@ -1619,3 +1623,48 @@ def remove_job(request):
     except Exception as e:
         logger.error(f"Error removing job: {str(e)}")
         return JsonResponse({"error": str(e)}, status=500)
+
+
+@login_required
+def deduplicate_skills(request):
+    """Remove duplicate skills for the current user's profile."""
+    try:
+        # Get all skills for the user
+        skills = request.user.userprofile.skills.all()
+        
+        # Keep track of seen skills (case-insensitive)
+        seen_skills = {}
+        duplicates_removed = 0
+        
+        for skill in skills:
+            # Create a key using lowercase name and category
+            key = (skill.name.lower(), skill.category)
+            
+            if key in seen_skills:
+                # If we've seen this skill before
+                existing_skill = seen_skills[key]
+                
+                # Keep the one with higher proficiency
+                if skill.proficiency > existing_skill.proficiency:
+                    existing_skill.delete()
+                    seen_skills[key] = skill
+                else:
+                    skill.delete()
+                duplicates_removed += 1
+            else:
+                # First time seeing this skill
+                seen_skills[key] = skill
+                # Normalize the name to Title Case
+                skill.name = skill.name.title()
+                skill.save()
+        
+        if duplicates_removed > 0:
+            messages.success(request, f"Successfully removed {duplicates_removed} duplicate skills.")
+        else:
+            messages.info(request, "No duplicate skills found.")
+            
+        return redirect('core:profile')
+        
+    except Exception as e:
+        messages.error(request, f"Error removing duplicate skills: {str(e)}")
+        return redirect('core:profile')
