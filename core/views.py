@@ -1278,7 +1278,7 @@ def get_token(request):
 def jobs_page(request):
     """View for the jobs page"""
     # Get user's job listings
-    job_listings = JobListing.objects.all().order_by("-posted_date", "-match_score")
+    job_listings = JobListing.objects.filter(user=request.user).order_by("-posted_date", "-match_score")
 
     # Get search parameters from request
     role = request.GET.get("role", "")
@@ -1324,81 +1324,94 @@ def search_jobs(request):
             data = json.loads(request.body)
             role = data.get("role")
             location = data.get("location")
+            platforms = data.get("platforms", [])  # Get platforms from request
 
             if not role or not location:
                 return JsonResponse({"error": "Role and location are required"}, status=400)
 
-            # Get user profile for job search
+            # Get user profile and their preferences
             user_profile = request.user.userprofile
+            try:
+                preferences = JobPlatformPreference.objects.get(user_profile=user_profile)
+                # If no platforms specified in request, use user's preferences
+                if not platforms:
+                    platforms = preferences.preferred_platforms
+            except JobPlatformPreference.DoesNotExist:
+                # Default to LinkedIn if no preferences set
+                if not platforms:
+                    platforms = ["linkedin"]
 
             # Initialize agents
             personal_agent = PersonalAgent(request.user.id)
             search_agent = SearchAgent(request.user.id, personal_agent)
 
-            # Search for jobs using LinkedIn only
+            # Search for jobs across all selected platforms
             job_listings = []
-            try:
-                platform_jobs = search_agent.search_jobs(role, location, "linkedin", request)
-                job_listings.extend(platform_jobs)
-            except Exception as e:
-                logger.error(f"Error searching LinkedIn: {str(e)}")
-                return JsonResponse({"error": "Error searching jobs"}, status=500)
+            errors = []
+
+            for platform in platforms:
+                try:
+                    platform_jobs = search_agent.search_jobs(role, location, platform, request)
+                    job_listings.extend(platform_jobs)
+                except Exception as e:
+                    logger.error(f"Error searching {platform}: {str(e)}")
+                    errors.append(f"{platform.title()}: {str(e)}")
+
+            if not job_listings and errors:
+                # If we have errors and no results, return the error
+                error_msg = "Errors occurred while searching: " + "; ".join(errors)
+                return JsonResponse({"error": error_msg}, status=500)
 
             # Process and save job listings
             processed_jobs = []
-            for job_data in job_listings:
+            for job in job_listings:
                 try:
-                    # Check if job already exists
-                    existing_job = JobListing.objects.filter(
-                        title=job_data["title"],
-                        company=job_data["company"],
-                        location=job_data["location"],
-                        source_url=job_data["source_url"],
-                    ).first()
-
-                    if existing_job:
-                        job = existing_job
-                    else:
-                        # Create new job listing
-                        job = JobListing.objects.create(
-                            title=job_data["title"],
-                            company=job_data["company"],
-                            location=job_data["location"],
-                            description=job_data["description"],
-                            source_url=job_data["source_url"],
-                            source="linkedin",  # Always set to LinkedIn
-                            posted_date=job_data.get("posted_date", timezone.now()),
-                        )
-
-                        # Trigger asynchronous document generation for new jobs
-                        generate_documents_async.delay(job.id, user_profile.id)
-
-                    processed_jobs.append(
-                        {
-                            "id": job.id,
-                            "title": job.title,
-                            "company": job.company,
-                            "location": job.location,
-                            "description": job.description,
-                            "source_url": job.source_url,
-                            "source": job.source,
-                            "posted_date": job.posted_date.isoformat(),
-                            "has_tailored_documents": job.has_tailored_documents,
-                        }
+                    # Create or update job listing
+                    job_obj, created = JobListing.objects.update_or_create(
+                        source_url=job["url"],
+                        user=request.user,
+                        defaults={
+                            "user": request.user,
+                            "title": job["title"],
+                            "company": job["company"],
+                            "location": job["location"],
+                            "description": job["description"],
+                            "source": job["source"],
+                            "posted_date": job.get("posted_date", timezone.now().date()),
+                            "salary_range": job.get("salary_range", ""),
+                            "job_type": job.get("job_type", ""),
+                            "requirements": job.get("requirements", ""),
+                            "match_score": job.get("match_score", None),
+                        },
                     )
+                    processed_jobs.append({
+                        "id": job_obj.id,
+                        "title": job_obj.title,
+                        "company": job_obj.company,
+                        "location": job_obj.location,
+                        "description": job_obj.description,
+                        "source": job_obj.source,
+                        "source_url": job_obj.source_url,
+                        "posted_date": job_obj.posted_date,
+                        "match_score": job_obj.match_score,
+                        "applied": job_obj.applied,
+                    })
                 except Exception as e:
-                    logger.error(f"Error processing job listing: {str(e)}")
+                    logger.error(f"Error processing job: {str(e)}")
                     continue
 
-            return JsonResponse({"jobs": processed_jobs})
+            return JsonResponse({
+                "jobs": processed_jobs,
+                "warnings": errors if errors else None
+            })
 
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data"}, status=400)
         except Exception as e:
             logger.error(f"Error in search_jobs: {str(e)}")
-            return JsonResponse({"error": str(e)}, status=500)
+            return JsonResponse({"error": "An unexpected error occurred"}, status=500)
 
-    return render(request, "core/jobs.html")
+    return JsonResponse({"error": "Only POST method is allowed"}, status=405)
 
 
 @api_view(["POST"])

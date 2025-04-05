@@ -1,6 +1,7 @@
 from datetime import date
 
 from dateutil.relativedelta import relativedelta
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
@@ -189,7 +190,6 @@ class Skill(models.Model):
 
     class Meta:
         ordering = ["category", "-proficiency", "name"]
-        unique_together = ['profile', 'category']
 
     def save(self, *args, **kwargs):
         # Capitalize the first letter of each word in the skill name
@@ -226,6 +226,7 @@ class JobListing(models.Model):
         ("other", "Other"),
     ]
 
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='job_listings', null=True)
     title = models.CharField(max_length=500)
     company = models.CharField(max_length=500)
     location = models.CharField(max_length=500)
