@@ -1,21 +1,14 @@
 {
-    "name": "Job Applier Development",
+    "name": "Project Development",
+    "image": "mcr.microsoft.com/devcontainers/universal:2",
     "dockerComposeFile": "docker-compose.yml",
     "service": "app",
     "workspaceFolder": "/workspace",
     "customizations": {
         "vscode": {
             "extensions": [
-                "ms-python.python",
-                "ms-python.vscode-pylance",
-                "ms-azuretools.vscode-docker",
-                "redhat.vscode-yaml",
-                "ms-python.black-formatter",
-                "ms-python.flake8",
-                "ms-python.isort",
-                "streetsidesoftware.code-spell-checker",
-                "eamodio.gitlens",
-                "GitHub.copilot"
+                "github.copilot",
+                "github.vscode-pull-request-github"
             ],
             "settings": {
                 "python.defaultInterpreterPath": "/usr/local/bin/python",
@@ -29,11 +22,10 @@
             }
         }
     },
-    "forwardPorts": [8000, 6379, 5432],
+    "forwardPorts": [],
     "postCreateCommand": "pip install -r requirements.txt && python manage.py migrate",
     "remoteUser": "vscode",
     "features": {
-        "ghcr.io/devcontainers/features/git:1": {},
         "ghcr.io/devcontainers/features/github-cli:1": {}
     }
-} 
+}

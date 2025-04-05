@@ -3,34 +3,22 @@ version: "3.8"
 services:
   app:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: .devcontainer/Dockerfile
     volumes:
-      - ..:/workspace:cached
+      - ../..:/workspace:cached
     command: sleep infinity
-    environment:
-      - DJANGO_SETTINGS_MODULE=job_applier.settings
-    ports:
-      - "8000:8000"
-    depends_on:
-      - db
-      - redis
+    network_mode: service:db
 
   db:
-    image: postgres:15
+    image: postgres:latest
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
-      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: job_applier
-
-  redis:
-    image: redis:7
-    restart: unless-stopped
-    volumes:
-      - redis-data:/data
+      POSTGRES_USER: postgres
+      POSTGRES_DB: postgres
 
 volumes:
   postgres-data:

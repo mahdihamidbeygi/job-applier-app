@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM mcr.microsoft.com/devcontainers/python:3
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -29,6 +29,11 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
     && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
+# Install additional packages
+RUN apt-get update && \
+    apt-get install -y postgresql-client && \
+    rm -rf /var/lib/apt/lists/*
+
 # Create the user
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
@@ -54,6 +59,11 @@ RUN pip install --no-cache-dir \
     celery \
     redis
 
+# Install Python packages
+COPY requirements.txt /tmp/pip-tmp/
+RUN pip3 install --requirement /tmp/pip-tmp/requirements.txt && \
+    rm -rf /tmp/pip-tmp
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -63,4 +73,4 @@ ENV PYTHONUNBUFFERED=1 \
     HOME=/home/${USERNAME}
 
 # Switch to non-root user
-USER $USERNAME 
+USER $USERNAME
