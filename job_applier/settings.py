@@ -216,6 +216,17 @@ SPECTACULAR_SETTINGS = {
 
 TEMPERATURE = 0.0
 
+# Security Settings
+SECURE_SSL_REDIRECT = False  # Disable SSL redirect for development
+SESSION_COOKIE_SECURE = False  # Allow non-HTTPS cookies in development
+CSRF_COOKIE_SECURE = False  # Allow non-HTTPS CSRF cookies in development
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development, restrict in production
 CORS_ALLOW_CREDENTIALS = True
@@ -223,18 +234,17 @@ CORS_ALLOWED_ORIGINS = [
     "https://jobs.lever.co",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
 ]
 
 # CSRF settings
 CSRF_TRUSTED_ORIGINS = [
-    'https://*.onrender.com',  # Add your Render.com domain
-    'chrome-extension://gjhaikeodndcnemkibilnmbplmicjnif',
-    'http://localhost:8000',
-    'http://127.0.0.1:8000',
-    'http://localhost:3000',
-    'http://127.0.0.1:3000',
+    "chrome-extension://gjhaikeodndcnemkibilnmbplmicjnif",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+    "http://localhost:8001",
+    "http://127.0.0.1:8001",
 ]
 
 # Disable CSRF for API endpoints
