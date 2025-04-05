@@ -490,6 +490,73 @@ Format as JSON:
             logger.error(f"Error in import_profile: {str(e)}")
             return json.dumps({"error": str(e)})
 
+    def transform_repos_to_projects(self, repo_data: List[Dict], user_profile) -> List[Dict]:
+        """
+        Transform GitHub repositories into project records.
+        
+        Args:
+            repo_data (List[Dict]): List of repository data from GitHub
+            user_profile: The UserProfile instance to associate projects with
+            
+        Returns:
+            List[Dict]: List of project dictionaries ready to be created
+        """
+        projects = []
+        
+        try:
+            for repo in repo_data:
+                # Skip if repo is a fork to avoid duplicating other people's projects
+                if repo.get('fork', False):
+                    continue
+                    
+                # Convert GitHub's datetime string to date object
+                updated_at = datetime.strptime(
+                    repo.get('last_updated', '').split('T')[0], 
+                    '%Y-%m-%d'
+                ).date() if repo.get('last_updated') else None
+                
+                # Extract technologies from repo
+                technologies = []
+                if repo.get('language'):
+                    technologies.append(repo['language'])
+                if repo.get('dependencies'):
+                    # Add main dependencies
+                    if repo['dependencies'].get('requirements'):
+                        technologies.extend([dep.split('==')[0] for dep in repo['dependencies']['requirements']])
+                    if repo['dependencies'].get('setup_py'):
+                        technologies.extend([dep.split('==')[0] for dep in repo['dependencies']['setup_py']])
+                
+                # Remove duplicates and join with commas
+                technologies = ', '.join(sorted(set(filter(None, technologies))))
+                
+                project_data = {
+                    'profile': user_profile,
+                    'title': repo.get('name', ''),
+                    'description': repo.get('description', '') or f"A {repo.get('language', 'software')} project.",
+                    'technologies': technologies,
+                    'github_url': f"https://github.com/{self.github_username}/{repo.get('name')}",
+                    'live_url': '',  # GitHub API doesn't provide homepage URL in our current data
+                    'start_date': datetime.strptime(
+                        repo.get('commit_history', {}).get('first_commit', '').split('T')[0],
+                        '%Y-%m-%d'
+                    ).date() if repo.get('commit_history', {}).get('first_commit') else updated_at,
+                    'end_date': None,  # Since it's a GitHub repo, we'll consider it ongoing
+                    'current': True,  # Mark as current since it's from GitHub
+                    # Use stars as a proxy for order (more stars = higher priority)
+                    'order': repo.get('stars', 0)
+                }
+                
+                projects.append(project_data)
+                
+            # Sort projects by order (stars) descending
+            projects.sort(key=lambda x: x['order'], reverse=True)
+            
+            return projects
+            
+        except Exception as e:
+            logger.error(f"Error transforming repos to projects: {str(e)}")
+            return []
+
 
 class ResumeImporter:
     """Class for handling resume uploads and parsing."""

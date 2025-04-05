@@ -952,7 +952,9 @@
             id="github-username"
             placeholder="Enter your GitHub profile URL"
           />
-          <button onclick="importFromGitHub()">Import</button>
+          <button onclick="importFromGitHub()" class="retry-button">
+            Import
+          </button>
         </div>
       </div>
 
@@ -969,7 +971,9 @@
             <input type="file" id="resume-file" accept=".pdf,.doc,.docx" />
             <label for="resume-file">Choose a file or drag it here</label>
           </div>
-          <button onclick="importFromResume()">Import</button>
+          <button onclick="importFromResume()" class="retry-button">
+            Import
+          </button>
         </div>
       </div>
 
@@ -987,7 +991,9 @@
             id="linkedin-url"
             placeholder="Enter your LinkedIn profile URL"
           />
-          <button onclick="importFromLinkedIn()">Import</button>
+          <button onclick="importFromLinkedIn()" class="retry-button">
+            Import
+          </button>
         </div>
       </div>
     </div>
@@ -1438,8 +1444,9 @@
               <div class="github-meta">
                 {% if github_data.location %}
                 <span
-                  ><i class="fas fa-map-marker-alt"></i> {{ github_data.location
-                  }}</span
+                  ><i class="fas fa-map-marker-alt"></i>
+                  <!--{{ github_data.location }}-->
+                  {{ github_data.location }}</span
                 >
                 {% endif %} {% if github_data.company %}
                 <span
@@ -1524,8 +1531,9 @@
               </p>
               <div class="repo-meta">
                 <span
-                  ><i class="fas fa-calendar"></i> Updated {{ repo.updated_at
-                  }}</span
+                  ><i class="fas fa-calendar"></i> Updated
+                  <!---{{ repo.updated_at|date:"M d, Y" }}-->
+                  {{ repo.updated_at|date:"M d, Y"}}</span
                 >
                 {% if repo.language %}
                 <span><i class="fas fa-code"></i> {{ repo.language }}</span>

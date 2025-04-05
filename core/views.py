@@ -145,11 +145,34 @@ def profile(request):
             importer = GitHubProfileImporter(github_username)
             github_data = json.loads(importer.import_profile(github_username))
             
+            # Transform repositories into projects
+            projects = importer.transform_repos_to_projects(
+                github_data.get("repositories", []),
+                request.user.userprofile
+            )
+
+            # Save projects
+            for project_data in projects:
+                # Check if project already exists (based on GitHub URL)
+                existing_project = Project.objects.filter(
+                    profile=request.user.userprofile,
+                    github_url=project_data['github_url']
+                ).first()
+                
+                if existing_project:
+                    # Update existing project
+                    for key, value in project_data.items():
+                        if key != 'profile':  # Skip updating the profile reference
+                            setattr(existing_project, key, value)
+                    existing_project.save()
+                else:
+                    # Create new project
+                    Project.objects.create(**project_data)
+            
             # Update last refresh time
             request.user.userprofile.github_data = github_data
             request.user.userprofile.last_github_refresh = timezone.now()
             request.user.userprofile.save()
-
 
     context = {
         "form": form,
@@ -548,6 +571,29 @@ def import_github_profile(request):
 
         with GitHubProfileImporter(github_username) as importer:
             profile_data = json.loads(importer.import_profile(github_username))
+
+            # Transform repositories into projects
+            projects = importer.transform_repos_to_projects(
+                profile_data.get("repositories", []),
+                request.user.userprofile
+            )
+
+            # Save projects
+            for project_data in projects:
+                # Check if project already exists (based on GitHub URL)
+                existing_project = Project.objects.filter(
+                    profile=request.user.userprofile,
+                    github_url=project_data['github_url']
+                ).first()
+                
+                if existing_project:
+                    # Update existing project
+                    for key, value in project_data.items():
+                        setattr(existing_project, key, value)
+                    existing_project.save()
+                else:
+                    # Create new project
+                    Project.objects.create(**project_data)
 
             # Save work experiences
             for exp in profile_data.get("work_experiences", []):
