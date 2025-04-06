@@ -701,13 +701,16 @@ def import_resume(request):
                     except (ValueError, TypeError):
                         gpa = None
 
-                # Parse dates
+                # Set default dates if not provided
                 start_date = edu.get("start_date")
-                if isinstance(start_date, str):
+                if not start_date:
+                    # Use January 1st of the current year as a default date
+                    start_date = date.today().replace(month=1, day=1)
+                elif isinstance(start_date, str):
                     try:
                         start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
                     except ValueError:
-                        start_date = None
+                        start_date = date.today().replace(month=1, day=1)
 
                 end_date = edu.get("end_date")
                 if isinstance(end_date, str):

@@ -119,7 +119,7 @@ class Education(models.Model):
     institution = models.CharField(max_length=200)
     degree = models.CharField(max_length=200)
     field_of_study = models.CharField(max_length=200)
-    start_date = models.DateField()
+    start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     current = models.BooleanField(default=False)
     gpa = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
