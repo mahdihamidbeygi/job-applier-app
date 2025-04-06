@@ -2,13 +2,14 @@ from dataclasses import dataclass
 from typing import Any, Dict, List
 
 from langchain.memory import ConversationBufferMemory
+from langchain_core.memory import BaseMemory
 
 from core.utils.local_llms import OllamaClient
 
 
 @dataclass
 class AgentState:
-    memory: ConversationBufferMemory
+    memory: BaseMemory
     llm: OllamaClient
     user_id: int
 
@@ -19,8 +20,9 @@ class BaseAgent:
         self.llm = OllamaClient(model=model, temperature=0.0)
         # Initialize memory with basic configuration
         self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
             return_messages=True,
+            memory_key="chat_history",
+            input_key="input",
             output_key="output"
         )
         self.state = AgentState(memory=self.memory, llm=self.llm, user_id=user_id)
