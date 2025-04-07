@@ -139,7 +139,7 @@ class Certification(models.Model):
     )
     name = models.CharField(max_length=200)
     issuer = models.CharField(max_length=200)
-    issue_date = models.DateField()
+    issue_date = models.DateField(null=True, blank=True)
     expiry_date = models.DateField(null=True, blank=True)
     credential_id = models.CharField(max_length=100, blank=True)
     credential_url = models.URLField(blank=True)

@@ -41,8 +41,8 @@ class ResumeComposition:
                     if char.isdigit() or char == "+"
                 ),
                 "location": getattr(user_data, "location", ""),
-                "linkedin": getattr(user_data, "linkedin", ""),
-                "github": getattr(user_data, "github", ""),
+                "linkedin": getattr(user_data, "linkedin_url", ""),
+                "github": getattr(user_data, "github_url", ""),
                 "title": getattr(user_data, "title", ""),
                 "headline": getattr(user_data, "headline", ""),
                 "professional_summary": getattr(user_data, "professional_summary", ""),
@@ -197,6 +197,7 @@ class ResumeComposition:
                 fontSize=12,
                 leftIndent=8,  # More indent than the main line
                 firstLineIndent=0,
+                leading=14,
                 spaceAfter=2,
             )
         )
@@ -268,10 +269,10 @@ class ResumeComposition:
                 contact_info.append(formatted_phone)
         if self.user_data.get("location"):
             contact_info.append(self.user_data["location"])
-        if self.user_data.get("linkedin"):
-            contact_info.append(self.user_data["linkedin"])
-        if self.user_data.get("github"):
-            contact_info.append(self.user_data["github"])
+        if self.personal_agent.background.profile["linkedin_url"]:
+            contact_info.append(self.personal_agent.background.profile["linkedin_url"])
+        if self.personal_agent.background.profile["github_url"]:
+            contact_info.append(self.personal_agent.background.profile["github_url"])
 
         if contact_info:
             self.elements.append(Paragraph(" | ".join(contact_info), self.styles["ResumeContact"]))
