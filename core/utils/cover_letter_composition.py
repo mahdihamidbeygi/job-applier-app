@@ -10,7 +10,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
 from core.models import UserProfile
-from core.utils.local_llms import GrokClient, OllamaClient
+from core.utils.local_llms import GoogleClient, GrokClient
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ class CoverLetterComposition:
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
         self.grok_client = GrokClient(model="grok-2-1212", temperature=0.0)
-        self.llm = OllamaClient(model="phi4:latest", temperature=0.0)
+        self.llm = GoogleClient()
 
     def _setup_styles(self) -> Dict[str, ParagraphStyle]:
         """Set up custom styles for the cover letter."""

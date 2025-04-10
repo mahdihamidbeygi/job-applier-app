@@ -1,6 +1,7 @@
 import json
 import re
 
+import google.generativeai as genai
 import requests
 from django.conf import settings
 
@@ -176,3 +177,75 @@ class GrokClient:
             )
         except Exception as e:
             raise Exception(f"Error calling Grok API: {str(e)}")
+
+
+class GoogleClient:
+    """Client for interacting with Google's Gemini API using the official google-generativeai library."""
+
+    def __init__(self, model: str = settings.GOOGLE_MODEL, temperature: float = settings.TEMPERATURE):
+        self.model = model
+        self.temperature = temperature
+        genai.configure(api_key=settings.GOOGLE_API_KEY)
+        self.genai = genai
+
+    def generate(self, prompt: str, resp_in_json: bool = False) -> str:
+        """Generate text using Google's Gemini API."""
+        try:
+            # Get the model
+            model = self.genai.GenerativeModel(self.model)
+
+            # Generate the response
+            response = model.generate_content(
+                prompt,
+                generation_config=self.genai.types.GenerationConfig(
+                    temperature=self.temperature,
+                    top_k=40,
+                    top_p=0.9,
+                    max_output_tokens=2048,
+                )
+            )
+
+            # Extract the response text
+            response_text = response.text
+
+            if resp_in_json:
+                # Remove any markdown code block markers and clean the response
+                response_text = response_text.replace("```json", "").replace("```", "").strip()
+                
+                # Remove any explanatory text before the JSON
+                if "Here is the response in the required format:" in response_text:
+                    response_text = response_text.split("Here is the response in the required format:")[1].strip()
+                
+                # Try to find the first occurrence of { or [ and the last occurrence of } or ]
+                start_idx = min(
+                    response_text.find("{"),
+                    response_text.find("[")
+                )
+                end_idx = max(
+                    response_text.rfind("}"),
+                    response_text.rfind("]")
+                )
+                
+                if start_idx != -1 and end_idx != -1:
+                    response_text = response_text[start_idx:end_idx + 1]
+                else:
+                    # If no JSON structure found, try to clean the response as a simple array
+                    response_text = response_text.strip()
+                    if response_text.startswith("["):
+                        response_text = response_text[:response_text.rfind("]") + 1]
+                    elif response_text.startswith("{"):
+                        response_text = response_text[:response_text.rfind("}") + 1]
+                
+                # Validate the JSON structure
+                try:
+                    json.loads(response_text)  # Test if it's valid JSON
+                except json.JSONDecodeError as e:
+                    print(f"Invalid JSON after cleaning: {response_text}")
+                    raise Exception(f"Failed to clean JSON string: {str(e)}")
+
+            return response_text
+
+        except self.genai.types.generation_types.BlockedPromptException as e:
+            raise Exception(f"Prompt was blocked by Google's safety filters: {str(e)}")
+        except Exception as e:
+            raise Exception(f"Error calling Google Gemini API: {str(e)}")

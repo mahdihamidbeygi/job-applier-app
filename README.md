@@ -1,27 +1,60 @@
-# Job Application Assistant Browser Extension
+# Job Application Assistant
 
-A Chrome extension that helps you fill out job application forms using AI-powered personal and application agents.
+A comprehensive job application assistant that helps you manage and streamline your job search process. The platform consists of a web application and browser extension that work together to help you fill out job applications, generate tailored documents, and track your applications.
 
 ## Features
 
+### Web Application
+- User profile management
+- Application tracking and management
+- AI-powered document generation
+  - Tailored resumes
+  - Custom cover letters
+  - Application question answers
+- Application status tracking
+- Document library management
+
+### Browser Extension
 - Automatically detects job application forms on web pages
 - Analyzes form fields and job descriptions
 - Uses your personal profile and experience to generate relevant responses
 - Fills out forms with AI-generated content
 - Maintains consistency across applications
-- Manual job application submission with tailored documents
-- AI-powered cover letter and resume generation
-- Application question answer generation
+- Seamless integration with the web application
 
 ## Installation
 
+### Web Application
 1. Clone this repository
-2. Open Chrome and go to `chrome://extensions/`
-3. Enable "Developer mode" in the top right
-4. Click "Load unpacked" and select the extension directory
-5. The extension icon should appear in your Chrome toolbar
+2. Install Python dependencies:
+```bash
+pip install -r requirements.txt
+```
+3. Set up your environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your settings
+```
+4. Run the Django development server:
+```bash
+python manage.py runserver
+```
+
+### Browser Extension
+1. Open Chrome and go to `chrome://extensions/`
+2. Enable "Developer mode" in the top right
+3. Click "Load unpacked" and select the extension directory
+4. The extension icon should appear in your Chrome toolbar
 
 ## Usage
+
+### Web Application
+1. Create an account and set up your profile
+2. Access your dashboard to:
+   - Track applications
+   - Generate documents
+   - Manage your profile
+   - View application history
 
 ### Browser Extension
 1. Navigate to a job application page
@@ -30,16 +63,7 @@ A Chrome extension that helps you fill out job application forms using AI-powere
 4. Review the detected fields
 5. Click "Fill Form" to automatically fill out the form with AI-generated responses
 
-### Manual Submission
-1. Go to the Manual Submission page
-2. Paste the job description
-3. Choose to generate:
-   - Tailored Resume
-   - Cover Letter
-   - Application Question Answers
-4. Download the generated documents
-
-### Generated Documents
+### Document Generation
 The system generates the following documents with personalized naming:
 - Resume: `resume_[username]_[date]_[time].pdf`
 - Cover Letter: `cover_letter_[username]_[date]_[time].pdf`
@@ -48,48 +72,20 @@ The system generates the following documents with personalized naming:
 ## Development
 
 ### Prerequisites
-
 - Python 3.8+
 - Django
 - Chrome browser
 - Node.js (for building the extension)
 
-### Setup
-
-1. Install Python dependencies:
-```bash
-pip install -r requirements.txt
-```
-
-2. Set up your environment variables:
-```bash
-cp .env.example .env
-# Edit .env with your settings
-```
-
-3. Run the Django development server:
-```bash
-python manage.py runserver
-```
-
-4. Load the extension in Chrome:
-- Go to `chrome://extensions/`
-- Enable "Developer mode"
-- Click "Load unpacked"
-- Select the extension directory
-
-### Extension Structure
-
-- `manifest.json`: Extension configuration
-- `popup.html`: Extension popup interface
-- `popup.js`: Popup logic
-- `content.js`: Page interaction logic
-- `background.js`: Background tasks
-- `icons/`: Extension icons
+### Project Structure
+- `backend/`: Django web application
+- `extension/`: Chrome extension
+- `frontend/`: Web application frontend
+- `docs/`: Documentation
 
 ### Backend Integration
 
-The extension communicates with your Django backend through the following endpoints:
+The system uses the following main endpoints:
 
 - `POST /api/fill-form/`: Handles form filling requests
   - Request body: `{ fields: [...], jobDescription: string }`
@@ -101,11 +97,11 @@ The extension communicates with your Django backend through the following endpoi
 
 ## Security
 
-- The extension only runs on job application pages
 - All API requests require authentication
 - Form data is processed securely on the backend
 - No sensitive data is stored in the extension
 - Generated documents are named with user identification for security
+- Secure user authentication and authorization
 
 ## Contributing
 

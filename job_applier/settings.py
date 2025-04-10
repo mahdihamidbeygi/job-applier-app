@@ -13,13 +13,14 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 import os
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
 load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
 
 # Quick-start development settings - unsuitable for production
@@ -29,14 +30,14 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "django-insecure-your-secret-key-here"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG: bool = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS: list[str] = []
 
 
 # Application definition
 
-INSTALLED_APPS = [
+INSTALLED_APPS: list[str] = [
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -56,7 +57,7 @@ INSTALLED_APPS = [
     "allauth.socialaccount.providers.google",
 ]
 
-MIDDLEWARE = [
+MIDDLEWARE: list[str] = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
@@ -70,7 +71,7 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = "job_applier.urls"
 
-TEMPLATES = [
+TEMPLATES: list[dict[str, Any]] = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [
@@ -95,7 +96,7 @@ WSGI_APPLICATION = "job_applier.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES = {
+DATABASES: dict[str, dict[str, str]] = {
     "default": {
         "ENGINE": "django.db.backends.postgresql",
         "NAME": "db_jobapplier",
@@ -110,7 +111,7 @@ DATABASES = {
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [
+AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
@@ -142,14 +143,14 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
 
 STATIC_URL = "static/"
-STATIC_ROOT = os.path.join(BASE_DIR, "staticfiles")
-STATICFILES_DIRS = [
+STATIC_ROOT: str = os.path.join(BASE_DIR, "staticfiles")
+STATICFILES_DIRS: list[str] = [
     os.path.join(BASE_DIR, "static"),
 ]
 
 # Media files
 MEDIA_URL = "/media/"
-MEDIA_ROOT = os.path.join(BASE_DIR, "media")
+MEDIA_ROOT: str = os.path.join(BASE_DIR, "media")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
@@ -157,7 +158,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, "media")
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Authentication settings
-AUTHENTICATION_BACKENDS = [
+AUTHENTICATION_BACKENDS: list[str] = [
     'django.contrib.auth.backends.ModelBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
@@ -165,14 +166,14 @@ AUTHENTICATION_BACKENDS = [
 SITE_ID = 1
 
 # AllAuth settings
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'password1*', 'password2*']
-ACCOUNT_LOGIN_METHODS = {'email'}
+ACCOUNT_SIGNUP_FIELDS: list[str] = ['email*', 'password1*', 'password2*']
+ACCOUNT_LOGIN_METHODS: set[str] = {'email'}
 ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
 
 # Google OAuth2 settings
-SOCIALACCOUNT_PROVIDERS = {
+SOCIALACCOUNT_PROVIDERS: dict[str, Any] = {
     'google': {
         'SCOPE': [
             'profile',
@@ -190,10 +191,10 @@ LOGIN_REDIRECT_URL = 'core:profile'
 LOGOUT_REDIRECT_URL = 'core:home'
 
 # AWS S3 Settings
-AWS_ACCESS_KEY_ID = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_REGION_NAME = os.getenv("AWS_S3_REGION_NAME")
+AWS_ACCESS_KEY_ID: str | None = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY: str | None = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_STORAGE_BUCKET_NAME: str | None = os.getenv("AWS_STORAGE_BUCKET_NAME")
+AWS_S3_REGION_NAME: str | None = os.getenv("AWS_S3_REGION_NAME")
 AWS_S3_FILE_OVERWRITE = False
 AWS_DEFAULT_ACL = None
 AWS_S3_VERIFY = True
@@ -203,15 +204,15 @@ AWS_S3_SIGNATURE_VERSION = "s3v4"
 DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 
 # OpenAI Settings
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
 
 # Grok API Settings
-GROK_API_KEY = os.getenv("GROK_API_KEY")
-GROK_MODEL = os.getenv("GROK_MODEL", "grok-1")
+GROK_API_KEY: str | None = os.getenv("GROK_API_KEY")
+GROK_MODEL: str = os.getenv("GROK_MODEL", "grok-1")
 
 # REST Framework settings
-REST_FRAMEWORK = {
+REST_FRAMEWORK: dict[str, Any] = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ],
@@ -237,7 +238,7 @@ SIMPLE_JWT = {
 }
 
 # Spectacular settings
-SPECTACULAR_SETTINGS = {
+SPECTACULAR_SETTINGS: dict[str, Any] = {
     "TITLE": "Job Applier API",
     "DESCRIPTION": "API for managing user profiles and job applications",
     "VERSION": "1.0.0",
@@ -267,7 +268,7 @@ SECURE_HSTS_PRELOAD = True
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True  # For development only
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
+CORS_ALLOWED_ORIGINS: list[str] = [
     "https://jobs.lever.co",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
@@ -276,7 +277,7 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 # CSRF settings
-CSRF_TRUSTED_ORIGINS = [
+CSRF_TRUSTED_ORIGINS: list[str] = [
     "chrome-extension://gjhaikeodndcnemkibilnmbplmicjnif",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
@@ -292,18 +293,23 @@ CSRF_COOKIE_NAME = "csrftoken"
 CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
 
 # Exempt all API endpoints from CSRF
-CSRF_EXEMPT_URLS = [
+CSRF_EXEMPT_URLS: list[str] = [
     "/api/",
 ]
 
 # LinkedIn Settings
-LINKEDIN_EMAIL = os.getenv("LINKEDIN_EMAIL")
-LINKEDIN_PASSWORD = os.getenv("LINKEDIN_PASSWORD")
+LINKEDIN_EMAIL: str | None = os.getenv("LINKEDIN_EMAIL")
+LINKEDIN_PASSWORD: str | None = os.getenv("LINKEDIN_PASSWORD")
 
 # Celery Configuration
 CELERY_BROKER_URL = "redis://localhost:6379/0"
 CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
-CELERY_ACCEPT_CONTENT = ["json"]
+CELERY_ACCEPT_CONTENT: list[str] = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+
+# Google API Settings
+GOOGLE_MODEL: str | None = os.getenv("GOOGLE_MODEL")
+GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY")
+

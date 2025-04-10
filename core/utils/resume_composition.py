@@ -11,7 +11,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-from core.utils.local_llms import OllamaClient
+from core.utils.local_llms import GoogleClient, OllamaClient
 
 
 class ResumeComposition:
@@ -28,7 +28,8 @@ class ResumeComposition:
         self._setup_styles()
         self.elements = []
         self.ollama_client = OllamaClient(model="llama3:latest", temperature=0.0)
-
+        self.google_client = GoogleClient()
+        
     def _convert_to_dict(self, user_data):
         """Convert UserProfile model instance to dictionary format"""
         if hasattr(user_data, "user"):  # If it's a UserProfile model instance
@@ -246,7 +247,7 @@ class ResumeComposition:
 
     def _create_header(self):
         # Name
-        self.elements.append(Paragraph(self.user_data["headline"], self.styles["ResumeHeader"]))
+        self.elements.append(Paragraph(self.user_data["name"], self.styles["ResumeHeader"]))
 
         # Title/Role
         if self.user_data.get("title"):
@@ -564,7 +565,7 @@ class ResumeComposition:
         """
 
         # Get AI analysis of skills
-        response = self.ollama_client.generate(prompt, resp_in_json=True)
+        response = self.google_client.generate(prompt, resp_in_json=True)
                 
         # Remove any extra text or whitespace
         response = response.strip()
@@ -694,7 +695,7 @@ class ResumeComposition:
         Remember: Your entire response should be a single JSON object, nothing more, nothing less.
         """
         # Get tailored summary from Ollama
-        response = self.ollama_client.generate(prompt, resp_in_json=True)
+        response = self.google_client.generate(prompt, resp_in_json=True)
         response_dict = json.loads(response)
         self.user_data["professional_summary"] = response_dict["summary"].strip()
 
