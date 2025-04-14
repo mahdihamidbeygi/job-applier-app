@@ -1,9 +1,12 @@
 import json
 import re
+from typing import Any, Dict, Optional, Union
 
 import google.generativeai as genai
 import requests
 from django.conf import settings
+from google.generativeai.generative_models import GenerativeModel
+from google.generativeai.types import GenerationConfig
 
 
 class OllamaClient:
@@ -188,16 +191,28 @@ class GoogleClient:
         genai.configure(api_key=settings.GOOGLE_API_KEY)
         self.genai = genai
 
-    def generate(self, prompt: str, resp_in_json: bool = False) -> str:
-        """Generate text using Google's Gemini API."""
+    def generate(self, prompt: str, resp_in_json: bool = False, response_schema: Optional[Union[Dict[str, Any], Dict[str, type]]] = None) -> str:
+        """Generate text using Google's Gemini API.
+        
+        Args:
+            prompt (str): The prompt to send to the model
+            resp_in_json (bool): Whether to expect and validate JSON response
+            response_schema (Optional[Union[Dict[str, Any], Dict[str, type]]]): Optional schema to enforce response structure
+        """
         try:
             # Get the model
-            model = self.genai.GenerativeModel(self.model)
+            model = GenerativeModel(model_name=self.model)
+
+            # If response_schema is provided, add it to the prompt
+            if response_schema:
+                schema_prompt = f"\nPlease respond in the following JSON schema format:\n{json.dumps(response_schema, indent=2)}"
+                prompt = prompt + schema_prompt
+                resp_in_json = True  # Force JSON response when schema is provided
 
             # Generate the response
             response = model.generate_content(
                 prompt,
-                generation_config=self.genai.types.GenerationConfig(
+                generation_config=GenerationConfig(
                     temperature=self.temperature,
                     top_k=40,
                     top_p=0.9,
@@ -238,14 +253,24 @@ class GoogleClient:
                 
                 # Validate the JSON structure
                 try:
-                    json.loads(response_text)  # Test if it's valid JSON
+                    parsed_json = json.loads(response_text)  # Test if it's valid JSON
+                    
+                    # If schema is provided, validate against it
+                    if response_schema:
+                        # Basic schema validation
+                        if isinstance(response_schema, dict) and isinstance(parsed_json, dict):
+                            for key, value_type in response_schema.items():
+                                if key not in parsed_json:
+                                    raise ValueError(f"Missing required field: {key}")
+                                if not isinstance(parsed_json[key], value_type):
+                                    raise ValueError(f"Field {key} has incorrect type. Expected {value_type}, got {type(parsed_json[key])}")
                 except json.JSONDecodeError as e:
                     print(f"Invalid JSON after cleaning: {response_text}")
                     raise Exception(f"Failed to clean JSON string: {str(e)}")
 
             return response_text
 
-        except self.genai.types.generation_types.BlockedPromptException as e:
-            raise Exception(f"Prompt was blocked by Google's safety filters: {str(e)}")
         except Exception as e:
+            if "blocked" in str(e).lower():
+                raise Exception(f"Prompt was blocked by Google's safety filters: {str(e)}")
             raise Exception(f"Error calling Google Gemini API: {str(e)}")
