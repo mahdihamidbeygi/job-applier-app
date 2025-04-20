@@ -20,10 +20,7 @@ class BaseAgent:
         self.llm = OllamaClient(model=model, temperature=0.0)
         # Initialize memory with basic configuration
         self.memory = ConversationBufferMemory(
-            return_messages=True,
-            memory_key="chat_history",
-            input_key="input",
-            output_key="output"
+            return_messages=True, memory_key="chat_history", input_key="input", output_key="output"
         )
         self.state = AgentState(memory=self.memory, llm=self.llm, user_id=user_id)
 
