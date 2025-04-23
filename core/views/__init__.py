@@ -1,13 +1,13 @@
 """
-Views for the core app.
-This file re-exports all views from the views package for backward compatibility.
+Views package for the core app.
+This module re-exports all views to maintain backwards compatibility.
 """
 
 # Auth views
-from core.views.auth_views import register, get_token
+from .auth_views import register, get_token
 
 # Profile views
-from core.views.profile_views import (
+from .profile_views import (
     profile,
     add_work_experience,
     add_project,
@@ -26,7 +26,7 @@ from core.views.profile_views import (
 )
 
 # Job views
-from core.views.job_views import (
+from .job_views import (
     jobs_page,
     job_detail,
     job_apply,
@@ -39,7 +39,7 @@ from core.views.job_views import (
 )
 
 # Document generation views
-from core.views.document_views import (
+from .document_views import (
     generate_documents,
     generate_answers,
     process_job_application,
@@ -48,7 +48,7 @@ from core.views.document_views import (
 )
 
 # API viewsets
-from core.views.api_views import (
+from .api_views import (
     UserProfileViewSet,
     WorkExperienceViewSet,
     ProjectViewSet,
@@ -59,7 +59,7 @@ from core.views.api_views import (
 )
 
 # Utility views
-from core.views.utility_views import (
+from .utility_views import (
     home,
     test_s3,
     parse_pdf_resume,
@@ -67,4 +67,4 @@ from core.views.utility_views import (
 )
 
 # Base permission classes
-from core.views.api_views import IsOwnerOrReadOnly
+from .api_views import IsOwnerOrReadOnly
