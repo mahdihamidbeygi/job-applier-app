@@ -159,36 +159,36 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Authentication settings
 AUTHENTICATION_BACKENDS: list[str] = [
-    'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
 ]
 
 SITE_ID = 1
 
 # AllAuth settings
-ACCOUNT_SIGNUP_FIELDS: list[str] = ['email*', 'password1*', 'password2*']
-ACCOUNT_LOGIN_METHODS: set[str] = {'email'}
-ACCOUNT_EMAIL_VERIFICATION = 'mandatory'
+ACCOUNT_SIGNUP_FIELDS: list[str] = ["email*", "password1*", "password2*"]
+ACCOUNT_LOGIN_METHODS: set[str] = {"email"}
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
 
 # Google OAuth2 settings
 SOCIALACCOUNT_PROVIDERS: dict[str, Any] = {
-    'google': {
-        'SCOPE': [
-            'profile',
-            'email',
+    "google": {
+        "SCOPE": [
+            "profile",
+            "email",
         ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
+        "AUTH_PARAMS": {
+            "access_type": "online",
         },
-        'OAUTH_PKCE_ENABLED': True,
+        "OAUTH_PKCE_ENABLED": True,
     }
 }
 
-LOGIN_URL = 'account_login'
-LOGIN_REDIRECT_URL = 'core:profile'
-LOGOUT_REDIRECT_URL = 'core:home'
+LOGIN_URL = "account_login"
+LOGIN_REDIRECT_URL = "core:profile"
+LOGOUT_REDIRECT_URL = "core:home"
 
 # AWS S3 Settings
 AWS_ACCESS_KEY_ID: str | None = os.getenv("AWS_ACCESS_KEY_ID")
@@ -206,6 +206,9 @@ DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
 # OpenAI Settings
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+
+# GitHub API Settings
+GITHUB_TOKEN: str | None = os.getenv("GITHUB_TOKEN")
 
 # Grok API Settings
 GROK_API_KEY: str | None = os.getenv("GROK_API_KEY")
@@ -260,7 +263,7 @@ SESSION_COOKIE_SECURE = False  # Allow non-HTTPS cookies in development
 CSRF_COOKIE_SECURE = False  # Allow non-HTTPS CSRF cookies in development
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = 'DENY'
+X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
@@ -312,4 +315,3 @@ CELERY_TIMEZONE = TIME_ZONE
 # Google API Settings
 GOOGLE_MODEL: str | None = os.getenv("GOOGLE_MODEL")
 GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY")
-

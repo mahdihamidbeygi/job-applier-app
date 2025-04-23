@@ -28,7 +28,9 @@ class SearchAgent(BaseAgent):
         self.monster_scraper = MonsterScraper()
         self.jobbank_scraper = JobBankScraper()
 
-    def search_jobs(self, role: str, location: str, platform: str = "linkedin", request=None) -> List[Dict]:
+    def search_jobs(
+        self, role: str, location: str, platform: str = "linkedin", request=None
+    ) -> List[Dict]:
         """
         Search for jobs on the specified platform
 
@@ -89,37 +91,102 @@ class SearchAgent(BaseAgent):
 
     def analyze_job_fit(self, job_posting: Dict[str, Any]) -> Dict[str, Any]:
         """Analyzes job posting for fit with personal background"""
-        # Get company context from knowledge base
-        company_context = self.knowledge_base.get_company_context(job_posting.get("company", ""))
+        try:
+            # Get company context from knowledge base
+            company_context = self.knowledge_base.get_company_context(
+                job_posting.get("company", "")
+            )
 
-        prompt = f"""
-        As a job search specialist, analyze this job posting for fit with the candidate's background:
-        
-        Job Posting:
-        {job_posting.get('description', '')}
-        
-        Company Context:
-        {company_context}
-        
-        Required Skills:
-        {', '.join(job_posting.get('required_skills', []))}
-        
-        Candidate Background Summary:
-        {self.personal_agent.get_background_summary()}
-        
-        Provide a response in JSON format with no extra text/numbers/etc:
-        1. match_percentage: number between 0-100
-        2. key_matching_skills: list of matching skills
-        3. potential_gaps: list of missing skills
-        4. application_strategy: string with recommended approach
-        5. company_fit: analysis of company culture fit
-        RULES:
-        - DO NOT INCLUDE ANY EXTRA TEXT/NUMBERS/ETC AT THE BEGINNING OR END OF THE RESPONSE
-        """
+            prompt = f"""
+            As a job search specialist, analyze this job posting for fit with the candidate's background:
+            
+            Job Posting:
+            {job_posting.get('description', '')}
+            
+            Company Context:
+            {company_context}
+            
+            Required Skills:
+            {', '.join(job_posting.get('required_skills', []))}
+            
+            Candidate Background Summary:
+            {self.personal_agent.get_background_summary()}
+            
+            Provide a response in JSON format with the following structure:
+            {{
+                "match_score": 0-100,
+                "key_matching_skills": ["skill1", "skill2", ...],
+                "potential_gaps": ["skill1", "skill2", ...],
+                "application_strategy": "string with recommended approach",
+                "company_fit": "analysis of company culture fit"
+            }}
+            
+            RULES:
+            - DO NOT INCLUDE ANY EXTRA TEXT, NUMBERS, OR EXPLANATION OUTSIDE THE JSON OBJECT
+            - Return valid JSON only
+            - Use simple structure with clear fields
+            - Ensure match_score is a NUMBER between 0-100 (not a string)
+            """
 
-        response = self.llm.generate(prompt, resp_in_json=True)
-        self.save_context("Analyze job fit", response)
-        return response
+            response = self.llm.generate(prompt, resp_in_json=True)
+
+            try:
+                # Handle case where response is not already in JSON format
+                if isinstance(response, str):
+                    import json
+
+                    json_response = json.loads(response)
+                else:
+                    json_response = response
+
+                # Ensure required fields are present
+                required_fields = ["match_score", "key_matching_skills", "potential_gaps"]
+                for field in required_fields:
+                    if field not in json_response:
+                        json_response[field] = [] if field != "match_score" else 0
+
+                # Format response for the frontend
+                formatted_response = {
+                    "match_score": float(json_response.get("match_score", 0)),
+                    "skills_match": {
+                        "matching": json_response.get("key_matching_skills", []),
+                        "missing": json_response.get("potential_gaps", []),
+                    },
+                    "recommendations": [
+                        json_response.get(
+                            "application_strategy",
+                            "Consider highlighting your relevant experience in your application.",
+                        )
+                    ],
+                }
+
+                self.save_context("Analyze job fit", json.dumps(formatted_response))
+                return formatted_response
+
+            except Exception as e:
+                print(f"Error parsing job analysis response: {str(e)}")
+                print(f"Raw response: {response}")
+                # Return a default response
+                return {
+                    "match_score": 50,
+                    "skills_match": {
+                        "matching": ["Unable to determine matching skills"],
+                        "missing": ["Unable to determine skill gaps"],
+                    },
+                    "recommendations": [
+                        "Consider reviewing the job description carefully and highlighting relevant experience in your application."
+                    ],
+                }
+        except Exception as e:
+            print(f"Error in analyze_job_fit: {str(e)}")
+            # Return a default response
+            return {
+                "match_score": 0,
+                "skills_match": {"matching": [], "missing": []},
+                "recommendations": [
+                    "There was an error analyzing this job. Please try again later."
+                ],
+            }
 
     def suggest_job_search_strategy(self) -> Dict[str, Any]:
         """Suggests personalized job search strategy"""

@@ -1,23 +1,24 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List
 
 from langchain.memory import ConversationBufferMemory
 from langchain_core.memory import BaseMemory
 
-from core.utils.local_llms import OllamaClient
+from core.utils.local_llms import GoogleClient
+
+LLM_CLIENT = GoogleClient
 
 
 @dataclass
 class AgentState:
     memory: BaseMemory
-    llm: OllamaClient
+    llm: LLM_CLIENT
     user_id: int
 
 
 class BaseAgent:
-    def __init__(self, user_id: int, model: str = "phi4:latest"):
+    def __init__(self, user_id: int, model: str = "gemini-2.0-flash"):
         self.user_id = user_id
-        self.llm = OllamaClient(model=model, temperature=0.0)
+        self.llm = LLM_CLIENT(model=model, temperature=0.0)
         # Initialize memory with basic configuration
         self.memory = ConversationBufferMemory(
             return_messages=True, memory_key="chat_history", input_key="input", output_key="output"

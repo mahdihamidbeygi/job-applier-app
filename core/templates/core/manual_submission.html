@@ -1,76 +1,101 @@
 {% extends 'core/base.html' %} {% load static %} {% block content %}
 <div class="container mt-5">
   <div class="row justify-content-center">
-    <div class="col-md-8">
+    <div class="col-md-14">
       <div class="card">
         <div class="card-header">
-          <h2 class="text-center">Manual Job Application Submission</h2>
+          <h2 class="text-center">Job Application Assistant</h2>
         </div>
         <div class="card-body">
-          <form id="manualSubmissionForm">
-            {% csrf_token %}
-            <div class="form-group mb-4">
-              <label for="jobDescription" class="form-label"
-                >Job Description</label
-              >
-              <textarea
-                class="form-control"
-                id="jobDescription"
-                rows="10"
-                placeholder="Paste the job description here..."
-              ></textarea>
-            </div>
-            <div class="d-grid gap-2">
-              <button
-                type="button"
-                class="btn btn-primary"
-                id="generateResumeBtn"
-                onclick="generateDocuments('resume', this)"
-              >
-                Generate Tailored Resume
-              </button>
-              <button
-                type="button"
-                class="btn btn-primary"
-                id="generateCoverLetterBtn"
-                onclick="generateDocuments('cover_letter', this)"
-              >
-                Generate Cover Letter
-              </button>
-            </div>
-            <!-- Application Questions Section -->
-            <div class="form-group mb-4 mt-4">
-              <label for="applicationQuestions" class="form-label"
-                >Application Questions</label
-              >
-              <textarea
-                class="form-control"
-                id="applicationQuestions"
-                rows="5"
-                placeholder="Enter your application questions here..."
-              ></textarea>
-              <button
-                type="button"
-                class="btn btn-primary mt-2"
-                id="generateAnswersBtn"
-                onclick="generateAnswers(this)"
-              >
-                Generate Answers
-              </button>
-            </div>
-            <!-- Answers Section -->
-            <div id="answersSection" class="mt-4 d-none">
-              <h4>Generated Answers</h4>
-              <div id="answersContent" class="border p-3 rounded"></div>
-            </div>
-            <!-- Loading spinner -->
-            <div id="loadingSpinner" class="text-center mt-3 d-none">
-              <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Loading...</span>
+          <!-- Chat container -->
+          <div id="chatContainer" class="mb-4">
+            <div
+              id="chatMessages"
+              class="border rounded p-3 mb-3"
+              style="height: 400px; overflow-y: auto"
+            >
+              <!-- Welcome message -->
+              <div class="message assistant mb-3">
+                <div class="d-flex">
+                  <div class="avatar me-2">
+                    <i class="fas fa-robot text-primary"></i>
+                  </div>
+                  <div class="message-content p-3 rounded bg-light">
+                    <p>
+                      Hello! I'm your job application assistant. How can I help
+                      you today?
+                    </p>
+                    <p>I can help you with:</p>
+                    <ul>
+                      <li>Generating a tailored resume for a job</li>
+                      <li>Creating a custom cover letter</li>
+                      <li>Answering application questions</li>
+                      <li>Analyzing your fit for the job</li>
+                    </ul>
+                    <p>
+                      Just share the job description with me to get started!
+                    </p>
+                  </div>
+                </div>
               </div>
-              <p class="mt-2">Generating your document...</p>
             </div>
-          </form>
+
+            <!-- Chat input -->
+            <div class="input-group">
+              <textarea
+                id="userInput"
+                class="form-control"
+                placeholder="Type your message here..."
+                rows="3"
+              ></textarea>
+              <button id="sendButton" class="btn btn-primary" type="button">
+                <i class="fas fa-paper-plane"></i> Send
+              </button>
+            </div>
+          </div>
+
+          <!-- Action buttons (initially hidden) -->
+          <div id="actionButtons" class="d-grid gap-2 mb-3 d-none">
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="generateResumeBtn"
+            >
+              Generate Tailored Resume
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary"
+              id="generateCoverLetterBtn"
+            >
+              Generate Cover Letter
+            </button>
+            <button type="button" class="btn btn-primary" id="askQuestionsBtn">
+              Answer Application Questions
+            </button>
+            <button type="button" class="btn btn-primary" id="analyzeJobBtn">
+              Analyze Job Fit
+            </button>
+          </div>
+
+          <!-- Save conversation button -->
+          <div class="d-grid gap-2 mb-3">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              id="saveConversationBtn"
+            >
+              <i class="fas fa-save"></i> Save Conversation
+            </button>
+          </div>
+
+          <!-- Loading spinner -->
+          <div id="loadingSpinner" class="text-center mt-3 d-none">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Processing your request...</p>
+          </div>
         </div>
       </div>
     </div>
@@ -78,18 +103,231 @@
 </div>
 
 <script>
-  async function generateDocuments(type, button) {
-    const jobDescription = document.getElementById("jobDescription").value;
-    const loadingSpinner = document.getElementById("loadingSpinner");
+  // Job description and questions storage
+  let jobDescription = "";
+  let applicationQuestions = [];
+  let conversationContext = {
+    jobProvided: false,
+    questionsProvided: false,
+    lastAction: null,
+  };
 
+  // DOM elements
+  const chatMessages = document.getElementById("chatMessages");
+  const userInput = document.getElementById("userInput");
+  const sendButton = document.getElementById("sendButton");
+  const actionButtons = document.getElementById("actionButtons");
+  const generateResumeBtn = document.getElementById("generateResumeBtn");
+  const generateCoverLetterBtn = document.getElementById(
+    "generateCoverLetterBtn"
+  );
+  const askQuestionsBtn = document.getElementById("askQuestionsBtn");
+  const analyzeJobBtn = document.getElementById("analyzeJobBtn");
+  const saveConversationBtn = document.getElementById("saveConversationBtn");
+  const loadingSpinner = document.getElementById("loadingSpinner");
+
+  // Event listeners
+  sendButton.addEventListener("click", handleUserMessage);
+  userInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleUserMessage();
+    }
+  });
+  generateResumeBtn.addEventListener("click", () => generateDocument("resume"));
+  generateCoverLetterBtn.addEventListener("click", () =>
+    generateDocument("cover_letter")
+  );
+  askQuestionsBtn.addEventListener("click", showQuestionsPrompt);
+  analyzeJobBtn.addEventListener("click", analyzeJobFit);
+  saveConversationBtn.addEventListener("click", saveConversation);
+
+  // Main function to handle user messages
+  async function handleUserMessage() {
+    const userMessage = userInput.value.trim();
+    if (!userMessage) return;
+
+    // Add user message to chat
+    addMessageToChat("user", userMessage);
+    userInput.value = "";
+
+    // Show loading indicator
+    const typingIndicator = addTypingIndicator();
+
+    try {
+      // Analyze the message content
+      if (!conversationContext.jobProvided) {
+        // If no job description yet, this might be one
+        if (userMessage.length > 100) {
+          jobDescription = userMessage;
+          conversationContext.jobProvided = true;
+
+          // Remove typing indicator
+          typingIndicator.remove();
+
+          // Respond to user
+          addMessageToChat(
+            "assistant",
+            `Thank you for providing the job description! I've saved it and can now help you prepare application materials. What would you like to do next?`
+          );
+
+          // Show action buttons
+          actionButtons.classList.remove("d-none");
+        } else {
+          // Message too short to be job description
+          typingIndicator.remove();
+          addMessageToChat(
+            "assistant",
+            `It seems your message might be too short to be a complete job description. Could you please share the full job posting with requirements, responsibilities, and company details?`
+          );
+        }
+      } else if (conversationContext.lastAction === "askingForQuestions") {
+        // User is providing application questions
+        applicationQuestions = userMessage.split("\n").filter((q) => q.trim());
+        conversationContext.questionsProvided = true;
+
+        // Process questions
+        typingIndicator.remove();
+        await generateAnswers();
+      } else {
+        // General conversation
+        const response = await analyzeUserIntent(userMessage);
+        typingIndicator.remove();
+        addMessageToChat("assistant", response);
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      typingIndicator.remove();
+      addMessageToChat(
+        "assistant",
+        `I'm sorry, I encountered an error: ${error.message}`
+      );
+    }
+  }
+
+  // Analyze user intent (this would ideally call an API endpoint)
+  async function analyzeUserIntent(message) {
+    // Simple keyword matching for now
+    const lowerMessage = message.toLowerCase();
+
+    if (lowerMessage.includes("resume") || lowerMessage.includes("cv")) {
+      if (conversationContext.jobProvided) {
+        generateDocument("resume");
+        return "I'll generate a tailored resume for you based on the job description you provided.";
+      } else {
+        return "I'd be happy to help with your resume. Could you please share the job description first?";
+      }
+    } else if (
+      lowerMessage.includes("cover letter") ||
+      lowerMessage.includes("coverletter")
+    ) {
+      if (conversationContext.jobProvided) {
+        generateDocument("cover_letter");
+        return "I'll create a cover letter for you based on the job description you provided.";
+      } else {
+        return "I'd be happy to help with your cover letter. Could you please share the job description first?";
+      }
+    } else if (
+      lowerMessage.includes("question") &&
+      (lowerMessage.includes("application") || lowerMessage.includes("answer"))
+    ) {
+      conversationContext.lastAction = "askingForQuestions";
+      return "Sure, I can help with application questions. Please share the questions (one per line) and I'll help generate appropriate answers based on your profile.";
+    } else if (
+      lowerMessage.includes("match") ||
+      lowerMessage.includes("analyze") ||
+      lowerMessage.includes("fit") ||
+      lowerMessage.includes("compatibility")
+    ) {
+      if (conversationContext.jobProvided) {
+        analyzeJobFit();
+        return "I'll analyze how well your profile matches this job posting.";
+      } else {
+        return "I'd be happy to analyze your fit for a job. Could you please share the job description first?";
+      }
+    } else if (
+      lowerMessage.includes("thanks") ||
+      lowerMessage.includes("thank you")
+    ) {
+      return "You're welcome! Is there anything else I can help you with?";
+    } else {
+      return "I'm here to help you with your job application. I can generate a tailored resume, create a cover letter, analyze job fit, or help with application questions. What would you like to do?";
+    }
+  }
+
+  // Function to add messages to the chat
+  function addMessageToChat(sender, content) {
+    const messageDiv = document.createElement("div");
+    messageDiv.className = `message ${sender} mb-3`;
+    messageDiv.dataset.timestamp = new Date().toISOString();
+    messageDiv.dataset.sender = sender;
+    messageDiv.dataset.content = content.replace(/<[^>]*>/g, ""); // Store plain text version for export
+
+    const iconClass = sender === "user" ? "fa-user" : "fa-robot";
+    const bgClass = sender === "user" ? "bg-primary text-white" : "bg-light";
+
+    messageDiv.innerHTML = `
+      <div class="d-flex ${sender === "user" ? "justify-content-end" : ""}">
+        ${
+          sender === "assistant"
+            ? `<div class="avatar me-2"><i class="fas ${iconClass} ${
+                sender === "user" ? "text-white" : "text-primary"
+              }"></i></div>`
+            : ""
+        }
+        <div class="message-content p-3 rounded ${bgClass}">
+          ${content}
+        </div>
+        ${
+          sender === "user"
+            ? `<div class="avatar ms-2"><i class="fas ${iconClass} ${
+                sender === "user" ? "text-white" : "text-primary"
+              }"></i></div>`
+            : ""
+        }
+      </div>
+    `;
+
+    chatMessages.appendChild(messageDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  // Add typing indicator
+  function addTypingIndicator() {
+    const typingDiv = document.createElement("div");
+    typingDiv.className = "message assistant typing mb-3";
+    typingDiv.innerHTML = `
+      <div class="d-flex">
+        <div class="avatar me-2"><i class="fas fa-robot text-primary"></i></div>
+        <div class="message-content p-3 rounded bg-light">
+          <span class="typing-dots">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </span>
+        </div>
+      </div>
+    `;
+    chatMessages.appendChild(typingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return typingDiv;
+  }
+
+  // Generate document (resume or cover letter)
+  async function generateDocument(type) {
     if (!jobDescription) {
-      alert("Please fill in the job description.");
+      addMessageToChat(
+        "assistant",
+        "I need a job description first. Could you please share the job posting?"
+      );
       return;
     }
 
-    // Disable the button and show loading spinner
-    button.disabled = true;
+    // Show loading spinner
     loadingSpinner.classList.remove("d-none");
+    loadingSpinner.querySelector("p").textContent = `Generating your ${
+      type === "resume" ? "resume" : "cover letter"
+    }...`;
 
     try {
       const response = await fetch("/process-application/", {
@@ -144,39 +382,58 @@
         a.click();
         window.URL.revokeObjectURL(url);
         document.body.removeChild(a);
+
+        // Add message to chat about successful generation
+        addMessageToChat(
+          "assistant",
+          `Your ${
+            type === "resume" ? "tailored resume" : "cover letter"
+          } has been generated and downloaded. Is there anything else you need help with?`
+        );
       } else {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate document");
+        throw new Error(errorData.error || `Failed to generate ${type}`);
       }
     } catch (error) {
-      alert("Error generating document: " + error.message);
+      addMessageToChat(
+        "assistant",
+        `I'm sorry, I encountered an error generating your ${type}: ${error.message}`
+      );
       console.error("Error:", error);
     } finally {
-      // Re-enable the button and hide loading spinner
-      button.disabled = false;
+      // Hide loading spinner
       loadingSpinner.classList.add("d-none");
     }
   }
 
-  async function generateAnswers(button) {
-    const jobDescription = document.getElementById("jobDescription").value;
-    const questions = document.getElementById("applicationQuestions").value;
-    const loadingSpinner = document.getElementById("loadingSpinner");
-    const answersSection = document.getElementById("answersSection");
-    const answersContent = document.getElementById("answersContent");
+  // Show questions prompt
+  function showQuestionsPrompt() {
+    conversationContext.lastAction = "askingForQuestions";
+    addMessageToChat(
+      "assistant",
+      "Please share the application questions (one per line) and I'll help generate appropriate answers based on your profile and the job description."
+    );
+  }
 
+  // Generate answers for application questions
+  async function generateAnswers() {
     if (!jobDescription) {
-      alert("Please fill in the job description.");
+      addMessageToChat(
+        "assistant",
+        "I need a job description first. Could you please share the job posting?"
+      );
       return;
     }
 
-    if (!questions) {
-      alert("Please enter your application questions.");
+    if (!applicationQuestions.length) {
+      addMessageToChat(
+        "assistant",
+        "Please provide the application questions first."
+      );
       return;
     }
 
-    // Disable the button and show loading spinner
-    button.disabled = true;
+    // Show loading spinner
     loadingSpinner.classList.remove("d-none");
     loadingSpinner.querySelector("p").textContent = "Generating answers...";
 
@@ -190,7 +447,7 @@
         credentials: "include",
         body: JSON.stringify({
           job_description: jobDescription,
-          questions: questions.split("\n").filter((q) => q.trim()),
+          questions: applicationQuestions,
           document_type: "none",
           additional_services: {
             answer_questions: true,
@@ -198,39 +455,186 @@
           },
         }),
       });
-      console.log(response);
+
       if (response.ok) {
         const data = await response.json();
 
-        // Display the answers
+        // Format the answers for chat display
+        let answersHTML =
+          "<strong>Here are suggested answers to your questions:</strong><br><br>";
+
         if (Array.isArray(data.answers)) {
-          answersContent.innerHTML = data.answers
-            .map(
-              (answer) =>
-                `<div class="mb-3">
+          data.answers.forEach((answer) => {
+            answersHTML += `<div class="mb-3">
               <strong>Q: ${answer.question}</strong><br>
               A: ${answer.answer}
-            </div>`
-            )
-            .join("");
+            </div>`;
+          });
         } else {
-          answersContent.innerHTML = data.answers.replace(/\n/g, "<br>");
+          answersHTML += data.answers.replace(/\n/g, "<br>");
         }
-        answersSection.classList.remove("d-none");
+
+        // Add answers to chat
+        addMessageToChat("assistant", answersHTML);
       } else {
         const errorData = await response.json();
         throw new Error(errorData.error || "Failed to generate answers");
       }
     } catch (error) {
-      alert("Error generating answers: " + error.message);
+      addMessageToChat(
+        "assistant",
+        `I'm sorry, I encountered an error generating answers: ${error.message}`
+      );
       console.error("Error:", error);
     } finally {
-      // Re-enable the button and hide loading spinner
-      button.disabled = false;
+      // Hide loading spinner
       loadingSpinner.classList.add("d-none");
-      loadingSpinner.querySelector("p").textContent =
-        "Generating your document...";
+      // Reset the action
+      conversationContext.lastAction = null;
     }
+  }
+
+  // Analyze job fit
+  async function analyzeJobFit() {
+    if (!jobDescription) {
+      addMessageToChat(
+        "assistant",
+        "I need a job description first. Could you please share the job posting?"
+      );
+      return;
+    }
+
+    // Show loading spinner
+    loadingSpinner.classList.remove("d-none");
+    loadingSpinner.querySelector("p").textContent = "Analyzing job fit...";
+
+    try {
+      const response = await fetch("/process-application/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken"),
+        },
+        credentials: "include",
+        body: JSON.stringify({
+          job_description: jobDescription,
+          document_type: "none",
+          additional_services: {
+            analyze_job_fit: true,
+            answer_questions: false,
+            prepare_interview: false,
+          },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        if (data.job_analysis) {
+          // Format the job analysis for chat display
+          const analysis = data.job_analysis;
+          let analysisHTML = "<strong>Job Fit Analysis</strong><br><br>";
+
+          // Overall match score
+          const matchScore =
+            analysis.match_score || analysis.match_percentage || 0;
+          analysisHTML += `<div class="mb-3">
+            <strong>Overall Match:</strong> ${matchScore.toFixed(1)}%
+            <div class="progress">
+              <div class="progress-bar ${getMatchScoreClass(
+                matchScore
+              )}" role="progressbar" style="width: ${matchScore}%" aria-valuenow="${matchScore}" aria-valuemin="0" aria-valuemax="100"></div>
+            </div>
+          </div>`;
+
+          // Skills match - handle both old and new formats
+          if (analysis.skills_match || analysis.key_matching_skills) {
+            analysisHTML += `<div class="mb-3">
+              <strong>Skills Match:</strong><br>
+              <ul>`;
+
+            // Matching skills - support both new and old formats
+            const matchingSkills =
+              analysis.skills_match?.matching ||
+              analysis.key_matching_skills ||
+              [];
+
+            if (matchingSkills.length > 0) {
+              analysisHTML += `<li><strong>Matching Skills:</strong> ${matchingSkills.join(
+                ", "
+              )}</li>`;
+            }
+
+            // Missing skills - support both new and old formats
+            const missingSkills =
+              analysis.skills_match?.missing || analysis.potential_gaps || [];
+
+            if (missingSkills.length > 0) {
+              analysisHTML += `<li><strong>Skills to Develop:</strong> ${missingSkills.join(
+                ", "
+              )}</li>`;
+            }
+
+            analysisHTML += `</ul></div>`;
+          }
+
+          // Recommendations - support both formats
+          const recommendations =
+            analysis.recommendations ||
+            (analysis.application_strategy
+              ? [analysis.application_strategy]
+              : []);
+
+          if (recommendations && recommendations.length > 0) {
+            analysisHTML += `<div class="mb-3">
+              <strong>Recommendations:</strong><br>
+              <ul>`;
+
+            recommendations.forEach((rec) => {
+              analysisHTML += `<li>${rec}</li>`;
+            });
+
+            analysisHTML += `</ul></div>`;
+          }
+
+          // Company fit
+          if (analysis.company_fit) {
+            analysisHTML += `<div class="mb-3">
+              <strong>Company Fit:</strong><br>
+              <p>${analysis.company_fit}</p>
+            </div>`;
+          }
+
+          // Add analysis to chat
+          addMessageToChat("assistant", analysisHTML);
+        } else {
+          addMessageToChat(
+            "assistant",
+            "Sorry, I couldn't generate a job analysis at this time."
+          );
+        }
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to analyze job fit");
+      }
+    } catch (error) {
+      addMessageToChat(
+        "assistant",
+        `I'm sorry, I encountered an error analyzing the job fit: ${error.message}`
+      );
+      console.error("Error:", error);
+    } finally {
+      // Hide loading spinner
+      loadingSpinner.classList.add("d-none");
+    }
+  }
+
+  // Helper function to get progress bar class based on match score
+  function getMatchScoreClass(score) {
+    if (score >= 80) return "bg-success";
+    if (score >= 60) return "bg-info";
+    if (score >= 40) return "bg-warning";
+    return "bg-danger";
   }
 
   function getCookie(name) {
@@ -247,5 +651,107 @@
     }
     return cookieValue;
   }
+
+  // Save conversation to text file
+  function saveConversation() {
+    // Get all message elements
+    const messages = document.querySelectorAll("#chatMessages .message");
+    let conversationText = `Job Application Conversation - ${new Date().toLocaleString()}\n\n`;
+
+    // Format each message
+    messages.forEach((msg) => {
+      const sender = msg.dataset.sender === "user" ? "You" : "Assistant";
+      const timestamp = new Date(msg.dataset.timestamp).toLocaleTimeString();
+      const content = msg.dataset.content || msg.textContent.trim();
+
+      conversationText += `[${timestamp}] ${sender}:\n${content.trim()}\n\n`;
+    });
+
+    // Add job description if available
+    if (jobDescription) {
+      conversationText += `\n--- Job Description ---\n${jobDescription}\n`;
+    }
+
+    // Create and download the file
+    const blob = new Blob([conversationText], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `job_application_conversation_${new Date()
+      .toISOString()
+      .slice(0, 10)}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+
+    // Notify user
+    addMessageToChat(
+      "assistant",
+      "Conversation saved! The text file has been downloaded to your device."
+    );
+  }
 </script>
+
+<style>
+  /* Chat styling */
+  .message {
+    margin-bottom: 15px;
+  }
+
+  .message .avatar {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+  }
+
+  .message .message-content {
+    max-width: 80%;
+    word-wrap: break-word;
+  }
+
+  .message.user .message-content {
+    background-color: #007bff;
+    color: white;
+  }
+
+  .typing-dots {
+    display: flex;
+  }
+
+  .typing-dots .dot {
+    background-color: #888;
+    border-radius: 50%;
+    width: 8px;
+    height: 8px;
+    margin: 0 2px;
+    animation: bounce 1.5s infinite ease-in-out;
+  }
+
+  .typing-dots .dot:nth-child(1) {
+    animation-delay: 0s;
+  }
+
+  .typing-dots .dot:nth-child(2) {
+    animation-delay: 0.3s;
+  }
+
+  .typing-dots .dot:nth-child(3) {
+    animation-delay: 0.6s;
+  }
+
+  @keyframes bounce {
+    0%,
+    80%,
+    100% {
+      transform: translateY(0);
+    }
+    40% {
+      transform: translateY(-8px);
+    }
+  }
+</style>
 {% endblock %}

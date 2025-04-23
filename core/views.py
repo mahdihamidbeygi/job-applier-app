@@ -145,31 +145,29 @@ def profile(request):
             # Import GitHub profile
             importer = GitHubProfileImporter(github_username)
             github_data = json.loads(importer.import_profile(github_username))
-            
+
             # Transform repositories into projects
             projects = importer.transform_repos_to_projects(
-                github_data.get("repositories", []),
-                request.user.userprofile
+                github_data.get("repositories", []), request.user.userprofile
             )
 
             # Save projects
             for project_data in projects:
                 # Check if project already exists (based on GitHub URL)
                 existing_project = Project.objects.filter(
-                    profile=request.user.userprofile,
-                    github_url=project_data['github_url']
+                    profile=request.user.userprofile, github_url=project_data["github_url"]
                 ).first()
-                
+
                 if existing_project:
                     # Update existing project
                     for key, value in project_data.items():
-                        if key != 'profile':  # Skip updating the profile reference
+                        if key != "profile":  # Skip updating the profile reference
                             setattr(existing_project, key, value)
                     existing_project.save()
                 else:
                     # Create new project
                     Project.objects.create(**project_data)
-            
+
             # Update last refresh time
             request.user.userprofile.github_data = github_data
             request.user.userprofile.last_github_refresh = timezone.now()
@@ -575,18 +573,16 @@ def import_github_profile(request):
 
             # Transform repositories into projects
             projects = importer.transform_repos_to_projects(
-                profile_data.get("repositories", []),
-                request.user.userprofile
+                profile_data.get("repositories", []), request.user.userprofile
             )
 
             # Save projects
             for project_data in projects:
                 # Check if project already exists (based on GitHub URL)
                 existing_project = Project.objects.filter(
-                    profile=request.user.userprofile,
-                    github_url=project_data['github_url']
+                    profile=request.user.userprofile, github_url=project_data["github_url"]
                 ).first()
-                
+
                 if existing_project:
                     # Update existing project
                     for key, value in project_data.items():
@@ -886,48 +882,33 @@ def bulk_delete_records(request):
 def edit_record(request, record_type, record_id):
     """Handle editing of a record."""
     try:
-        data = json.loads(request.body)
-
-        # Map record types to their models
+        # Map record types to their models and forms
         model_map = {
-            "work_experience": WorkExperience,
-            "education": Education,
-            "project": Project,
-            "certification": Certification,
-            "publication": Publication,
-            "skill": Skill,
+            "work_experience": (WorkExperience, WorkExperienceForm),
+            "project": (Project, ProjectForm),
+            "education": (Education, EducationForm),
+            "certification": (Certification, CertificationForm),
+            "publication": (Publication, PublicationForm),
+            "skill": (Skill, SkillForm),
         }
 
         if record_type not in model_map:
             return JsonResponse({"error": "Invalid record type"}, status=400)
 
-        model = model_map[record_type]
+        model, form_class = model_map[record_type]
         record = model.objects.filter(profile=request.user.userprofile, id=record_id).first()
 
         if not record:
             return JsonResponse({"error": "Record not found"}, status=404)
 
-        # Update record fields
-        for field, value in data.items():
-            if hasattr(record, field):
-                if field in [
-                    "start_date",
-                    "end_date",
-                    "issue_date",
-                    "expiry_date",
-                    "publication_date",
-                ]:
-                    try:
-                        value = datetime.strptime(value, "%b %Y").date()
-                    except ValueError:
-                        continue
-                elif field == "technologies":
-                    value = value.split(",") if value else []
-                setattr(record, field, value)
+        # Create form with POST data and instance
+        form = form_class(request.POST, instance=record)
 
-        record.save()
-
-        return JsonResponse({"success": True, "message": "Record updated successfully"})
+        if form.is_valid():
+            form.save()
+            return JsonResponse({"success": True, "message": "Record updated successfully"})
+        else:
+            return JsonResponse({"success": False, "error": form.errors}, status=400)
 
     except Exception as e:
         logger.error(f"Error in edit record: {str(e)}")
@@ -1124,6 +1105,7 @@ def process_job_application(request):
         job_description = data.get("job_description")
         questions = data.get("questions", [])
         document_type = data.get("document_type", "all")  # 'resume', 'cover_letter', or 'all'
+        additional_services = data.get("additional_services", {})
 
         if not job_description:
             return JsonResponse({"error": "Missing job description"}, status=400)
@@ -1144,20 +1126,24 @@ def process_job_application(request):
         )
         personal_agent.load_background(background)
 
+        # Initialize response data
+        response_data = {
+            "documents": {},
+            "answers": [],
+        }
+
         # Initialize application agent
         application_agent = ApplicationAgent(request.user.id, personal_agent)
-        if document_type is not None:
-            # Initialize search agent for job analysis
+
+        # Initialize search agent for job analysis if needed
+        if document_type != "none" or additional_services.get("analyze_job_fit", False):
             search_agent = SearchAgent(request.user.id, personal_agent)
 
-            # Analyze job fit
-            job_analysis = search_agent.analyze_job_fit({"description": job_description})
-
-            response_data = {
-                "job_analysis": json.loads(job_analysis),
-                "documents": {},
-                "answers": [],
-            }
+            # Analyze job fit if requested
+            if additional_services.get("analyze_job_fit", False):
+                job_analysis = search_agent.analyze_job_fit({"description": job_description})
+                # No need to parse JSON since the method now returns a dictionary
+                response_data["job_analysis"] = job_analysis
 
         # Generate requested documents
         if document_type in ["resume", "all"]:
@@ -1189,9 +1175,15 @@ def process_job_application(request):
             response_data["answers"] = answers
 
         # Add interview preparation if requested
-        if data.get("include_interview_prep", False):
+        if additional_services.get("prepare_interview", False):
             interview_prep = application_agent.prepare_interview_responses(job_description)
-            response_data["interview_prep"] = json.loads(interview_prep)
+            if isinstance(interview_prep, str):
+                try:
+                    response_data["interview_prep"] = json.loads(interview_prep)
+                except:
+                    response_data["interview_prep"] = {"questions": [], "answers": []}
+            else:
+                response_data["interview_prep"] = interview_prep
 
         return JsonResponse(response_data)
 
@@ -1281,7 +1273,9 @@ def get_token(request):
 def jobs_page(request):
     """View for the jobs page"""
     # Get user's job listings
-    job_listings = JobListing.objects.filter(user=request.user).order_by("-posted_date", "-match_score")
+    job_listings = JobListing.objects.filter(user=request.user).order_by(
+        "-posted_date", "-match_score"
+    )
 
     # Get search parameters from request
     role = request.GET.get("role", "")
@@ -1297,17 +1291,17 @@ def jobs_page(request):
     # Annotate job listings with has_tailored_documents
     job_listings = [
         {
-            'id': job.id,
-            'title': job.title,
-            'company': job.company,
-            'location': job.location,
-            'description': job.description,
-            'source': job.source,
-            'source_url': job.source_url,
-            'posted_date': job.posted_date,
-            'match_score': job.match_score,
-            'applied': job.applied,
-            'has_tailored_documents': job.has_tailored_documents,
+            "id": job.id,
+            "title": job.title,
+            "company": job.company,
+            "location": job.location,
+            "description": job.description,
+            "source": job.source,
+            "source_url": job.source_url,
+            "posted_date": job.posted_date,
+            "match_score": job.match_score,
+            "applied": job.applied,
+            "has_tailored_documents": job.has_tailored_documents,
         }
         for job in job_listings
     ]
@@ -1387,26 +1381,25 @@ def search_jobs(request):
                             "match_score": job.get("match_score", None),
                         },
                     )
-                    processed_jobs.append({
-                        "id": job_obj.id,
-                        "title": job_obj.title,
-                        "company": job_obj.company,
-                        "location": job_obj.location,
-                        "description": job_obj.description,
-                        "source": job_obj.source,
-                        "source_url": job_obj.source_url,
-                        "posted_date": job_obj.posted_date,
-                        "match_score": job_obj.match_score,
-                        "applied": job_obj.applied,
-                    })
+                    processed_jobs.append(
+                        {
+                            "id": job_obj.id,
+                            "title": job_obj.title,
+                            "company": job_obj.company,
+                            "location": job_obj.location,
+                            "description": job_obj.description,
+                            "source": job_obj.source,
+                            "source_url": job_obj.source_url,
+                            "posted_date": job_obj.posted_date,
+                            "match_score": job_obj.match_score,
+                            "applied": job_obj.applied,
+                        }
+                    )
                 except Exception as e:
                     logger.error(f"Error processing job: {str(e)}")
                     continue
 
-            return JsonResponse({
-                "jobs": processed_jobs,
-                "warnings": errors if errors else None
-            })
+            return JsonResponse({"jobs": processed_jobs, "warnings": errors if errors else None})
 
         except json.JSONDecodeError:
             return JsonResponse({"error": "Invalid JSON data"}, status=400)
@@ -1617,23 +1610,23 @@ def remove_job(request):
     try:
         data = json.loads(request.body)
         job_id = data.get("job_id")
-        
+
         if not job_id:
             return JsonResponse({"error": "Job ID is required"}, status=400)
-            
+
         # Get the job listing
         job = JobListing.objects.filter(id=job_id).first()
         if not job:
             return JsonResponse({"error": "Job not found"}, status=404)
-            
+
         # Store the job ID in user's session to hide it from future searches
         hidden_jobs = request.session.get("hidden_jobs", [])
         if job_id not in hidden_jobs:
             hidden_jobs.append(job_id)
             request.session["hidden_jobs"] = hidden_jobs
-            
+
         return JsonResponse({"message": "Job removed successfully"})
-        
+
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON data"}, status=400)
     except Exception as e:
@@ -1647,19 +1640,19 @@ def deduplicate_skills(request):
     try:
         # Get all skills for the user
         skills = request.user.userprofile.skills.all()
-        
+
         # Keep track of seen skills (case-insensitive)
         seen_skills = {}
         duplicates_removed = 0
-        
+
         for skill in skills:
             # Create a key using lowercase name and category
             key = (skill.name.lower(), skill.category)
-            
+
             if key in seen_skills:
                 # If we've seen this skill before
                 existing_skill = seen_skills[key]
-                
+
                 # Keep the one with higher proficiency
                 if skill.proficiency > existing_skill.proficiency:
                     existing_skill.delete()
@@ -1673,14 +1666,16 @@ def deduplicate_skills(request):
                 # Normalize the name to Title Case
                 skill.name = skill.name.title()
                 skill.save()
-        
+
         if duplicates_removed > 0:
-            messages.success(request, f"Successfully removed {duplicates_removed} duplicate skills.")
+            messages.success(
+                request, f"Successfully removed {duplicates_removed} duplicate skills."
+            )
         else:
             messages.info(request, "No duplicate skills found.")
-            
-        return redirect('core:profile')
-        
+
+        return redirect("core:profile")
+
     except Exception as e:
         messages.error(request, f"Error removing duplicate skills: {str(e)}")
-        return redirect('core:profile')
+        return redirect("core:profile")
