@@ -931,7 +931,7 @@ def get_profile_stats(request):
 
 @method_decorator(login_required, name="dispatch")
 class ManualSubmissionView(TemplateView):
-    template_name = "core/manual_submission.html"
+    template_name = "core/application_assistance.html"
 
 
 @login_required

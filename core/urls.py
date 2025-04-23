@@ -49,7 +49,11 @@ urlpatterns = [
     path("import-resume/", views.import_resume, name="import_resume"),
     path("bulk-delete-records/", views.bulk_delete_records, name="bulk_delete_records"),
     path("profile/edit/<str:record_type>/<int:record_id>/", views.edit_record, name="edit_record"),
-    path("manual-submission/", views.ManualSubmissionView.as_view(), name="manual_submission"),
+    path(
+        "application-assistance/",
+        views.ManualSubmissionView.as_view(),
+        name="application_assistance",
+    ),
     path("process-application/", views.process_job_application, name="process_job_application"),
     path("api/generate-documents/", views.generate_documents, name="generate_documents"),
     path("api/generate-answers/", views.generate_answers, name="generate_answers"),
