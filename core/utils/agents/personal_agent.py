@@ -55,10 +55,10 @@ class PersonalAgent(BaseAgent):
             raise ValueError("Background not loaded. Call load_user_profile first.")
 
         return f"""
-        Professional Experience: {len(getattr(self.user_profile, 'work_experiences', []))} positions
-        Education: {len(getattr(self.user_profile, 'education', []))} institutions
-        Skills: {len(getattr(self.user_profile, 'skills', []))} skills
-        Projects: {len(getattr(self.user_profile, 'projects', []))} projects
+        Professional Experience: {len(self.user_profile.work_experiences.all())} positions
+        Education: {len(self.user_profile.education.all())} institutions
+        Skills: {len(self.user_profile.skills.all())} skills
+        Projects: {len(self.user_profile.projects.all())} projects
         """
 
     def get_background_str(self) -> str:

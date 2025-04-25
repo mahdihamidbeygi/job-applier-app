@@ -51,7 +51,10 @@ def generate_documents(request):
         personal_agent = PersonalAgent(request.user.id)
         job_agent = JobAgent(
             user_id=request.user.id,
-            text=job_title + job_description + company + f"user: {request.user.username}",
+            text=job_title
+            + job_description
+            + company
+            + f"user: {personal_agent.user_profile.user.username}",
         )
         # Initialize application agent
         application_agent = ApplicationAgent(
@@ -96,11 +99,19 @@ def generate_answers(request):
                 {"error": "Job title, description, company, and questions are required"}, status=400
             )
 
+        personal_agent = PersonalAgent(request.user.id)
+        job_agent = JobAgent(
+            user_id=request.user.id,
+            text=job_title
+            + job_description
+            + company
+            + f"user: {personal_agent.user_profile.user.username}",
+        )
         # Initialize application agent
         application_agent = ApplicationAgent(
             user_id=request.user.id,
-            personal_agent=PersonalAgent(request.user.id),
-            job_agent=JobAgent(job_id=None, text=job_title + job_description + company),
+            personal_agent=personal_agent,
+            job_agent=job_agent,
         )
 
         # Generate answers
@@ -147,7 +158,13 @@ def process_job_application(request):
 
         agent_personal = PersonalAgent(request.user.id)
         agent_job = JobAgent(
-            job_id=None, text=job_title + job_description + company + application_url
+            user_id=request.user.id,
+            job_id=None,
+            text=job_title
+            + job_description
+            + company
+            + application_url
+            + f"user: {agent_personal.user_profile.user.username}",
         )
 
         # Initialize application agent
@@ -191,11 +208,20 @@ def fill_form(request):
         if not user_id:
             return Response({"error": "Authentication required"}, status=401)
 
+        personal_agent = PersonalAgent(user_id)
+        job_agent = JobAgent(
+            user_id=user_id,
+            job_id=None,
+            text=job_title
+            + job_description
+            + company
+            + f"user: {personal_agent.user_profile.user.username}",
+        )
         # Initialize application agent
         application_agent = ApplicationAgent(
             user_id=user_id,
-            personal_agent=PersonalAgent(user_id),
-            job_agent=JobAgent(job_id=None, text=job_title + job_description + company),
+            personal_agent=personal_agent,
+            job_agent=job_agent,
         )
 
         # Process form fields using the utility function

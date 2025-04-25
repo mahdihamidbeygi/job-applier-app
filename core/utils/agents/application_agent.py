@@ -90,16 +90,16 @@ class ApplicationAgent(BaseAgent):
 
         # Handle name fields
         if any(name in field_label_lower for name in ["first name", "firstname", "given name"]):
-            return getattr(self.personal_agent.user_profile, "first_name", "")
+            return self.personal_agent.user_profile.user.first_name
 
         if any(
             name in field_label_lower
             for name in ["last name", "lastname", "surname", "family name"]
         ):
-            return getattr(self.personal_agent.user_profile, "last_name", "")
+            return self.personal_agent.user_profile.user.last_name
 
         if "full name" in field_label_lower or "name" == field_label_lower:
-            return getattr(self.personal_agent.user_profile, "full_name", "")
+            return self.personal_agent.user_profile.full_name
 
         # Handle contact information
         if "email" in field_label_lower:
@@ -227,9 +227,9 @@ class ApplicationAgent(BaseAgent):
 
             # Find the user's highest education level
             highest_education = None
-            if getattr(self.personal_agent.user_profile, "education", None):
+            if self.personal_agent.user_profile.education:
                 for edu in education_order:
-                    for user_edu in getattr(self.personal_agent.user_profile, "education", []):
+                    for user_edu in self.personal_agent.user_profile.education.all():
                         if edu in user_edu.get("degree", "").lower():
                             highest_education = edu
 
@@ -244,7 +244,7 @@ class ApplicationAgent(BaseAgent):
         # For years of experience fields
         if "experience" in field_label_lower and "year" in field_label_lower:
             years_of_experience = 0
-            if getattr(self.personal_agent.user_profile, "work_experience", None):
+            if self.personal_agent.user_profile.work_experiences:
                 # Calculate total years of experience from work experiences
                 pass  # Implementation depends on data structure
 
@@ -293,10 +293,10 @@ class ApplicationAgent(BaseAgent):
             selected_skills: List[str] = []
             user_skills: List[str] = []
 
-            if getattr(self.personal_agent.user_profile, "skills", None):
+            if self.personal_agent.user_profile.skills:
                 user_skills: List[str] = [
                     skill.get("name", "").lower()
-                    for skill in getattr(self.personal_agent.user_profile, "skills", [])
+                    for skill in self.personal_agent.user_profile.skills
                 ]
 
             for option in options:
@@ -344,9 +344,9 @@ class ApplicationAgent(BaseAgent):
 
         if "start" in field_label_lower:
             # Get most recent work experience start date
-            if getattr(self.personal_agent.user_profile, "work_experience", None):
+            if self.personal_agent.user_profile.work_experience:
                 for exp in sorted(
-                    getattr(self.personal_agent.user_profile, "work_experience", []),
+                    self.personal_agent.user_profile.work_experience,
                     key=lambda x: x.get("start_date", ""),
                     reverse=True,
                 ):
@@ -569,73 +569,73 @@ class ApplicationAgent(BaseAgent):
 
     def generate_cover_letter(self) -> str:
         """Generates a tailored cover letter"""
-        # Get company context
-        company_context = self.knowledge_base.get_company_context(
-            self.job_agent.job_record.description.split("\n")[
-                0
-            ]  # Assuming first line contains company name
-        )
+        # # Get company context
+        # company_context = self.knowledge_base.get_company_context(
+        #     self.job_agent.job_record.description.split("\n")[
+        #         0
+        #     ]  # Assuming first line contains company name
+        # )
 
-        prompt = f"""
-        Job Description:
-        {self.job_agent.job_record.get_formatted_info()}
-        
-        Company Context:
-        {company_context}
-        
-        Candidate Background:
-        {self.personal_agent.get_background_str()}
-        
-        GitHub Profile:
-        {self.personal_agent._format_github_data(self.personal_agent.user_profile.github_data if hasattr(self.personal_agent, 'user_profile') else {})}
-        
-        Generate a professional cover letter that:
-        1. Opens with a strong hook
-        2. Highlights relevant experience and GitHub contributions
-        3. Demonstrates understanding of the role
-        4. Shows enthusiasm for the company
-        5. Closes with a call to action
-        6. Reflects company culture and values
-        7. References specific GitHub projects or contributions when relevant
-        
-        Format Requirements:
-        1. Start with "Dear Hiring Manager," on its own line
-        2. Add a blank line after the salutation
-        3. Write exactly 3 paragraphs:
-           - First paragraph: Introduction and hook
-           - Second paragraph: Relevant experience, GitHub contributions, and skills
-           - Third paragraph: Closing and call to action
-        4. End with "Sincerely," followed by a blank line and the candidate's name
-        5. Each paragraph must be unique - do not repeat any sentences or content
-        6. Keep paragraphs focused and concise
-        
-        Return ONLY the formatted cover letter text, with no additional commentary.
-        """
+        # prompt = f"""
+        # Job Description:
+        # {self.job_agent.job_record.get_formatted_info()}
 
-        response: str = self.llm.generate_text(prompt)
+        # Company Context:
+        # {company_context}
 
-        # Clean up formatting
-        # Split into paragraphs and remove empty lines
-        paragraphs = [p.strip() for p in response.split("\n") if p.strip()]
+        # Candidate Background:
+        # {self.personal_agent.get_background_str()}
 
-        # Remove any duplicate paragraphs while preserving order
-        seen = set()
-        unique_paragraphs = []
-        for p in paragraphs:
-            normalized_p = " ".join(p.lower().split())  # Normalize for comparison
-            if normalized_p not in seen and p not in ["Dear Hiring Manager,", "Sincerely,"]:
-                seen.add(normalized_p)
-                unique_paragraphs.append(p)
+        # GitHub Profile:
+        # {self.personal_agent._format_github_data(self.personal_agent.user_profile.github_data if hasattr(self.personal_agent, 'user_profile') else {})}
 
-        # Ensure proper structure
-        formatted_parts = []
-        formatted_parts.append("Dear Hiring Manager,")  # Salutation
-        formatted_parts.extend(unique_paragraphs[:3])  # Main paragraphs (limit to 3)
-        formatted_parts.append("Sincerely,")  # Closing
-        formatted_parts.append(getattr(self.personal_agent.user_profile, "name", ""))  # Name
+        # Generate a professional cover letter that:
+        # 1. Opens with a strong hook
+        # 2. Highlights relevant experience and GitHub contributions
+        # 3. Demonstrates understanding of the role
+        # 4. Shows enthusiasm for the company
+        # 5. Closes with a call to action
+        # 6. Reflects company culture and values
+        # 7. References specific GitHub projects or contributions when relevant
 
-        # Join with double line breaks
-        formatted_letter = "\n\n".join(formatted_parts)
+        # Format Requirements:
+        # 1. Start with "Dear Hiring Manager," on its own line
+        # 2. Add a blank line after the salutation
+        # 3. Write exactly 3 paragraphs:
+        #    - First paragraph: Introduction and hook
+        #    - Second paragraph: Relevant experience, GitHub contributions, and skills
+        #    - Third paragraph: Closing and call to action
+        # 4. End with "Sincerely," followed by a blank line and the candidate's name
+        # 5. Each paragraph must be unique - do not repeat any sentences or content
+        # 6. Keep paragraphs focused and concise
+
+        # Return ONLY the formatted cover letter text, with no additional commentary.
+        # """
+
+        # response: str = self.llm.generate_text(prompt)
+
+        # # Clean up formatting
+        # # Split into paragraphs and remove empty lines
+        # paragraphs = [p.strip() for p in response.split("\n") if p.strip()]
+
+        # # Remove any duplicate paragraphs while preserving order
+        # seen = set()
+        # unique_paragraphs = []
+        # for p in paragraphs:
+        #     normalized_p = " ".join(p.lower().split())  # Normalize for comparison
+        #     if normalized_p not in seen and p not in ["Dear Hiring Manager,", "Sincerely,"]:
+        #         seen.add(normalized_p)
+        #         unique_paragraphs.append(p)
+
+        # # Ensure proper structure
+        # formatted_parts = []
+        # formatted_parts.append("Dear Hiring Manager,")  # Salutation
+        # formatted_parts.extend(unique_paragraphs[:3])  # Main paragraphs (limit to 3)
+        # formatted_parts.append("Sincerely,")  # Closing
+        # formatted_parts.append(getattr(self.personal_agent.user_profile, "name", ""))  # Name
+
+        # # Join with double line breaks
+        # formatted_letter = "\n\n".join(formatted_parts)
 
         cover_letter_composition = CoverLetterComposition(
             personal_agent=self.personal_agent,
@@ -645,7 +645,7 @@ class ApplicationAgent(BaseAgent):
         cover_letter_buffer: BytesIO = cover_letter_composition.build()
 
         # Format the filename components
-        username: Any | str = getattr(self.personal_agent.user_profile, "username", "")
+        username: Any | str = self.personal_agent.user_profile.user.username
         today: str = date.today().strftime("%Y%m%d")
         company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")
@@ -714,7 +714,7 @@ class ApplicationAgent(BaseAgent):
         )
 
         # Format the filename components
-        username: Any | str = getattr(self.personal_agent.user_profile, "username", "")
+        username: Any | str = self.personal_agent.user_profile.user.username
         today: str = date.today().strftime("%Y%m%d")
         company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")

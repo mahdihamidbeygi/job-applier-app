@@ -133,8 +133,8 @@ class UserProfile(TimestampMixin):
         """
         info = {
             # Basic info
-            "id": getattr(self, "id"),
-            "username": getattr(self.user, "username"),
+            "id": self.user.id,
+            "username": self.user.username,
             "email": self.email,
             "name": self.name,
             "full_name": self.full_name,
@@ -174,7 +174,7 @@ class UserProfile(TimestampMixin):
         # Work experiences
         if hasattr(self, "work_experiences"):
             info["work_experiences"] = []
-            for exp in getattr(self, "work_experiences", []):
+            for exp in self.work_experiences.all():
                 info["work_experiences"].append(
                     {
                         "id": exp.id,
@@ -196,7 +196,7 @@ class UserProfile(TimestampMixin):
         # Education
         if hasattr(self, "education"):
             info["education"] = []
-            for edu in getattr(self, "education", []):
+            for edu in self.education.all():
                 info["education"].append(
                     {
                         "id": edu.id,
@@ -217,7 +217,7 @@ class UserProfile(TimestampMixin):
         # Projects
         if hasattr(self, "projects"):
             info["projects"] = []
-            for proj in getattr(self, "projects", []):
+            for proj in self.projects.all():
                 info["projects"].append(
                     {
                         "id": proj.id,
@@ -241,7 +241,7 @@ class UserProfile(TimestampMixin):
             # Group skills by category
             skills_by_category = {}
 
-            for skill in getattr(self, "skills", []):
+            for skill in self.skills.all():
                 skill_info = {
                     "id": skill.id,
                     "name": skill.name,
@@ -270,7 +270,7 @@ class UserProfile(TimestampMixin):
         # Certifications
         if hasattr(self, "certifications"):
             info["certifications"] = []
-            for cert in getattr(self, "certifications", []):
+            for cert in self.certifications.all():
                 info["certifications"].append(
                     {
                         "id": cert.id,
@@ -289,7 +289,7 @@ class UserProfile(TimestampMixin):
         # Publications
         if hasattr(self, "publications"):
             info["publications"] = []
-            for pub in getattr(self, "publications", []):
+            for pub in self.publications.all():
                 info["publications"].append(
                     {
                         "id": pub.id,
@@ -328,7 +328,7 @@ class UserProfile(TimestampMixin):
         # Add user information section
         additional_sections.append("\nUSER ACCOUNT INFORMATION")
         additional_sections.append("-" * 22)
-        additional_sections.append(f"Username: {getattr(self.user, 'username')}")
+        additional_sections.append(f"Username: {self.user.username}")
         additional_sections.append(f"Email: {self.email}")
         additional_sections.append(f"Full Name: {self.full_name}")
 
@@ -347,7 +347,7 @@ class UserProfile(TimestampMixin):
                 if self.company:
                     position_info.append(f"at {self.company}")
                 additional_sections.append(f"Current Position: {' '.join(position_info)}")
-            if hasattr(self, "work_experiences") and getattr(self, "work_experiences").exists():
+            if hasattr(self, "work_experiences") and self.work_experiences.exists():
                 additional_sections.append(f"Years of Experience: {self.years_of_experience}")
 
         # Add contact and location information

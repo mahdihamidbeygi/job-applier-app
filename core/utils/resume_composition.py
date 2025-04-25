@@ -259,7 +259,7 @@ class ResumeComposition:
 
     def _create_experience_section(self):
         """Create the experience section of the resume."""
-        if not getattr(self.personal_agent.user_profile, "work_experiences", None):
+        if not self.personal_agent.user_profile.work_experiences:
             return
 
         self.elements.append(
@@ -267,7 +267,7 @@ class ResumeComposition:
         )
         # Sort experiences by start date (most recent first)
         sorted_experiences = sorted(
-            getattr(self.personal_agent.user_profile, "work_experiences", []),
+            self.personal_agent.user_profile.work_experiences.all(),
             key=lambda x: x.get("start_date", "1900-01-01").strftime("%Y-%m-%d"),
             reverse=True,
         )
@@ -344,12 +344,12 @@ class ResumeComposition:
             return 0.0
 
     def _create_projects_section(self, job_description=None, max_projects=10):
-        if not getattr(self.personal_agent.user_profile, "projects", None):
+        if not self.personal_agent.user_profile.projects:
             return
 
         # Score and sort projects by relevance
         scored_projects: List[Tuple[float, Dict[str, Any]]] = []
-        for project in getattr(self.personal_agent.user_profile, "projects", []):
+        for project in self.personal_agent.user_profile.projects.all():
             # Clean the project title by removing anything in parentheses
             title: str = project.get("title", "")
             cleaned_title = title.split("(")[0].strip()
@@ -417,12 +417,12 @@ class ResumeComposition:
             self.elements.append(Spacer(1, 2))
 
     def _create_certifications_section(self):
-        if not getattr(self.personal_agent.user_profile, "certifications", None):
+        if not self.personal_agent.user_profile.certifications:
             return
 
         self.elements.append(Paragraph("CERTIFICATIONS", self.styles["ResumeSectionHeader"]))
 
-        for cert in getattr(self.personal_agent.user_profile, "certifications", []):
+        for cert in self.personal_agent.user_profile.certifications.all():
             cert_text: str = f"{cert['name']}"
             if cert.get("issuer"):
                 cert_text += f" - {cert['issuer']}"
@@ -434,12 +434,12 @@ class ResumeComposition:
 
     def _create_education_section(self):
         """Create the education section of the resume."""
-        if not getattr(self.personal_agent.user_profile, "education", None):
+        if not self.personal_agent.user_profile.education:
             return
 
         self.elements.append(Paragraph("EDUCATION", self.styles["ResumeSectionHeader"]))
 
-        for edu in getattr(self.personal_agent.user_profile, "education", []):
+        for edu in self.personal_agent.user_profile.education.all():
             edu_text: str = f"{edu['institution']}"
             if edu.get("degree"):
                 edu_text += f" - {edu['degree']}"
@@ -453,7 +453,7 @@ class ResumeComposition:
 
     def _create_skills_section(self, job_info: str):
         """Create the skills section of the resume."""
-        if not getattr(self.personal_agent.user_profile, "skills", None):
+        if not self.personal_agent.user_profile.skills:
             return
 
         self.elements.append(Paragraph("SKILLS", self.styles["ResumeSectionHeader"]))
@@ -461,7 +461,7 @@ class ResumeComposition:
         # Get unique skills and their highest proficiency level
         # Use lowercase name as key to ensure case-insensitive uniqueness
         skill_levels = {}
-        for skill in getattr(self.personal_agent.user_profile, "skills", []):
+        for skill in self.personal_agent.user_profile.skills.all():
             name = skill.get("name", "").strip()
             name_lower = name.lower()
             level = skill.get("level", 0)
@@ -480,7 +480,7 @@ class ResumeComposition:
         {job_info}
         
         Candidate's Work Experiences:
-        {', '.join([f"{exp.get('position', '')} at {exp.get('company', '')}: {exp.get('description', '')}" for exp in getattr(self.personal_agent.user_profile, "work_experiences", [])])}
+        {', '.join([f"{exp.get('position', '')} at {exp.get('company', '')}: {exp.get('description', '')}" for exp in self.personal_agent.user_profile.work_experiences.all()])}
 
         ⚠️ STRICT RESPONSE FORMAT REQUIREMENTS ⚠️
         Your response must be EXACTLY in this format, with no additional text:
@@ -564,7 +564,7 @@ class ResumeComposition:
         {self.personal_agent.get_background_str()}   
                      
         Applicant Skills:
-        {', '.join([skill.get('name', '') for skill in getattr(self.personal_agent.user_profile, "skills", [])])}
+        {', '.join([skill.get('name', '') for skill in self.personal_agent.user_profile.skills.all()])}
 
         Instructions:
         1. Analyze the job description and identify key requirements and skills
