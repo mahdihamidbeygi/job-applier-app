@@ -1,103 +1,38 @@
 import json
 from datetime import datetime
 from io import BytesIO
-from typing import List
+from typing import Any, Dict, List, LiteralString, Tuple
 
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from django.core.files.storage import default_storage
 
+from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.local_llms import GoogleClient, OllamaClient
 
 
 class ResumeComposition:
-    def __init__(self, personal_agent):
+    def __init__(self, personal_agent: PersonalAgent):
         """
         Initialize the ResumeComposition class.
 
         Args:
             personal_agent (PersonalAgent): The personal agent containing user data
         """
-        self.personal_agent = personal_agent
-        self.user_data = self._convert_to_dict(personal_agent.background.profile)
-        self.styles = getSampleStyleSheet()
+        self.personal_agent: PersonalAgent = personal_agent
+        self.styles: StyleSheet1 = getSampleStyleSheet()
         self._setup_styles()
         self.elements = []
         self.ollama_client = OllamaClient(model="llama3:latest", temperature=0.0)
         self.google_client = GoogleClient()
-        
-    def _convert_to_dict(self, user_data):
-        """Convert UserProfile model instance to dictionary format"""
-        if hasattr(user_data, "user"):  # If it's a UserProfile model instance
-            return {
-                "name": user_data.user.get_full_name() or user_data.user.username,
-                "email": user_data.user.email,
-                "phone": "".join(
-                    char
-                    for char in getattr(user_data, "phone", "")
-                    if char.isdigit() or char == "+"
-                ),
-                "location": getattr(user_data, "location", ""),
-                "linkedin": getattr(user_data, "linkedin_url", ""),
-                "github": getattr(user_data, "github_url", ""),
-                "title": getattr(user_data, "title", ""),
-                "headline": getattr(user_data, "headline", ""),
-                "professional_summary": getattr(user_data, "professional_summary", ""),
-                "work_experience": [
-                    {
-                        "company": exp.company,
-                        "position": exp.position,
-                        "location": exp.location,
-                        "start_date": (
-                            exp.start_date.strftime("%Y-%m-%d") if exp.start_date else None
-                        ),
-                        "end_date": exp.end_date.strftime("%Y-%m-%d") if exp.end_date else None,
-                        "description": exp.description,
-                        "bullet_points": exp.achievements.split("\n") if exp.achievements else [],
-                    }
-                    for exp in user_data.work_experiences.all()
-                ],
-                "projects": [
-                    {
-                        "title": proj.title,
-                        "description": proj.description,
-                        "technologies": proj.technologies.split(", ") if proj.technologies else [],
-                        "start_date": (
-                            proj.start_date.strftime("%Y-%m-%d") if proj.start_date else None
-                        ),
-                        "end_date": proj.end_date.strftime("%Y-%m-%d") if proj.end_date else None,
-                    }
-                    for proj in user_data.projects.all()
-                ],
-                "certifications": [
-                    {
-                        "name": cert.name,
-                        "issuer": cert.issuer,
-                        "date": cert.issue_date.strftime("%Y-%m-%d") if cert.issue_date else None,
-                    }
-                    for cert in user_data.certifications.all()
-                ],
-                "education": [
-                    {
-                        "institute": edu.institution,
-                        "degree": edu.degree,
-                        "field_of_study": edu.field_of_study,
-                        "graduation_date": (
-                            edu.end_date.strftime("%Y-%m-%d") if edu.end_date else None
-                        ),
-                    }
-                    for edu in user_data.education.all()
-                ],
-                "skills": [
-                    {"name": skill.name, "level": skill.proficiency}
-                    for skill in user_data.skills.all()
-                ],
-            }
-        return user_data  # If it's already a dictionary, return as is
+        self.professional_summary: str = ""
+        self.projects: str = ""
+        self.skills: str = ""
 
     def _setup_styles(self):
         # Header style
@@ -247,19 +182,25 @@ class ResumeComposition:
 
     def _create_header(self):
         # Name
-        self.elements.append(Paragraph(self.user_data["name"], self.styles["ResumeHeader"]))
+        self.elements.append(
+            Paragraph(self.personal_agent.user_profile.name, self.styles["ResumeHeader"])
+        )
 
         # Title/Role
-        if self.user_data.get("title"):
-            self.elements.append(Paragraph(self.user_data["title"], self.styles["ResumeRole"]))
+        if self.personal_agent.user_profile.title:
+            self.elements.append(
+                Paragraph(self.personal_agent.user_profile.title, self.styles["ResumeRole"])
+            )
 
         # Contact info
         contact_info = []
-        if self.user_data.get("email"):
-            contact_info.append(self.user_data["email"])
-        if self.user_data.get("phone"):
+        if self.personal_agent.user_profile.email:
+            contact_info.append(self.personal_agent.user_profile.email)
+        if self.personal_agent.user_profile.phone:
             # Extract only numbers from phone string
-            phone = "".join(char for char in str(self.user_data["phone"]) if char.isdigit())
+            phone = "".join(
+                char for char in str(self.personal_agent.user_profile.phone) if char.isdigit()
+            )
             if len(phone) >= 10:  # Only format if we have enough digits
                 if phone.startswith("1") and len(phone) > 10:  # Handle country code 1
                     # Format as +1 XXX XXX XXXX
@@ -268,12 +209,12 @@ class ResumeComposition:
                     # Format as XXX XXX XXXX
                     formatted_phone = f"{phone[:3]} {phone[3:6]} {phone[6:10]}"
                 contact_info.append(formatted_phone)
-        if self.user_data.get("location"):
-            contact_info.append(self.user_data["location"])
-        if self.personal_agent.background.profile["linkedin_url"]:
-            contact_info.append(self.personal_agent.background.profile["linkedin_url"])
-        if self.personal_agent.background.profile["github_url"]:
-            contact_info.append(self.personal_agent.background.profile["github_url"])
+        if self.personal_agent.user_profile.location:
+            contact_info.append(self.personal_agent.user_profile.location)
+        if self.personal_agent.user_profile.linkedin_url:
+            contact_info.append(self.personal_agent.user_profile.linkedin_url)
+        if self.personal_agent.user_profile.github_url:
+            contact_info.append(self.personal_agent.user_profile.github_url)
 
         if contact_info:
             self.elements.append(Paragraph(" | ".join(contact_info), self.styles["ResumeContact"]))
@@ -318,7 +259,7 @@ class ResumeComposition:
 
     def _create_experience_section(self):
         """Create the experience section of the resume."""
-        if not self.personal_agent.background.work_experience:
+        if not getattr(self.personal_agent.user_profile, "work_experiences", None):
             return
 
         self.elements.append(
@@ -326,7 +267,7 @@ class ResumeComposition:
         )
         # Sort experiences by start date (most recent first)
         sorted_experiences = sorted(
-            self.personal_agent.background.work_experience,
+            getattr(self.personal_agent.user_profile, "work_experiences", []),
             key=lambda x: x.get("start_date", "1900-01-01").strftime("%Y-%m-%d"),
             reverse=True,
         )
@@ -338,11 +279,11 @@ class ResumeComposition:
             if exp.get("location"):
                 position_text += f", {exp['location']}"
 
-            start_date = self._format_date(exp.get("start_date"))
-            end_date = self._format_date(exp.get("end_date"))
-            date_text = f"{start_date}-{end_date}"
+            start_date: str = self._format_date(exp.get("start_date"))
+            end_date: str = self._format_date(exp.get("end_date"))
+            date_text: str = f"{start_date}-{end_date}"
 
-            experience_data = [
+            experience_data: List[List[Paragraph]] = [
                 [
                     Paragraph(position_text, self.styles["ResumeJobTitleBold"]),
                     Paragraph(date_text, self.styles["ResumeDate"]),
@@ -370,7 +311,9 @@ class ResumeComposition:
 
             # Convert description to bullet points if it exists
             if exp.get("description"):
-                additional_bullets = self._convert_description_to_bullets(exp["description"])
+                additional_bullets: List[str] = self._convert_description_to_bullets(
+                    exp["description"]
+                )
                 if additional_bullets:
                     exp.setdefault("bullet_points", []).extend(additional_bullets)
 
@@ -400,15 +343,15 @@ class ResumeComposition:
         except Exception:
             return 0.0
 
-    def _create_projects_section(self, job_description=None, max_projects=5):
-        if not self.personal_agent.background.projects:
+    def _create_projects_section(self, job_description=None, max_projects=10):
+        if not getattr(self.personal_agent.user_profile, "projects", None):
             return
 
         # Score and sort projects by relevance
-        scored_projects = []
-        for project in self.personal_agent.background.projects:
+        scored_projects: List[Tuple[float, Dict[str, Any]]] = []
+        for project in getattr(self.personal_agent.user_profile, "projects", []):
             # Clean the project title by removing anything in parentheses
-            title = project.get("title", "")
+            title: str = project.get("title", "")
             cleaned_title = title.split("(")[0].strip()
             project["title"] = cleaned_title
 
@@ -416,8 +359,12 @@ class ResumeComposition:
             scored_projects.append((score, project))
 
         # Sort by score (descending) and limit to max_projects
-        sorted_projects = sorted(scored_projects, key=lambda x: (-x[0], x[1].get("title", "")))
-        relevant_projects = [proj for _, proj in sorted_projects[:max_projects]]
+        sorted_projects: List[Tuple[float, Dict[str, Any]]] = sorted(
+            scored_projects, key=lambda x: (-x[0], x[1].get("title", ""))
+        )
+        relevant_projects: List[Dict[str, Any]] = [
+            proj for _, proj in sorted_projects[:max_projects]
+        ]
 
         if not relevant_projects:
             return
@@ -431,11 +378,11 @@ class ResumeComposition:
             # if project.get('technologies'):
             #     title_text += f" ({', '.join(project['technologies'])})"
 
-            start_date = self._format_date(project.get("start_date"))
-            end_date = self._format_date(project.get("end_date"))
-            date_text = f"{start_date}-{end_date}"
+            start_date: str = self._format_date(project.get("start_date"))
+            end_date: str = self._format_date(project.get("end_date"))
+            date_text: str = f"{start_date}-{end_date}"
 
-            project_data = [
+            project_data: List[List[Paragraph]] = [
                 [
                     Paragraph(title_text, self.styles["ResumeProjectTitle"]),
                     Paragraph(date_text, self.styles["ResumeDate"]),
@@ -470,13 +417,13 @@ class ResumeComposition:
             self.elements.append(Spacer(1, 2))
 
     def _create_certifications_section(self):
-        if not self.user_data.get("certifications"):
+        if not getattr(self.personal_agent.user_profile, "certifications", None):
             return
 
         self.elements.append(Paragraph("CERTIFICATIONS", self.styles["ResumeSectionHeader"]))
 
-        for cert in self.user_data["certifications"]:
-            cert_text = f"{cert['name']}"
+        for cert in getattr(self.personal_agent.user_profile, "certifications", []):
+            cert_text: str = f"{cert['name']}"
             if cert.get("issuer"):
                 cert_text += f" - {cert['issuer']}"
             if cert.get("date"):
@@ -487,13 +434,13 @@ class ResumeComposition:
 
     def _create_education_section(self):
         """Create the education section of the resume."""
-        if not self.personal_agent.background.education:
+        if not getattr(self.personal_agent.user_profile, "education", None):
             return
 
         self.elements.append(Paragraph("EDUCATION", self.styles["ResumeSectionHeader"]))
 
-        for edu in self.personal_agent.background.education:
-            edu_text = f"{edu['institution']}"
+        for edu in getattr(self.personal_agent.user_profile, "education", []):
+            edu_text: str = f"{edu['institution']}"
             if edu.get("degree"):
                 edu_text += f" - {edu['degree']}"
             if edu.get("field_of_study"):
@@ -504,9 +451,9 @@ class ResumeComposition:
 
         self.elements.append(Spacer(1, 2))
 
-    def _create_skills_section(self, job_description, required_skills=None):
+    def _create_skills_section(self, job_info: str):
         """Create the skills section of the resume."""
-        if not self.personal_agent.background.skills:
+        if not getattr(self.personal_agent.user_profile, "skills", None):
             return
 
         self.elements.append(Paragraph("SKILLS", self.styles["ResumeSectionHeader"]))
@@ -514,7 +461,7 @@ class ResumeComposition:
         # Get unique skills and their highest proficiency level
         # Use lowercase name as key to ensure case-insensitive uniqueness
         skill_levels = {}
-        for skill in self.personal_agent.background.skills:
+        for skill in getattr(self.personal_agent.user_profile, "skills", []):
             name = skill.get("name", "").strip()
             name_lower = name.lower()
             level = skill.get("level", 0)
@@ -529,11 +476,11 @@ class ResumeComposition:
         Analyze the job description and extract relevant skills from the candidate's work experiences.
         Return a JSON array of strings containing only the relevant skill names.
 
-        Job Description:
-        {job_description}
+        Job information:
+        {job_info}
         
         Candidate's Work Experiences:
-        {', '.join([f"{exp.get('position', '')} at {exp.get('company', '')}: {exp.get('description', '')}" for exp in self.personal_agent.background.work_experience])}
+        {', '.join([f"{exp.get('position', '')} at {exp.get('company', '')}: {exp.get('description', '')}" for exp in getattr(self.personal_agent.user_profile, "work_experiences", [])])}
 
         ⚠️ STRICT RESPONSE FORMAT REQUIREMENTS ⚠️
         Your response must be EXACTLY in this format, with no additional text:
@@ -565,37 +512,37 @@ class ResumeComposition:
         """
 
         # Get AI analysis of skills
-        response = self.google_client.generate(prompt, resp_in_json=True)
-                
+        response: str = self.google_client.generate_text(prompt)
+
         # Remove any extra text or whitespace
         response = response.strip()
-        
+
         # Find the first '[' and last ']' to extract just the JSON array
-        start_idx = response.find('[')
-        end_idx = response.rfind(']')
-        
+        start_idx = response.find("[")
+        end_idx = response.rfind("]")
+
         if start_idx == -1 or end_idx == -1:
             raise ValueError("No valid JSON array found in response")
-        
+
         # Extract just the JSON array part
-        json_str = response[start_idx:end_idx + 1]
-        
+        json_str = response[start_idx : end_idx + 1]
+
         # Parse the JSON
         relevant_skills = json.loads(json_str)
-        
+
         # Validate and clean the skills
         if not isinstance(relevant_skills, list):
             raise ValueError("Response is not a list")
-        
+
         # Use the skills directly from the model's response
         top_skills = relevant_skills[:15]
 
         # Create a single line of skills
-        skills_text = " | ".join(top_skills)
+        skills_text: LiteralString = " | ".join(top_skills)
         self.elements.append(Paragraph(skills_text, self.styles["ResumeBullet"]))
         self.elements.append(Spacer(1, 2))
 
-    def tailor_to_job(self, job_description):
+    def tailor_to_job(self, job_info: str = "") -> None:
         """
         Tailors the resume content based on the job description by:
         1. Analyzing keywords in job description
@@ -604,69 +551,27 @@ class ResumeComposition:
         4. Adjusting professional summary
 
         Args:
-            job_description (str): The job description to tailor against
+            job_info (str): The job information to tailor against
         """
-        # Extract keywords from job description
-        vectorizer = CountVectorizer(stop_words="english")
-        job_matrix = vectorizer.fit_transform([job_description])
-        job_terms = vectorizer.get_feature_names_out()
-
-        # Score work experiences based on keyword matches
-        scored_experiences = []
-        for exp in self.user_data.get("work_experience", []):
-            exp_text = f"{exp.get('position', '')} {exp.get('description', '')} {' '.join(exp.get('bullet_points', []))}"
-            exp_matrix = vectorizer.transform([exp_text])
-            similarity = cosine_similarity(job_matrix, exp_matrix)[0][0]
-            scored_experiences.append((similarity, exp))
-
-        # Sort experiences by relevance
-        self.user_data["work_experience"] = [
-            exp
-            for _, exp in sorted(
-                scored_experiences, key=lambda x: (-x[0], x[1].get("position", ""))
-            )
-        ]
-
-        # Identify key skills from job description
-        job_skills = set(job_terms).intersection(
-            skill.get("name", "").lower() for skill in self.user_data.get("skills", [])
-        )
-
-        # Reorder skills to prioritize matching ones
-        scored_skills = []
-        for skill in self.user_data.get("skills", []):
-            score = 1.0 if skill.get("name", "").lower() in job_skills else 0.0
-            scored_skills.append((score, skill))
-
-        self.user_data["skills"] = [
-            skill for _, skill in sorted(scored_skills, key=lambda x: (-x[0], x[1].get("name", "")))
-        ]
-
         # Prepare comprehensive prompt for tailoring the summary
-        prompt = f"""
+        prompt: str = f"""
         You are a professional resume writer. Create a tailored professional summary that highlights the candidate's relevant experience and skills for this job.
 
         Job Description:
-        {job_description}
+        {job_info}
         
         Candidate Background Summary:
-        {self.personal_agent.get_background_summary()}   
-             
-        GitHub Profile:
-        {self.personal_agent._format_github_data(self.user_data.get('github_data', {}))}
-        
-        Projects:
-        {[proj for proj in self.personal_agent.background.projects]}
-        
-        Skills:
-        {', '.join([skill.get('name', '') for skill in self.user_data.get('skills', [])])}
+        {self.personal_agent.get_background_str()}   
+                     
+        Applicant Skills:
+        {', '.join([skill.get('name', '') for skill in getattr(self.personal_agent.user_profile, "skills", [])])}
 
         Instructions:
         1. Analyze the job description and identify key requirements and skills
         2. Review the candidate's background, GitHub profile, and identify relevant experience
         3. Create a compelling 2-3 sentence summary that:
            - Maintains the candidate's authentic voice and style
-           - Highlights relevant experience and skills from their background and GitHub profile
+           - Highlights relevant experience and skills from their background
            - Emphasizes alignment with the job requirements
            - Uses specific examples from their work history and GitHub contributions
            - Incorporates relevant technical skills naturally
@@ -675,64 +580,43 @@ class ResumeComposition:
 
         ⚠️ STRICT RESPONSE FORMAT REQUIREMENTS ⚠️
         Your response must be EXACTLY in this format, with no additional text:
-        {{"summary": "Your tailored summary here"}}
+        {{"summary": "Your tailored summary here",
+        "skills": ["skill1", "skill2", ...],
+        "projects": ["project1", "project2", ...]}}
 
-        ❌ FORBIDDEN:
-        1. NO introductory text like "Here is the tailored professional summary:"
-        2. NO explanatory text before or after the JSON
-        3. NO markdown formatting
-        4. NO line breaks or extra whitespace
-        5. NO additional context or notes
-        6. NO "Here's" or similar phrases
-        7. NO "The summary is:" or similar phrases
-
-        ✅ REQUIRED:
-        1. Response must start with {{ and end with }}
-        2. Response must be valid JSON
-        3. Response must contain only the JSON object with a "summary" key
-        4. Response must be parseable by a JSON parser
 
         Remember: Your entire response should be a single JSON object, nothing more, nothing less.
         """
         # Get tailored summary from Ollama
-        response = self.google_client.generate(prompt, resp_in_json=True)
+        response: str = self.google_client.generate_text(prompt)
         response_dict = json.loads(response)
-        self.user_data["professional_summary"] = response_dict["summary"].strip()
+        self.professional_summary = response_dict["summary"].strip()
+        self.projects = response_dict["projects"].strip()
+        self.skills = response_dict["skills"].strip()
 
-        # Reorder projects based on relevance
-        scored_projects = []
-        for proj in self.user_data.get("projects", []):
-            proj_text = f"{proj.get('title', '')} {proj.get('description', '')} {' '.join(proj.get('technologies', []))}"
-            proj_matrix = vectorizer.transform([proj_text])
-            similarity = cosine_similarity(job_matrix, proj_matrix)[0][0]
-            scored_projects.append((similarity, proj))
-
-        self.user_data["projects"] = [
-            proj
-            for _, proj in sorted(scored_projects, key=lambda x: (-x[0], x[1].get("title", "")))
-        ]
-
-    def build(self, output_path, job_description=None):
+    def build(self, output_path, job_info: str) -> None:
         """Build the resume PDF, optionally tailoring it to a job description."""
 
-        if job_description:
-            self.tailor_to_job(job_description)
+        # Clear any existing elements
+        self.elements = []
+
+        self.tailor_to_job(job_info)
+
         # Create header
         self._create_header()
         # Add professional summary
-        if self.user_data.get("professional_summary"):
+        if self.professional_summary:
             self.elements.append(
                 Paragraph("PROFESSIONAL SUMMARY", self.styles["ResumeSectionHeader"])
             )
-            self.elements.append(
-                Paragraph(self.user_data["professional_summary"], self.styles["ResumeSummary"])
-            )
+            self.elements.append(Paragraph(self.professional_summary, self.styles["ResumeSummary"]))
+
         # Add skills section
-        self._create_skills_section(job_description)
+        self._create_skills_section(job_info)
         # Add experience section
         self._create_experience_section()
         # Add relevant projects section
-        self._create_projects_section(job_description)
+        self._create_projects_section(job_info)
         # Add certifications section
         self._create_certifications_section()
         # Add education section
@@ -750,11 +634,7 @@ class ResumeComposition:
 
     def generate_tailored_resume(
         self,
-        job_title: str,
-        company: str,
-        job_description: str,
-        required_skills: List[str],
-        background: str,
+        job_info: str,
     ) -> BytesIO:
         """
         Generate a tailored resume for a specific job.
@@ -764,70 +644,17 @@ class ResumeComposition:
             company (str): The company name
             job_description (str): The job description
             required_skills (List[str]): List of required skills
-            background (str): User's background summary
 
         Returns:
             BytesIO: The generated resume PDF
         """
-        try:
-            # Ensure required_skills is a list and contains strings
-            if not isinstance(required_skills, list):
-                required_skills = []
-            required_skills = [str(skill) for skill in required_skills if skill]
+        # Create a buffer for the PDF
+        buffer = BytesIO()
 
-            # Clear any existing elements
-            self.elements = []
+        # Build the resume
+        self.build(buffer, job_info)
 
-            # Tailor the resume content
-            self.tailor_to_job(job_description)
+        # Reset buffer position
+        buffer.seek(0)
 
-            # Create a buffer for the PDF
-            buffer = BytesIO()
-
-            # Create all sections
-            self._create_header()
-
-            # Add professional summary
-            if self.user_data.get("professional_summary"):
-                self.elements.append(
-                    Paragraph("PROFESSIONAL SUMMARY", self.styles["ResumeSectionHeader"])
-                )
-                self.elements.append(
-                    Paragraph(self.user_data["professional_summary"], self.styles["ResumeSummary"])
-                )
-
-            # Add skills section
-            self._create_skills_section(job_description, required_skills)
-
-            # Add experience section
-            self._create_experience_section()
-
-            # Add relevant projects section
-            self._create_projects_section(job_description)
-
-            # Add certifications section
-            self._create_certifications_section()
-
-            # Add education section
-            self._create_education_section()
-
-            # Create PDF document
-            doc = SimpleDocTemplate(
-                buffer,
-                pagesize=letter,
-                rightMargin=20,
-                leftMargin=20,
-                topMargin=15,
-                bottomMargin=20,
-            )
-
-            # Build the resume
-            doc.build(self.elements)
-
-            # Reset buffer position
-            buffer.seek(0)
-            return buffer
-
-        except Exception as e:
-            print(f"Error generating tailored resume: {str(e)}")
-            return None
+        return buffer

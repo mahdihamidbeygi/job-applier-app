@@ -1,7 +1,11 @@
 """
 Views for the core app.
 This file re-exports all views from the views package for backward compatibility.
+DEPRECATED: Use the specific view modules directly instead of importing from here.
 """
+
+# This file is maintained for backward compatibility only
+# Please import directly from the appropriate view modules
 
 # Auth views
 from core.views.auth_views import register, get_token
@@ -68,3 +72,13 @@ from core.views.utility_views import (
 
 # Base permission classes
 from core.views.api_views import IsOwnerOrReadOnly
+
+# Print a deprecation warning
+import warnings
+
+warnings.warn(
+    "Importing from core.views is deprecated. "
+    "Please import directly from the appropriate view modules.",
+    DeprecationWarning,
+    stacklevel=2,
+)

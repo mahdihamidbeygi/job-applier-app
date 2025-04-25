@@ -330,6 +330,10 @@
     }...`;
 
     try {
+      // Extract job title and company name from context if possible
+      const jobTitle = extractJobTitle(jobDescription) || "Job Position";
+      const company = extractCompany(jobDescription) || "Company";
+
       const response = await fetch("/process-application/", {
         method: "POST",
         headers: {
@@ -338,7 +342,10 @@
         },
         credentials: "include",
         body: JSON.stringify({
+          job_title: jobTitle,
           job_description: jobDescription,
+          company: company,
+          application_url: window.location.href,
           document_type: type,
           additional_services: {
             answer_questions: false,
@@ -438,6 +445,10 @@
     loadingSpinner.querySelector("p").textContent = "Generating answers...";
 
     try {
+      // Extract job title and company name from context if possible
+      const jobTitle = extractJobTitle(jobDescription) || "Job Position";
+      const company = extractCompany(jobDescription) || "Company";
+
       const response = await fetch("/process-application/", {
         method: "POST",
         headers: {
@@ -446,7 +457,10 @@
         },
         credentials: "include",
         body: JSON.stringify({
+          job_title: jobTitle,
           job_description: jobDescription,
+          company: company,
+          application_url: window.location.href,
           questions: applicationQuestions,
           document_type: "none",
           additional_services: {
@@ -509,6 +523,10 @@
     loadingSpinner.querySelector("p").textContent = "Analyzing job fit...";
 
     try {
+      // Extract job title and company name from context if possible
+      const jobTitle = extractJobTitle(jobDescription) || "Job Position";
+      const company = extractCompany(jobDescription) || "Company";
+
       const response = await fetch("/process-application/", {
         method: "POST",
         headers: {
@@ -517,7 +535,10 @@
         },
         credentials: "include",
         body: JSON.stringify({
+          job_title: jobTitle,
           job_description: jobDescription,
+          company: company,
+          application_url: window.location.href,
           document_type: "none",
           additional_services: {
             analyze_job_fit: true,
@@ -635,6 +656,36 @@
     if (score >= 60) return "bg-info";
     if (score >= 40) return "bg-warning";
     return "bg-danger";
+  }
+
+  // Helper function to extract job title from job description
+  function extractJobTitle(description) {
+    // Try to find a job title by looking for common patterns
+    const titleRegex = /job title|position|role|job|title|:\s*([^\n.]+)/i;
+    const match = description.match(titleRegex);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    // If no match, return the first non-empty line that's shorter than 100 chars
+    const lines = description.split("\n");
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed && trimmed.length < 100 && !trimmed.includes("http")) {
+        return trimmed;
+      }
+    }
+    return null;
+  }
+
+  // Helper function to extract company from job description
+  function extractCompany(description) {
+    // Try to find company name by looking for common patterns
+    const companyRegex = /company|employer|organization|at\s+([^,.\n]+)/i;
+    const match = description.match(companyRegex);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    return null;
   }
 
   function getCookie(name) {

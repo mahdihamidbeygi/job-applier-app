@@ -3,10 +3,9 @@ API ViewSets for the core app.
 """
 
 import logging
-from typing import Any
-from django.db.models import Count
+from typing import Any, Dict, List
+from django.db.models import Count, QuerySet
 from django.db.models.manager import BaseManager
-from django.db.models.query import ValuesQuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -57,14 +56,14 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     API endpoint for user profiles
     """
 
-    serializer_class = UserProfileSerializer
+    serializer_class: UserProfileSerializer = UserProfileSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["city", "state", "country"]
-    search_fields = ["headline", "professional_summary", "current_position", "company"]
-    ordering_fields = ["years_of_experience", "created_at", "updated_at"]
+    filterset_fields: list[str] = ["city", "state", "country"]
+    search_fields: list[str] = ["headline", "professional_summary", "current_position", "company"]
+    ordering_fields: list[str] = ["years_of_experience", "created_at", "updated_at"]
 
-    def get_queryset(self) -> BaseManager[UserProfile]:
+    def get_queryset(self) -> QuerySet[UserProfile]:
         return UserProfile.objects.filter(user=self.request.user)
 
     @extend_schema(
@@ -118,7 +117,7 @@ class WorkExperienceViewSet(viewsets.ModelViewSet):
     search_fields = ["company", "position", "description", "technologies"]
     ordering_fields = ["start_date", "end_date", "created_at"]
 
-    def get_queryset(self) -> BaseManager[WorkExperience]:
+    def get_queryset(self) -> QuerySet[WorkExperience]:
         return WorkExperience.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -139,7 +138,7 @@ class WorkExperienceViewSet(viewsets.ModelViewSet):
         """
         Group work experiences by company
         """
-        companies: ValuesQuerySet[WorkExperience, dict[str, Any]] = (
+        companies: QuerySet[WorkExperience] = (
             WorkExperience.objects.filter(profile__user=request.user)
             .values("company")
             .annotate(count=Count("id"))
@@ -160,7 +159,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
     search_fields: list[str] = ["title", "description", "technologies"]
     ordering_fields: list[str] = ["start_date", "end_date", "created_at"]
 
-    def get_queryset(self) -> BaseManager[Project]:
+    def get_queryset(self) -> QuerySet[Project]:
         return Project.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -168,16 +167,16 @@ class ProjectViewSet(viewsets.ModelViewSet):
         """
         Group projects by technology
         """
-        projects: BaseManager[Project] = Project.objects.filter(profile__user=request.user)
-        technologies: dict[str, list[int]] = {}
+        projects: QuerySet[Project] = Project.objects.filter(profile__user=request.user)
+        technologies: Dict[str, List[int]] = {}
 
         for project in projects:
             techs: list[str] = [t.strip() for t in project.technologies.split(",") if t.strip()]
             for tech in techs:
                 if tech in technologies:
-                    technologies[tech].append(project.id)
+                    technologies[tech].append(project.pk)
                 else:
-                    technologies[tech] = [project.id]
+                    technologies[tech] = [project.pk]
 
         return Response(technologies)
 
@@ -194,7 +193,7 @@ class EducationViewSet(viewsets.ModelViewSet):
     search_fields: list[str] = ["institution", "degree", "field_of_study", "achievements"]
     ordering_fields: list[str] = ["start_date", "end_date", "gpa", "created_at"]
 
-    def get_queryset(self) -> BaseManager[Education]:
+    def get_queryset(self) -> QuerySet[Education]:
         return Education.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -202,7 +201,7 @@ class EducationViewSet(viewsets.ModelViewSet):
         """
         Group education entries by institution
         """
-        institutions: ValuesQuerySet[Education, dict[str, Any]] = (
+        institutions: QuerySet[Education] = (
             Education.objects.filter(profile__user=request.user)
             .values("institution")
             .annotate(count=Count("id"))
@@ -223,7 +222,7 @@ class CertificationViewSet(viewsets.ModelViewSet):
     search_fields: list[str] = ["name", "issuer", "credential_id"]
     ordering_fields: list[str] = ["issue_date", "expiry_date", "created_at"]
 
-    def get_queryset(self) -> BaseManager[Certification]:
+    def get_queryset(self) -> QuerySet[Certification]:
         return Certification.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -231,7 +230,7 @@ class CertificationViewSet(viewsets.ModelViewSet):
         """
         Group certifications by issuer
         """
-        issuers: ValuesQuerySet[Certification, dict[str, Any]] = (
+        issuers: QuerySet[Certification] = (
             Certification.objects.filter(profile__user=request.user)
             .values("issuer")
             .annotate(count=Count("id"))
@@ -252,7 +251,7 @@ class PublicationViewSet(viewsets.ModelViewSet):
     search_fields: list[str] = ["title", "authors", "abstract", "doi"]
     ordering_fields: list[str] = ["publication_date", "created_at"]
 
-    def get_queryset(self) -> BaseManager[Publication]:
+    def get_queryset(self) -> QuerySet[Publication]:
         return Publication.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -260,7 +259,7 @@ class PublicationViewSet(viewsets.ModelViewSet):
         """
         Group publications by publisher
         """
-        publishers: ValuesQuerySet[Publication, dict[str, Any]] = (
+        publishers: QuerySet[Publication] = (
             Publication.objects.filter(profile__user=request.user)
             .values("publisher")
             .annotate(count=Count("id"))
@@ -281,7 +280,7 @@ class SkillViewSet(viewsets.ModelViewSet):
     search_fields: list[str] = ["name", "category"]
     ordering_fields: list[str] = ["proficiency", "created_at"]
 
-    def get_queryset(self) -> BaseManager[Skill]:
+    def get_queryset(self) -> QuerySet[Skill]:
         return Skill.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -289,8 +288,8 @@ class SkillViewSet(viewsets.ModelViewSet):
         """
         Group skills by category
         """
-        categories: ValuesQuerySet[Skill, dict[str, Any]] = (
-            Skill.objects.filter(profile__user=request.user)
+        categories: QuerySet[Skill] = (
+            Skill.objects.filter(profile__user=self.request.user)
             .values("category")
             .annotate(count=Count("id"))
             .order_by("-count")
@@ -302,8 +301,8 @@ class SkillViewSet(viewsets.ModelViewSet):
         """
         Group skills by proficiency level
         """
-        proficiency_levels: ValuesQuerySet[Skill, dict[str, Any]] = (
-            Skill.objects.filter(profile__user=request.user)
+        proficiency_levels: QuerySet[Skill] = (
+            Skill.objects.filter(profile__user=self.request.user)
             .values("proficiency")
             .annotate(count=Count("id"))
             .order_by("-proficiency")

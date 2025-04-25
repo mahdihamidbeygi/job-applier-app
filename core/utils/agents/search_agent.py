@@ -110,7 +110,7 @@ class SearchAgent(BaseAgent):
             {', '.join(job_posting.get('required_skills', []))}
             
             Candidate Background Summary:
-            {self.personal_agent.get_background_summary()}
+            {self.personal_agent.get_background_str()}
             
             Provide a response in JSON format with the following structure:
             {{
@@ -128,7 +128,7 @@ class SearchAgent(BaseAgent):
             - Ensure match_score is a NUMBER between 0-100 (not a string)
             """
 
-            response = self.llm.generate(prompt, resp_in_json=True)
+            response = self.llm.generate_text(prompt)
 
             try:
                 # Handle case where response is not already in JSON format
@@ -192,12 +192,12 @@ class SearchAgent(BaseAgent):
         """Suggests personalized job search strategy"""
         # Get similar jobs from knowledge base
         similar_jobs = self.knowledge_base.search_similar_jobs(
-            self.personal_agent.get_background_summary()
+            self.personal_agent.get_background_str()
         )
 
         prompt = f"""
         Based on the candidate's background:
-        {self.personal_agent.get_background_summary()}
+        {self.personal_agent.get_background_str()}
         
         Similar Jobs Found:
         {similar_jobs}
@@ -211,7 +211,7 @@ class SearchAgent(BaseAgent):
         6. similar_jobs_analysis: insights from similar job postings
         """
 
-        response = self.llm.generate(prompt, resp_in_json=True)
+        response = self.llm.generate_text(prompt)
         self.save_context("Suggest search strategy", response)
         return response
 
@@ -233,7 +233,7 @@ class SearchAgent(BaseAgent):
         {company_contexts}
         
         Candidate Background:
-        {self.personal_agent.get_background_summary()}
+        {self.personal_agent.get_background_str()}
         
         Provide a JSON response with:
         1. ranked_jobs: list of jobs sorted by fit
@@ -242,6 +242,6 @@ class SearchAgent(BaseAgent):
         4. company_fit_analysis: analysis of company culture fit
         """
 
-        response = self.llm.generate(prompt, resp_in_json=True)
+        response = self.llm.generate_text(prompt)
         self.save_context("Refine search results", response)
         return response

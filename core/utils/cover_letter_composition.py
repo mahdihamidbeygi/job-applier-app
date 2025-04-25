@@ -9,14 +9,14 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from core.models import UserProfile
+from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.local_llms import GoogleClient, GrokClient
 
 logger = logging.getLogger(__name__)
 
 
 class CoverLetterComposition:
-    def __init__(self, user_info: UserProfile, job_desc: str):
+    def __init__(self, personal_agent: PersonalAgent, job_info: str):
         """
         Initialize the CoverLetterComposition class.
 
@@ -24,8 +24,8 @@ class CoverLetterComposition:
             user_info (Dict[str, Any]): Dictionary containing user information
             company_info (Dict[str, Any]): Dictionary containing company and job information
         """
-        self.user_info: UserProfile = user_info
-        self.job_description: str = job_desc
+        self.personal_agent: PersonalAgent = personal_agent
+        self.job_info: str = job_info
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
         self.grok_client = GrokClient(model="grok-2-1212", temperature=0.0)
@@ -96,7 +96,7 @@ class CoverLetterComposition:
         #     response = self.llm.generate(
         #         f"""
         #         here's the job description: {self.job_description}
-        #         return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description 
+        #         return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description
         #         or 'Hiring Manager' if no name is found. Do not include any explanatory text.
         #         """
         #     )
@@ -179,82 +179,16 @@ class CoverLetterComposition:
 
         story = []
 
-        # Add salutation
-        story.extend(self._create_salutation())
-        # Get user's profile information
-        user_profile = self.user_info
-
-        if user_profile.work_experiences.exists():
-            # Format work experiences
-            work_experiences = []
-            for exp in user_profile.work_experiences.all():
-                work_experiences.append(
-                    {
-                        "company": exp.company,
-                        "position": exp.position,
-                        "start_date": (
-                            exp.start_date.strftime("%Y-%m-%d") if exp.start_date else None
-                        ),
-                        "end_date": exp.end_date.strftime("%Y-%m-%d") if exp.end_date else None,
-                        "current": exp.current,
-                        "description": exp.description,
-                        "technologies": exp.technologies,
-                    }
-                )
-        else:
-            work_experiences = []
-
-        if user_profile.skills.exists():
-            # Format skills
-            skills = []
-            for skill in user_profile.skills.all():
-                skills.append(
-                    {
-                        "name": skill.name,
-                        "category": skill.category,
-                        "proficiency": skill.proficiency,
-                    }
-                )
-        else:
-            skills = []
-
-        if user_profile.projects.exists():
-            # Format projects
-            projects = []
-            for proj in user_profile.projects.all():
-                projects.append(
-                    {
-                        "title": proj.title,
-                        "description": proj.description,
-                        "technologies": proj.technologies,
-                        "start_date": (
-                            proj.start_date.strftime("%Y-%m-%d") if proj.start_date else None
-                        ),
-                        "end_date": proj.end_date.strftime("%Y-%m-%d") if proj.end_date else None,
-                    }
-                )
-        else:
-            projects = []
-
         # Generate cover letter content using Grok
         prompt = f"""Generate a professional cover letter based on the following information.
 
-                Job Description: {self.job_description}
+                Job Description: {self.job_info}
 
                 Candidate Information:
-                - Name: {user_profile.user.get_full_name() or user_profile.user.username}
-                - Professional Summary: {user_profile.professional_summary or 'Not provided'}
-                - Current Position: {user_profile.current_position or 'Not specified'}
-                - Years of Experience: {user_profile.years_of_experience or 'Not specified'}
+                {self.personal_agent.get_background_str()}
 
                 Work Experience:
-                {json.dumps(work_experiences, indent=2)}
-
-                Skills:
-                {json.dumps(skills, indent=2)}
-
-                Projects:
-                {json.dumps(projects, indent=2)}
+                {self.job_info}
 
                 Please provide the content in JSON format with three sections:
                 1. opening : A compelling opening paragraph that introduces the candidate and expresses interest in the position
@@ -268,7 +202,7 @@ class CoverLetterComposition:
                 Focus on matching the candidate's experience and skills with the job requirements.
                 No Dear hiring manager, or any other salutation. No content field name in the JSON object."""
         # try:
-        generated_content = self.llm.generate(prompt, resp_in_json=True)
+        generated_content: str = self.llm.generate_text(prompt)
 
         # Parse the generated content as JSON
         content = json.loads(generated_content)
@@ -276,51 +210,9 @@ class CoverLetterComposition:
         # Add body
         story.extend(self._create_body(content))
 
-        # Add closing
-        story.extend(self._create_closing())
-
         # Build the PDF
         doc.build(story)
 
         # Reset buffer position
         self.buffer.seek(0)
         return self.buffer
-
-    def generate_tailored_cover_letter(
-        self,
-        job_title: str,
-        company: str,
-        job_description: str,
-        required_skills: List[str],
-        background: str,
-    ) -> BytesIO:
-        """
-        Generate a tailored cover letter for a specific job.
-
-        Args:
-            job_title (str): The job title
-            company (str): The company name
-            job_description (str): The job description
-            required_skills (List[str]): List of required skills
-            background (str): User's background summary
-
-        Returns:
-            BytesIO: The generated cover letter PDF
-        """
-        try:
-            # Update job description for better tailoring
-            self.job_description = f"""
-            Position: {job_title}
-            Company: {company}
-            Required Skills: {', '.join(required_skills)}
-            
-            Job Description:
-            {job_description}
-            """
-
-            # Generate and return the cover letter
-            return self.build()
-
-        except Exception as e:
-            print(f"Error generating tailored cover letter: {str(e)}")
-            return None

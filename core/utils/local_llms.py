@@ -1,20 +1,41 @@
-import json
-import re
-from typing import Any, Dict, Optional, Union
+"""
+Local LLM clients for text generation.
+"""
 
-import google.generativeai as genai
+import logging
+import os
+
+import json
+from typing import Any, Dict
+
 import requests
 from django.conf import settings
+from google import genai
 from google.api_core import retry
-from google.generativeai import types
+from google.genai import types
 
 
-class OllamaClient:
+logger = logging.getLogger(__name__)
+
+
+class BaseLLMClient:
+    """Base class for local LLM clients."""
+
+    def __init__(self, **kwargs) -> None:
+        self.model: str = kwargs.get("model", "gemini-2.0-flash")
+        self.temperature: float = kwargs.get("temperature", settings.TEMPERATURE)
+        self.api_key: str | None = kwargs.get("api_key", None)
+        self.max_tokens: int = kwargs.get("max_tokens", 100)
+        self.temperature: float | None = kwargs.get("temperature", 0.2)
+        self.top_k: int = kwargs.get("top_k", 40)
+        self.top_p: float = kwargs.get("top_p", 0.95)
+
+
+class OllamaClient(BaseLLMClient):
     """Client for interacting with Ollama API."""
 
-    def __init__(self, model: str = "phi4:latest", temperature: float = settings.TEMPERATURE):
-        self.model = model
-        self.temperature = temperature
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         self.base_url = "http://localhost:11434/api/generate"
 
     def generate(self, prompt: str, resp_in_json: bool = False) -> str:
@@ -39,9 +60,9 @@ class OllamaClient:
                     "stream": False,
                     "options": {
                         "temperature": self.temperature,
-                        "num_predict": 2048,
-                        "top_k": 40,
-                        "top_p": 0.9,
+                        "num_predict": self.max_tokens,
+                        "top_k": self.top_k,
+                        "top_p": self.top_p,
                         "repeat_penalty": 1.1,
                         "num_ctx": 4096,
                     },
@@ -125,14 +146,15 @@ class OllamaClient:
         return json.loads(response_text)
 
 
-class GrokClient:
+class GrokClient(BaseLLMClient):
     """Client for interacting with Grok API."""
 
-    def __init__(self, model: str = "grok-2-1212", temperature: float = settings.TEMPERATURE):
-        self.model = model
-        self.temperature = temperature
+    name: str = "grok"
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
         self.base_url = "https://api.x.ai/v1/chat/completions"
-        self.api_key = settings.GROK_API_KEY
+        self.api_key = kwargs.get("api_key", settings.GROK_API_KEY)
 
     def generate(self, prompt: str) -> str:
         """Generate text using Grok API."""
@@ -150,8 +172,8 @@ class GrokClient:
                     "model": self.model,
                     "messages": [{"role": "user", "content": prompt}],
                     "temperature": self.temperature,
-                    "max_tokens": 2048,
-                    "top_p": 0.9,
+                    "max_tokens": self.max_tokens,
+                    "top_p": self.top_p,
                     "frequency_penalty": 0.1,
                     "presence_penalty": 0.1,
                 },
@@ -241,157 +263,90 @@ class GrokClient:
         return self.generate(enhanced_prompt)
 
 
-class GoogleClient:
-    """Client for interacting with Google's Gemini API using the official google-generativeai library."""
+class GoogleClient(BaseLLMClient):
+    """
+    Client for Google's LLM API.
 
-    def __init__(
-        self, model: str = settings.GOOGLE_MODEL, temperature: float = settings.TEMPERATURE
-    ):
-        self.model = model
-        self.temperature = temperature
-        # Configure the API key
-        genai.configure(api_key=settings.GOOGLE_API_KEY)
+    This client handles text generation requests to Google's language models.
+    """
 
-        # Define a retry policy for API errors
-        # This predicate checks if the error is retriable (429 or 503)
-        def is_retriable(e):
-            return (
-                hasattr(e, "code")
-                and e.code in {429, 503}
-                or (isinstance(e, Exception) and any(code in str(e) for code in ["429", "503"]))
+    name: str = "google"
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.api_key: str | None = kwargs.get("api_key", os.environ.get("GOOGLE_API_KEY"))
+
+        if not self.api_key:
+            logger.warning("No Google API key provided. Using mock responses.")
+            return
+
+        is_retriable = lambda e: (isinstance(e, genai.errors.APIError) and e.code in {429, 503})
+
+        # Configure the API
+        self.client = genai.Client(api_key=self.api_key)
+        is_retriable = lambda e: (isinstance(e, genai.errors.APIError) and e.code in {429, 503})
+
+        if not hasattr(genai.models.Models.generate_content, "__wrapped__"):
+            genai.models.Models.generate_content = retry.Retry(predicate=is_retriable)(
+                genai.models.Models.generate_content
             )
 
-        # Apply retry policy to the GenerativeModel class
-        if not hasattr(genai.GenerativeModel.generate_content, "__wrapped__"):
-            genai.GenerativeModel.generate_content = retry.Retry(
-                predicate=is_retriable, initial=1.0, maximum=60.0, multiplier=2.0
-            )(genai.GenerativeModel.generate_content)
+        self.config = types.GenerationConfig(
+            temperature=self.temperature,
+            top_k=self.top_k,
+            top_p=self.top_p,
+            max_output_tokens=self.max_tokens,
+        )
+        # # Create model with grounding (with proper parameters for the API)
+        # self.model_instance = genai.GenerativeModel(
+        #     model_name=self.model,
+        #     generation_config=self.config,
+        #     tools=[genai.web.WebSearchTool()],
+        # )
 
-    def generate(
+    def generate_text(
         self,
         prompt: str,
-        resp_in_json: bool = False,
-        response_schema: Optional[Union[Dict[str, Any], Dict[str, type]]] = None,
+        **kwargs,
     ) -> str:
-        """Generate text using Google's Gemini API.
-
-        Args:
-            prompt (str): The prompt to send to the model
-            resp_in_json (bool): Whether to expect and validate JSON response
-            response_schema (Optional[Union[Dict[str, Any], Dict[str, type]]]): Optional schema to enforce response structure
         """
-        try:
-            # Get the model
-            model = genai.GenerativeModel(model_name=self.model)
-
-            # If response_schema is provided, add it to the prompt
-            if response_schema:
-                schema_prompt = f"\nPlease respond in the following JSON schema format:\n{json.dumps(response_schema, indent=2)}"
-                prompt = prompt + schema_prompt
-                resp_in_json = True  # Force JSON response when schema is provided
-
-            # Generate the response with retry capability built in at the class level
-            generation_config = {
-                "temperature": self.temperature,
-                "top_k": 40,
-                "top_p": 0.9,
-                "max_output_tokens": 2048,
-            }
-
-            response = model.generate_content(prompt, generation_config=generation_config)
-
-            # Extract the response text
-            response_text = response.text
-
-            if resp_in_json:
-                # Remove any markdown code block markers and clean the response
-                response_text = response_text.replace("```json", "").replace("```", "").strip()
-
-                # Remove any explanatory text before the JSON
-                if "Here is the response in the required format:" in response_text:
-                    response_text = response_text.split(
-                        "Here is the response in the required format:"
-                    )[1].strip()
-
-                # Try to find the first occurrence of { or [ and the last occurrence of } or ]
-                start_idx = min(response_text.find("{"), response_text.find("["))
-                end_idx = max(response_text.rfind("}"), response_text.rfind("]"))
-
-                if start_idx != -1 and end_idx != -1:
-                    response_text = response_text[start_idx : end_idx + 1]
-                else:
-                    # If no JSON structure found, try to clean the response as a simple array
-                    response_text = response_text.strip()
-                    if response_text.startswith("["):
-                        response_text = response_text[: response_text.rfind("]") + 1]
-                    elif response_text.startswith("{"):
-                        response_text = response_text[: response_text.rfind("}") + 1]
-
-                # Validate the JSON structure
-                try:
-                    parsed_json = json.loads(response_text)  # Test if it's valid JSON
-
-                    # If schema is provided, validate against it
-                    if response_schema:
-                        # Basic schema validation
-                        if isinstance(response_schema, dict) and isinstance(parsed_json, dict):
-                            for key, value_type in response_schema.items():
-                                if key not in parsed_json:
-                                    raise ValueError(f"Missing required field: {key}")
-                                if not isinstance(parsed_json[key], value_type):
-                                    raise ValueError(
-                                        f"Field {key} has incorrect type. Expected {value_type}, got {type(parsed_json[key])}"
-                                    )
-                except json.JSONDecodeError as e:
-                    print(f"Invalid JSON after cleaning: {response_text}")
-                    raise Exception(f"Failed to clean JSON string: {str(e)}")
-
-            return response_text
-
-        except Exception as e:
-            if "blocked" in str(e).lower():
-                raise Exception(f"Prompt was blocked by Google's safety filters: {str(e)}")
-            raise Exception(f"Error calling Google Gemini API: {str(e)}")
-
-    def query_with_grounding(self, prompt: str, model: str = "gemini-2.0-flash"):
-        """Generate text with web search grounding enabled.
+        Generate text using Google's LLM.
 
         Args:
-            prompt (str): The prompt to send to the model
-            model (str): The model to use, defaults to gemini-2.0-flash
+            prompt: The prompt to generate text from
+            max_tokens: Maximum number of tokens to generate
+            temperature: Temperature for generation (higher = more random)
+            top_k: Top-k sampling parameter
+            top_p: Top-p sampling parameter
+            **kwargs: Additional parameters for the generation
 
         Returns:
-            The response from the model with web search capability
+            Generated text as a string
         """
-        # Create a model instance with web search capability
-        model_instance = genai.GenerativeModel(model_name=model)
-
-        # Call the model with web search enabled
-        # The 'tools' parameter enables web search
         try:
-            response = model_instance.generate_content(contents=prompt, tools=["web_search"])
-            return response
+            # Set up generation config (with proper parameters for the API)
+            self.config_with_search = types.GenerateContentConfig(
+                tools=[types.Tool(google_search=types.GoogleSearch())],
+                **kwargs,
+            )
+
+            # Generate response
+            response: types.GenerateContentResponse = self.client.models.generate_content(
+                model=self.model,
+                contents=prompt,
+                config=self.config_with_search,
+            )
+
+            # Return the text response
+            if response and hasattr(response, "text"):
+                return response.text
+            return "No response generated"
+
         except Exception as e:
-            print(f"Error with web search: {str(e)}")
-            # Fall back to regular generation without web search
-            return self.generate(prompt)
+            logger.error(f"Error generating text: {str(e)}")
+            raise Exception(f"Error generating text: {str(e)}")
 
-    def search_grounding_example(self):
-        """Example of how to implement web search grounding as per user's request.
-
-        This is a reference implementation showing the exact code pattern
-        requested by the user.
-        """
-        # Example usage of query_with_grounding
-        return self.query_with_grounding("When and where is Billie Eilish's next concert?")
-
-    def get_search_grounded_response(self, prompt: str):
-        """Get a response with web search grounding."""
-        return self.query_with_grounding(prompt)
-
-    def generate_structured_output(
-        self, prompt: str, output_schema: Dict[str, Any], model: str = None
-    ):
+    def generate_structured_output(self, prompt: str, output_schema: Dict[str, Any], **kwargs):
         """Generate structured output in JSON format based on the provided schema.
 
         Args:
@@ -402,36 +357,105 @@ class GoogleClient:
         Returns:
             Dict: Parsed JSON response that matches the output schema
         """
-        if model is None:
-            model = self.model
-
-        model_instance = genai.GenerativeModel(model_name=model)
 
         # Add schema requirements to the prompt
-        enhanced_prompt = f"{prompt}\n\nPlease format your response as a JSON object with the following schema:\n{json.dumps(output_schema, indent=2)}"
-
-        # Generate the response
-        generation_config = types.GenerationConfig(
-            temperature=self.temperature,
-            top_k=40,
-            top_p=0.9,
-            max_output_tokens=2048,
+        enhanced_prompt: str = (
+            f"{prompt}\n\nPlease format your response as a JSON object with the following schema:\n{json.dumps(output_schema, indent=2)}"
         )
 
-        response = model_instance.generate_content(
-            contents=enhanced_prompt, generation_config=generation_config
+        self.config_with_search = types.GenerateContentConfig(
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+            **kwargs,
+        )
+
+        response: types.GenerateContentResponse = self.client.models.generate_content(
+            model=self.model,
+            contents=enhanced_prompt,
+            config=self.config_with_search,
         )
 
         # Extract and clean the JSON response
-        response_text = response.text
+        response_text: str | None = response.text
         response_text = response_text.replace("```json", "").replace("```", "").strip()
 
         # Extract JSON portion
-        start_idx = response_text.find("{")
-        end_idx = response_text.rfind("}")
+        start_idx: int = response_text.find("{")
+        end_idx: int = response_text.rfind("}")
 
         if start_idx != -1 and end_idx != -1:
-            json_text = response_text[start_idx : end_idx + 1]
+            json_text: str = response_text[start_idx : end_idx + 1]
             return json.loads(json_text)
         else:
             raise Exception("Failed to extract valid JSON from response")
+
+
+class OpenAIClient(BaseLLMClient):
+    """
+    Client for OpenAI's API.
+
+    This client handles text generation requests to OpenAI's language models.
+    """
+
+    name: str = "openai"
+
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.api_key = kwargs.get("api_key", os.environ.get("OPENAI_API_KEY"))
+        self.model = kwargs.get("model", "gpt-3.5-turbo")
+        self.client_loaded = False
+        self.client = None
+
+        """
+        Initialize the OpenAI client.
+
+        Args:
+            api_key: Optional API key (defaults to environment variable OPENAI_API_KEY)
+            model: Model to use for text generation
+        """
+
+        if not self.api_key:
+            logger.warning("No OpenAI API key provided. Using mock responses.")
+            return
+
+        # Only import if API key is available
+        from openai import OpenAI
+
+        self.client = OpenAI(api_key=self.api_key)
+        self.client_loaded = True
+
+    def generate_text(
+        self,
+        prompt: str,
+        **kwargs,
+    ) -> str:
+        """
+        Generate text using OpenAI's API.
+
+        Args:
+            prompt: The prompt to generate text from
+            max_tokens: Maximum number of tokens to generate
+            temperature: Temperature for generation (higher = more random)
+            top_p: Top-p sampling parameter
+            **kwargs: Additional parameters for the generation
+
+        Returns:
+            Generated text as a string
+        """
+        try:
+            # Generate response
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=kwargs.get("max_tokens", self.max_tokens),
+                temperature=kwargs.get("temperature", self.temperature),
+                top_p=kwargs.get("top_p", self.top_p),
+                **kwargs,
+            )
+
+            # Return the text response
+            if hasattr(response, "choices") and response.choices:
+                return response.choices[0].message.content or ""
+            return "No response generated"
+        except Exception as e:
+            logger.error(f"Error generating text: {str(e)}")
+            raise Exception(f"Error generating text: {str(e)}")

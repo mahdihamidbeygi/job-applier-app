@@ -1033,6 +1033,44 @@
   .edit-record-form .cancel-btn:hover {
     background-color: var(--bg-secondary);
   }
+
+  /* Notification styles */
+  .notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 15px 20px;
+    border-radius: 5px;
+    color: white;
+    font-weight: 500;
+    z-index: 1000;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+    transform: translateY(-20px);
+    opacity: 0;
+    transition: transform 0.3s, opacity 0.3s;
+  }
+
+  .notification.show {
+    transform: translateY(0);
+    opacity: 1;
+  }
+
+  .notification.success {
+    background-color: #4caf50;
+  }
+
+  .notification.error {
+    background-color: #f44336;
+  }
+
+  .notification.warning {
+    background-color: #ffc107;
+    color: #333;
+  }
+
+  .notification.info {
+    background-color: #2196f3;
+  }
 </style>
 
 <div class="profile-container">
@@ -1190,7 +1228,12 @@
     <!-- Basic Information Section -->
     <section id="basic-info" class="section active">
       <h2>Basic Information</h2>
-      <form method="post" enctype="multipart/form-data">
+      <form
+        id="profile-basic-form"
+        method="post"
+        enctype="multipart/form-data"
+        onsubmit="event.preventDefault(); saveProfileChanges();"
+      >
         {% csrf_token %}
         <div class="name-title-row">
           <div>
@@ -1210,14 +1253,6 @@
           <label for="id_email">Email</label>
           {{ form.email }}
         </div>
-        <div class="full-width">
-          <label for="id_location">Location</label>
-          {{ form.location }}
-        </div>
-        <div class="full-width">
-          <label for="id_bio">Bio</label>
-          {{ form.bio }}
-        </div>
         <div>
           <label for="id_github_url">GitHub URL</label>
           {{ form.github_url }}
@@ -1226,7 +1261,15 @@
           <label for="id_linkedin_url">LinkedIn URL</label>
           {{ form.linkedin_url }}
         </div>
-        <button type="submit">Save Changes</button>
+        <div class="full-width">
+          <label for="id_location">Location</label>
+          {{ form.address }}
+        </div>
+        <div class="full-width">
+          <label for="id_bio">Bio</label>
+          {{ form.professional_summary }}
+        </div>
+        <button type="submit" class="save-btn">Save Changes</button>
       </form>
     </section>
 
@@ -2262,10 +2305,11 @@
               return response.json();
           })
           .then(data => {
-              document.getElementById('work-experience-count').textContent = data.work_experience;
-              document.getElementById('projects-count').textContent = data.projects;
-              document.getElementById('skills-count').textContent = data.skills;
-              document.getElementById('certifications-count').textContent = data.certifications;
+              console.log('Profile stats data:', data); // Add logging to debug
+              document.getElementById('work-experience-count').textContent = data.work_experience_count;
+              document.getElementById('projects-count').textContent = data.projects_count;
+              document.getElementById('skills-count').textContent = data.skills_count;
+              document.getElementById('certifications-count').textContent = data.certifications_count;
               document.getElementById('years-of-experience').textContent = data.years_of_experience;
           })
           .catch(error => {
@@ -2318,6 +2362,69 @@
       }
 
       return true;
+  }
+
+  // Function to show notifications to the user
+  function showNotification(type, message) {
+      // Create the notification element
+      const notification = document.createElement('div');
+      notification.className = `notification ${type}`;
+      notification.textContent = message;
+
+      // Add notification to the body
+      document.body.appendChild(notification);
+
+      // Make it visible
+      setTimeout(() => {
+          notification.classList.add('show');
+      }, 10);
+
+      // Remove it after 5 seconds
+      setTimeout(() => {
+          notification.classList.remove('show');
+          setTimeout(() => {
+              document.body.removeChild(notification);
+          }, 300);
+      }, 5000);
+  }
+
+  // Function to save profile basic information changes
+  async function saveProfileChanges() {
+      showLoading();
+      try {
+          const form = document.getElementById('profile-basic-form');
+          const formData = new FormData(form);
+
+          const csrftoken = getCookie('csrftoken');
+
+          const response = await fetch("{% url 'core:edit_profile' %}", {
+              method: 'POST',
+              body: formData,
+              headers: {
+                  'X-Requested-With': 'XMLHttpRequest',
+                  'X-CSRFToken': csrftoken
+              }
+          });
+
+          const data = await response.json();
+
+          if (data.success) {
+              showNotification('success', 'Profile updated successfully!');
+              // No need to reload the page as we're just updating the profile
+          } else {
+              let errorMsg = 'Failed to update profile';
+              if (data.errors) {
+                  errorMsg = Object.entries(data.errors)
+                      .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
+                      .join('\n');
+              }
+              showNotification('error', errorMsg);
+          }
+      } catch (error) {
+          showNotification('error', 'Error updating profile: ' + error.message);
+      } finally {
+          hideLoading();
+      }
   }
 </script>
 {% endblock %}
