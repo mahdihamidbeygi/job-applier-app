@@ -3,12 +3,12 @@ Base models and mixins.
 """
 
 import json
-from typing import Dict, Any, Optional, Type, List, ClassVar
 from datetime import date, datetime
+from typing import Any, Dict, List, Optional
 
+from django.apps import apps
 from django.db import models
 from django.utils import timezone
-from django.apps import apps
 
 
 class TimestampMixin(models.Model):
@@ -267,48 +267,3 @@ class TimestampMixin(models.Model):
             app_label=app_label, exclude_models=exclude_models, include_abstract=include_abstract
         )
         return json.dumps(schemas, indent=indent)
-
-
-class ChatConversation(TimestampMixin):
-    """
-    Model to store chat conversations.
-    """
-
-    user = models.ForeignKey(
-        "auth.User", on_delete=models.CASCADE, related_name="chat_conversations"
-    )
-    title = models.CharField(max_length=200, blank=True)
-    job_listing = models.ForeignKey(
-        "JobListing",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="chat_conversations",
-    )
-
-    def __str__(self):
-        return f"{self.user.username}'s conversation: {self.title or 'Untitled'}"
-
-
-class ChatMessage(TimestampMixin):
-    """
-    Model to store chat messages.
-    """
-
-    ROLE_CHOICES = [
-        ("user", "User"),
-        ("assistant", "Assistant"),
-        ("system", "System"),
-    ]
-
-    conversation = models.ForeignKey(
-        ChatConversation, on_delete=models.CASCADE, related_name="messages"
-    )
-    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
-    content = models.TextField()
-
-    def __str__(self):
-        return f"{self.role}: {self.content[:50]}..."
-
-    class Meta:
-        ordering = ["created_at"]

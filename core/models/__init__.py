@@ -4,7 +4,7 @@ This module imports all models to maintain Django's models discovery.
 """
 
 # Base models
-from .base import TimestampMixin, ChatConversation, ChatMessage
+from .base import TimestampMixin
 
 # User profile models
 from .profile import (
@@ -19,6 +19,9 @@ from .profile import (
 
 # Job-related models
 from .jobs import JobListing, JobPlatformPreference
+
+# Chat models
+from .chat import ChatConversation, ChatMessage
 
 __all__ = [
     "TimestampMixin",

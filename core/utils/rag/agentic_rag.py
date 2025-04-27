@@ -1,39 +1,45 @@
+import json
 import logging
 import os
-import json
-from typing import Dict, List, Any, LiteralString, Optional
+from typing import Any, Dict, Optional, Sequence
 
 from django.conf import settings
 from django.db.models.manager import BaseManager
-from langchain_community.vectorstores import Chroma
-from langchain_core.documents import Document
+from django.shortcuts import get_object_or_404  # Import for safe DB lookups
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain.memory import ConversationBufferWindowMemory
 
 # Agent related imports
-from langchain.tools import StructuredTool
-from langchain.agents import AgentExecutor, create_tool_calling_agent
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.memory import ConversationBufferWindowMemory
-from langchain_core.vectorstores.base import VectorStoreRetriever
-from pydantic import BaseModel, Field  # <-- Import Pydantic
 from langchain.tools import StructuredTool  # <-- Import StructuredTool if needed later
+from langchain_community.vectorstores import Chroma
+from langchain_core.documents import Document
+from langchain_core.messages.base import BaseMessage
+from langchain_core.prompt_values import PromptValue
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables.base import Runnable
+from langchain_core.vectorstores.base import VectorStoreRetriever
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 
 # Existing imports
 from langchain_openai import OpenAIEmbeddings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
-from core.models import (
-    UserProfile,
-    JobListing,
-    ChatConversation,
-    ChatMessage,
-    WorkExperience,
-)  # Add models needed for tools
-from core.utils.db_utils import safe_get_or_none
-from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-from django.shortcuts import get_object_or_404  # Import for safe DB lookups
+from pydantic import BaseModel, Field  # <-- Import Pydantic
 
+from core.models import (  # Add models needed for tools
+    Certification,
+    ChatConversation,
+    Education,
+    JobListing,
+    Project,
+    Publication,
+    Skill,
+    UserProfile,
+    WorkExperience,
+)
+from core.models.chat import ChatMessage
 from core.utils.agents.application_agent import ApplicationAgent
-from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.agents.job_agent import JobAgent
+from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.db_utils import safe_get_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +64,19 @@ class GenerateDocumentInput(BaseModel):
     job_id: int = Field(description="The integer ID of the job listing saved in the system.")
 
 
+class GetJobDetailsInput(BaseModel):
+    job_id: int = Field(description="The integer ID of the job listing saved in the system.")
+
+
+class AnalyzeTextWithBackgroundInput(BaseModel):
+    context_text: str = Field(
+        description="The relevant text provided by the user (e.g., interview questions, job description snippet)."
+    )
+    user_query: str = Field(
+        description="The specific question the user wants answered based on the context_text and their background."
+    )
+
+
 class AgenticRAGProcessor:
     """
     Agentic Retrieval Augmented Generation (RAG) processor.
@@ -70,20 +89,24 @@ class AgenticRAGProcessor:
         """
         Initialize the Agentic RAG processor.
         """
-        self.user_id = user_id
-        self.conversation_id = conversation_id
-        self.persist_directory = os.path.join(settings.BASE_DIR, "job_vectors")
+        self.user_id: int = user_id
+        self.conversation_id: int | None = conversation_id
+        self.persist_directory: str = os.path.join(settings.BASE_DIR, "job_vectors")
 
         # --- Initialization Steps ---
-        self.embeddings = self._initialize_embeddings()
-        self.llm = self._initialize_llm()  # Ensure this LLM supports tool calling
-        self.vectorstore = self._initialize_vectorstore(
+        self.embeddings: GoogleGenerativeAIEmbeddings | OpenAIEmbeddings = (
+            self._initialize_embeddings()
+        )
+        self.llm: ChatGoogleGenerativeAI = (
+            self._initialize_llm()
+        )  # Ensure this LLM supports tool calling
+        self.vectorstore: Chroma | None = self._initialize_vectorstore(
             exclude_conversations=True
         )  # Exclude convos from vector store
-        self.retriever = self._create_retriever()
-        self.tools = self._initialize_tools()
-        self.memory = self._initialize_memory()
-        self.agent_executor = self._initialize_agent()
+        self.retriever: VectorStoreRetriever | None = self._create_retriever()
+        self.tools: list[StructuredTool] = self._initialize_tools()
+        self.memory: ConversationBufferWindowMemory = self._initialize_memory()
+        self.agent_executor: AgentExecutor = self._initialize_agent()
         # --- End Initialization ---
 
     def _initialize_embeddings(self):
@@ -110,7 +133,7 @@ class AgenticRAGProcessor:
             # Use Google Gemini LLM - Ensure it's a version supporting tool calling
             # Models like 'gemini-1.5-flash-latest' or 'gemini-1.5-pro-latest' are good choices
             llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",  # Or another tool-calling capable model
+                model="gemini-1.5-pro-latest",  # Or another tool-calling capable model
                 google_api_key=os.environ.get("GOOGLE_API_KEY"),
                 temperature=0.1,
                 convert_system_message_to_human=True,  # Often needed for Gemini function calling
@@ -124,7 +147,7 @@ class AgenticRAGProcessor:
     def _initialize_vectorstore(self, exclude_conversations: bool = False):
         """Initialize or load the vector store."""
         try:
-            user_persist_dir = os.path.join(self.persist_directory, f"user_{self.user_id}")
+            user_persist_dir: str = os.path.join(self.persist_directory, f"user_{self.user_id}")
             os.makedirs(user_persist_dir, exist_ok=True)
 
             vectorstore = Chroma(
@@ -146,7 +169,7 @@ class AgenticRAGProcessor:
             logger.error(f"Error initializing vector store: {str(e)}")
             raise
 
-    def _create_retriever(self):
+    def _create_retriever(self) -> VectorStoreRetriever:
         """Create a retriever from the vectorstore."""
         if not self.vectorstore:
             raise ValueError("Vectorstore not initialized")
@@ -154,24 +177,82 @@ class AgenticRAGProcessor:
             search_kwargs={"k": 5, "filter": {"user_id": self.user_id}}
         )
 
-    def _populate_vectorstore(self, vectorstore, exclude_conversations: bool = False):
+    def _populate_vectorstore(self, vectorstore, exclude_conversations: bool = False) -> None:
         """Populate the vector store with user data."""
         # This is largely the same as your RAGProcessor.populate_vectorstore,
         # but we add the 'exclude_conversations' logic.
         try:
-            documents = []
-            # --- Load UserProfile, WorkExperience, Education, Skills, Projects ---
-            # (Copy the logic from RAGProcessor.populate_vectorstore here)
-            # Example for profile:
+            documents: list[Document] = []
             try:
-                profile = UserProfile.objects.get(user_id=self.user_id)
-                profile_doc = Document(
-                    page_content=f"User Profile: {profile.get_all_user_info()}",
+                profile: UserProfile = UserProfile.objects.get(user_id=self.user_id)
+                try:
+                    profile_content = profile.get_all_user_info_formatted()
+                except AttributeError:
+                    # Fallback if the method doesn't exist
+                    profile_content = (
+                        f"User Profile: {profile.get_all_user_info_formatted()}\n\n"
+                        + f"Title: {profile.title}\n"
+                        + f"Summary: {profile.professional_summary}\n"
+                        + f"Years of Experience: {profile.years_of_experience}"
+                    )
+                    logger.warning(
+                        "UserProfile.get_all_user_info_formatted() not found, using basic profile info."
+                    )
+
+                profile_doc: Document = Document(
+                    page_content=profile_content,  # Use the comprehensive content
                     metadata={"type": "profile", "user_id": self.user_id},
                 )
+
                 documents.append(profile_doc)
-                # ... add docs for WorkExperience, Education, Skills, Projects ...
-                # (Make sure to copy the relevant loops and Document creation)
+
+                # Add work experiences
+                for exp in profile.work_experiences.all():
+                    exp_doc = Document(
+                        page_content=f"Work Experience: {exp.position} at {exp.company}\n\n"
+                        + f"Duration: {exp.start_date.strftime('%b %Y')} - "
+                        + f"{exp.end_date.strftime('%b %Y') if exp.end_date else 'Present'}\n"
+                        + f"Description: {exp.description}\n"
+                        + f"Achievements: {exp.achievements}\n"
+                        + f"Technologies: {exp.technologies}",
+                        metadata={"type": "work_experience", "user_id": self.user_id, "id": exp.id},
+                    )
+                    documents.append(exp_doc)
+
+                # Add education
+                for edu in profile.education.all():
+                    edu_doc = Document(
+                        page_content=f"Education: {edu.degree} in {edu.field_of_study} from {edu.institution}\n\n"
+                        + f"Duration: {edu.start_date.strftime('%b %Y') if edu.start_date else ''} - "
+                        + f"{edu.end_date.strftime('%b %Y') if edu.end_date else 'Present'}\n"
+                        + f"Achievements: {edu.achievements}",
+                        metadata={"type": "education", "user_id": self.user_id, "id": edu.id},
+                    )
+                    documents.append(edu_doc)
+
+                # Add skills
+                skills_text = "Skills:\n"
+                for skill in profile.skills.all():
+                    skills_text += (
+                        f"- {skill.name} ({skill.get_category_display()}, "
+                        + f"Proficiency: {skill.get_proficiency_display()})\n"
+                    )
+                skills_doc = Document(
+                    page_content=skills_text, metadata={"type": "skills", "user_id": self.user_id}
+                )
+                documents.append(skills_doc)
+
+                # Add projects
+                for proj in profile.projects.all():
+                    proj_doc = Document(
+                        page_content=f"Project: {proj.title}\n\n"
+                        + f"Duration: {proj.start_date.strftime('%b %Y')} - "
+                        + f"{proj.end_date.strftime('%b %Y') if proj.end_date else 'Present'}\n"
+                        + f"Description: {proj.description}\n"
+                        + f"Technologies: {proj.technologies}",
+                        metadata={"type": "project", "user_id": self.user_id, "id": proj.id},
+                    )
+                    documents.append(proj_doc)
 
             except UserProfile.DoesNotExist:
                 logger.warning(f"User profile not found for user_id={self.user_id}")
@@ -181,18 +262,20 @@ class AgenticRAGProcessor:
             job_listings: BaseManager[JobListing] = JobListing.objects.filter(user_id=self.user_id)
             for job in job_listings:
                 job_doc = Document(
-                    page_content=f"Job info: {job.get_formatted_info()}",
+                    page_content=f"Job Listing: {job.get_formatted_info()}",
                     metadata={"type": "job_listing", "user_id": self.user_id, "id": job.id},
                 )
                 documents.append(job_doc)
 
             # --- Conditionally Load Conversations ---
             if not exclude_conversations:
-                conversations = ChatConversation.objects.filter(user_id=self.user_id)
+                conversations: BaseManager[ChatConversation] = ChatConversation.objects.filter(
+                    user_id=self.user_id
+                )
                 for conv in conversations:
-                    messages = conv.messages.order_by("-created_at")[:10]
+                    messages: BaseManager[ChatMessage] = conv.messages.order_by("-created_at")[:10]
                     if messages:
-                        conv_text = f"Previous Conversation (ID: {conv.id}):\n\n"
+                        conv_text: str = f"Previous Conversation (ID: {conv.id}):\n\n"
                         for msg in reversed(messages):
                             conv_text += f"{msg.role.capitalize()}: {msg.content}\n\n"
                         conv_doc = Document(
@@ -207,11 +290,14 @@ class AgenticRAGProcessor:
 
             # Add documents to the vectorstore
             if documents:
+                logger.info(
+                    f"Attempting to add {len(documents)} documents to vector store for user {self.user_id}. First doc type: {documents[0].metadata.get('type')}"
+                )
                 vectorstore.add_documents(documents)
                 vectorstore.persist()
                 logger.info(
-                    f"Added {len(documents)} documents to vector store for user {self.user_id}"
-                )
+                    f"Successfully added {len(documents)} documents. Vector store count now: {vectorstore._collection.count()}"
+                )  # Check count after adding
             else:
                 logger.warning(f"No documents found to add to vector store for user {self.user_id}")
 
@@ -235,10 +321,10 @@ class AgenticRAGProcessor:
         if not self.retriever:
             return "Error: Retriever not available."
         try:
-            docs = self.retriever.get_relevant_documents(query)
+            docs: list[Document] = self.retriever.get_relevant_documents(query)
             if not docs:
                 return "No specific context found in the user's profile for that query."
-            context = "\n\n".join(
+            context: str = "\n\n".join(
                 [
                     f"Source: {doc.metadata.get('type', 'unknown')}, Content: {doc.page_content}"
                     for doc in docs
@@ -259,8 +345,10 @@ class AgenticRAGProcessor:
             f"Agent Tool: get_specific_work_experience called with ID: {experience_id} for user {self.user_id}"
         )
         try:
-            profile = UserProfile.objects.get(user_id=self.user_id)
-            experience = safe_get_or_none(WorkExperience, id=experience_id, profile=profile)
+            profile: UserProfile = UserProfile.objects.get(user_id=self.user_id)
+            experience: WorkExperience | None = safe_get_or_none(
+                WorkExperience, id=experience_id, profile=profile
+            )
             if experience:
                 return (
                     f"Work Experience Details (ID: {experience.id}):\n"
@@ -298,9 +386,9 @@ class AgenticRAGProcessor:
 
             # Check if the job_record was successfully created
             if job_agent.job_record and job_agent.job_record.id:
-                new_job_id = job_agent.job_record.id
-                job_title = job_agent.job_record.title
-                company = job_agent.job_record.company
+                new_job_id: int = job_agent.job_record.id
+                job_title: str = job_agent.job_record.title
+                company: str = job_agent.job_record.company
                 logger.info(
                     f"Successfully saved job description as Job ID: {new_job_id} for user {self.user_id}"
                 )
@@ -401,7 +489,7 @@ class AgenticRAGProcessor:
         )
         try:
             # Verify the job exists and belongs to the user
-            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+            job_listing: JobListing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
 
             # Initialize necessary agents for ApplicationAgent
             personal_agent = PersonalAgent(user_id=self.user_id)
@@ -449,11 +537,137 @@ class AgenticRAGProcessor:
                 f"An unexpected error occurred while trying to generate the cover letter: {str(e)}"
             )
 
+    def get_job_details(self, job_id: int) -> str:
+        """
+        Retrieves the full details (title, company, description, requirements, etc.)
+        of a specific job listing saved in the system using its ID.
+        Use this tool when the user asks questions about a specific job identified by its ID,
+        especially if the job details were saved previously using 'save_job_description'.
+        Input must be the integer ID of the job listing.
+        """
+        logger.info(
+            f"Agent Tool: get_job_details called for job ID: {job_id} for user {self.user_id}"
+        )
+        try:
+            # Use get_object_or_404 for safety, ensuring job belongs to user
+            job_listing: JobListing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+            # Use the model's method if it provides good formatting
+            details = job_listing.get_formatted_info()
+            # Alternatively, construct the string manually:
+            # details = (
+            #     f"Job Details (ID: {job_listing.id}):\n"
+            #     f"Title: {job_listing.title}\n"
+            #     f"Company: {job_listing.company}\n"
+            #     f"Location: {job_listing.location}\n"
+            #     f"Posted Date: {job_listing.posted_date}\n"
+            #     f"Source: {job_listing.source}\n"
+            #     f"URL: {job_listing.source_url}\n\n"
+            #     f"Description:\n{job_listing.description}\n\n"
+            #     f"Requirements:\n{job_listing.requirements}\n\n"
+            #     # Add other relevant fields like salary, benefits if available
+            # )
+            logger.info(f"Retrieved details for job ID: {job_id}")
+            return details
+        except JobListing.DoesNotExist:
+            logger.warning(
+                f"get_job_details tool: JobListing ID {job_id} not found for user {self.user_id}"
+            )
+            return f"Error: Job listing with ID {job_id} not found for this user."
+        except Exception as e:
+            logger.exception(f"Error in get_job_details tool for job {job_id}: {str(e)}")
+            return f"An unexpected error occurred while retrieving job details: {str(e)}"
+
+    def analyze_text_with_background(self, context_text: str, user_query: str) -> str:
+        """
+        Analyzes provided text (like interview questions or a job description snippet)
+        in the context of the user's background to answer a specific user query.
+        Use this when the user provides context directly in the chat and asks a question about it
+        that requires knowledge of their profile (skills, experience).
+
+        Args:
+            context_text: The text provided by the user (e.g., interview questions, job snippet).
+            user_query: The specific question the user wants answered based on the context_text and their background.
+        """
+        logger.info(
+            f"Agent Tool: analyze_text_with_background called for user {self.user_id}. Query: '{user_query}'"
+        )
+        try:
+            # 1. Get User Background (using PersonalAgent is direct)
+            # Ensure PersonalAgent is initialized correctly if needed, or retrieve from vector store
+            personal_agent = PersonalAgent(
+                user_id=self.user_id
+            )  # Assumes PersonalAgent can be initialized here
+            background_summary = (
+                personal_agent.get_formatted_background()
+            )  # Or use get_background_str()
+
+            # 2. Construct a prompt for the LLM combining background, context_text, and query
+            prompt = f"""
+            You are an expert assistant helping a user answer a question based on provided text and their background.
+
+            User's Background Summary:
+            ---
+            {json.dumps(background_summary, indent=2)}
+            ---
+
+            Provided Context Text:
+            ---
+            {context_text}
+            ---
+
+            User's Question:
+            ---
+            {user_query}
+            ---
+
+            Based *only* on the User's Background Summary and the Provided Context Text, answer the User's Question accurately and concisely.
+            Focus on highlighting relevant skills and experiences from the background that relate to the context text and the question.
+            If the background doesn't contain relevant information, state that clearly.
+            """
+
+            # 3. Call the LLM (using the agent's LLM instance)
+            response: str = self.llm.generate_text(
+                prompt, temperature=0.1, max_tokens=1000
+            )  # Adjust max_tokens as needed
+
+            logger.info("Successfully generated analysis using text and background.")
+            return response
+
+        except Exception as e:
+            logger.exception(
+                f"Error in analyze_text_with_background tool for user {self.user_id}: {str(e)}"
+            )
+            return f"An unexpected error occurred during analysis: {str(e)}"
+
+    def get_profile_summary(self) -> str:
+        """
+        Retrieves a formatted summary of the user's profile, including work experience,
+        education, skills, and projects directly from their saved profile data.
+        Use this as a quick way to get the user's overall background if vector search fails or is too slow.
+        """
+        logger.info(f"Agent Tool: get_profile_summary called for user {self.user_id}")
+        try:
+            personal_agent = PersonalAgent(user_id=self.user_id)
+            # Use the method that returns a dictionary or well-formatted string
+            summary_data = personal_agent.get_formatted_background()
+            # Convert dict to string if necessary for the agent
+            summary_str = json.dumps(summary_data, indent=2)
+            logger.info("Successfully retrieved profile summary.")
+            return summary_str
+        except UserProfile.DoesNotExist:
+            logger.warning(
+                f"get_profile_summary tool: UserProfile not found for user {self.user_id}"
+            )
+            return "Error: User profile could not be loaded."
+        except Exception as e:
+            logger.exception(f"Error in get_profile_summary tool for user {self.user_id}: {str(e)}")
+            return f"An unexpected error occurred while retrieving the profile summary: {str(e)}"
+
     # Add more tools as needed (e.g., get_profile_summary, search_web, trigger_document_generation)
 
-    def _initialize_tools(self):
+    def _initialize_tools(self) -> list[StructuredTool]:
         """Gather all defined tools for the agent using StructuredTool."""
-        tools = [
+        tools: list[StructuredTool] = [
             StructuredTool.from_function(
                 func=self.search_user_context,  # Pass the bound method
                 name="search_user_context",
@@ -484,10 +698,28 @@ class AgenticRAGProcessor:
                 description=self.generate_tailored_cover_letter.__doc__,  # Use docstring
                 args_schema=GenerateDocumentInput,
             ),
+            StructuredTool.from_function(
+                func=self.get_job_details,
+                name="get_job_details",
+                description=self.get_job_details.__doc__,
+                args_schema=GetJobDetailsInput,  # Use the new schema
+            ),
+            StructuredTool.from_function(
+                func=self.analyze_text_with_background,
+                name="analyze_text_with_background",
+                description=self.analyze_text_with_background.__doc__,
+                args_schema=AnalyzeTextWithBackgroundInput,  # Use the new schema
+            ),
+            StructuredTool.from_function(
+                func=self.get_profile_summary,
+                name="get_profile_summary",
+                description=self.get_profile_summary.__doc__,
+                # No args_schema needed as it takes no arguments
+            ),
         ]
         return tools
 
-    def _initialize_memory(self):
+    def _initialize_memory(self) -> ConversationBufferWindowMemory:
         """Initialize conversation memory, loading from DB if conversation_id exists."""
         memory = ConversationBufferWindowMemory(
             k=10,  # Number of past interactions to keep
@@ -500,11 +732,13 @@ class AgenticRAGProcessor:
         # Load existing messages if conversation_id is provided
         if self.conversation_id:
             try:
-                conversation = safe_get_or_none(
+                conversation: ChatConversation | None = safe_get_or_none(
                     ChatConversation, id=self.conversation_id, user_id=self.user_id
                 )
                 if conversation:
-                    messages = conversation.messages.order_by("created_at")
+                    messages: BaseManager[ChatMessage] = conversation.messages.order_by(
+                        "created_at"
+                    )
                     for msg in messages:
                         if msg.role == "user":
                             memory.chat_memory.add_user_message(msg.content)
@@ -530,22 +764,30 @@ class AgenticRAGProcessor:
         **AGENT BEHAVIOR RULES (User ID: {self.user_id}):**
 
         You are a helpful job application assistant for User ID {self.user_id}.
-        Your goal is to assist the user with their job search and application process using the available tools.
+        Your goal is to assist the user with their job search and application process using the available tools and context.
 
-        **TOOL USAGE GUIDELINES:**
+        **CONTEXT AND TOOL USAGE GUIDELINES:**
 
-        1.  **Prioritize `search_user_context`:** For questions about the user's background, skills, experience, or suitability for a role, use the `search_user_context` tool first to gather relevant information from their profile. Example query: "What are the user's skills relevant to a software engineer role?"
-        2.  **Use `save_job_description`:** When the user provides the text of a job description to be saved, use the `save_job_description` tool immediately. Confirm the action by stating the Job ID you received back from the tool.
-        3.  **Check History/Input for IDs:** Before using `generate_tailored_resume`, `generate_tailored_cover_letter`, or `get_specific_work_experience`, check the recent `chat_history` AND the current user `input`.
-            *   If a specific Job ID or Experience ID was mentioned recently by you (the assistant) or the user, use that ID.
-            *   If no ID is clearly available, ASK the user to provide the specific ID needed for the tool. DO NOT GUESS the ID.
-        4.  **Report Tool Results:** Clearly state the outcome of any tool action. If successful, mention the key result (e.g., "Job saved with ID: 123", "Resume generated: [URL]"). If a tool returns an error, report the error message to the user.
-        5.  **General Conversation:** If no specific tool seems appropriate for the user's input, engage in helpful conversation based on the chat history and your general knowledge. You can still use `search_user_context` if the conversation touches on the user's background.
+        **VERY IMPORTANT RULE FOR BACKGROUND QUESTIONS:**
+        - When the user asks questions like "What do you know about my background?", "What are my skills?", "Tell me about my experience", or any question asking about *their own profile information*, you **MUST** use the `search_user_context` tool first.
+        - If `search_user_context` fails or returns insufficient information, you MAY then use the `get_profile_summary` tool as a fallback.
+        - **DO NOT** answer questions about the user's background based on general knowledge, assumptions, or by inferring from job listings mentioned in the chat. Only use information retrieved via the specified tools (`search_user_context`, `get_profile_summary`).
+
+        **OTHER TOOL USAGE GUIDELINES:**
+
+        1.  **CHECK CHAT HISTORY:** Before using any tool, review the recent `chat_history`. If the user recently provided specific text (like interview answers, job description snippets) and asks a question *about that text*, prioritize using `analyze_text_with_background` or incorporate the chat context directly in your reasoning if appropriate.
+        2.  **USE `search_user_context` for GENERAL BACKGROUND:** For general questions about the user's background, skills, experience, education, projects, or suitability for a role (when specific text isn't provided in chat), **ALWAYS** use the `search_user_context` tool first. If the tool returns no relevant info, state that clearly.
+        3.  **USE `get_profile_summary` as FALLBACK:** Only use `get_profile_summary` if `search_user_context` fails or is insufficient for a background query.
+        4.  **USE `analyze_text_with_background` for SPECIFIC TEXT + BACKGROUND:** When the user provides specific text (e.g., interview questions/answers) in the chat and asks how it relates to their background or how to improve it, use the `analyze_text_with_background` tool. Provide both the text and the user's query to the tool.
+        5.  **USE `get_job_details` for SAVED JOBS:** If the user asks about a specific job previously saved (mentioning its ID), use the `get_job_details` tool with the `job_id`.
+        6.  **USE `save_job_description` for SAVING:** When the user provides the *full text* of a job description and asks to save it, use the `save_job_description` tool. Confirm the action by stating the Job ID.
+        7.  **CHECK IDs for GENERATION:** Before using `generate_tailored_resume` or `generate_tailored_cover_letter`, check `chat_history` or `input` for a specific Job ID. If unclear, ASK the user for the ID. DO NOT GUESS.
+        8.  **Report Tool Results:** Clearly state the outcome of tool actions. Report errors clearly.
+        9.  **General Conversation:** If no specific tool or context is relevant, engage in helpful conversation based on history and general knowledge, but remember the **VERY IMPORTANT RULE** about background questions.
         """
-
         # 2. Create the ChatPromptTemplate for Tool Calling
         #    Note the placeholders: input, chat_history, agent_scratchpad
-        prompt = ChatPromptTemplate.from_messages(
+        prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
             [
                 ("system", custom_instructions),
                 MessagesPlaceholder(variable_name="chat_history"),
@@ -558,7 +800,14 @@ class AgenticRAGProcessor:
         #    This explicitly tells the LLM which tools it can call.
         #    Depending on the LangChain version and Gemini model, this might be
         #    handled automatically by create_tool_calling_agent, but being explicit can help.
-        llm_with_tools = self.llm.bind_tools(self.tools)  # Uncomment if needed
+        llm_with_tools: Runnable[
+            PromptValue
+            | str
+            | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
+            BaseMessage,
+        ] = self.llm.bind_tools(
+            self.tools
+        )  # Uncomment if needed
 
         # 4. Create the Tool Calling Agent
         #    Pass the LLM (potentially llm_with_tools), tools, and prompt.
@@ -598,14 +847,14 @@ class AgenticRAGProcessor:
             )
             # --- Add Memory Logging ---
             try:
-                memory_vars = self.memory.load_memory_variables({})
+                memory_vars: dict[str, Any] = self.memory.load_memory_variables({})
                 logger.debug(f"Memory variables before invoke: {memory_vars}")
             except Exception as mem_err:
                 logger.error(f"Could not load memory variables for logging: {mem_err}")
             # --- End Memory Logging ---
 
             # Invoke the agent executor. It handles the LLM calls, tool execution, and memory updates.
-            response = self.agent_executor.invoke(
+            response: Dict[str, Any] = self.agent_executor.invoke(
                 {
                     "input": user_input,
                 },
@@ -632,7 +881,7 @@ class AgenticRAGProcessor:
             )
             return "I'm sorry, I encountered an internal error. Please try again."
 
-    def refresh_vectorstore(self):
+    def refresh_vectorstore(self) -> bool:
         """Refresh the vector store with updated user data."""
         # This method needs to be adapted slightly if it exists in the original RAGProcessor
         # to use the correct vectorstore instance and population method.
