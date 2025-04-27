@@ -4,7 +4,6 @@ from typing import Any, Dict, List
 from django.utils import timezone
 
 from core.models import JobListing
-from core.tasks import generate_documents_async
 from core.utils.agents.base_agent import BaseAgent
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.job_scrapers.glassdoor_scraper import GlassdoorScraper
@@ -83,9 +82,6 @@ class SearchAgent(BaseAgent):
                     )
 
                     job_listings.append(job_listing)
-
-                    # Trigger background document generation
-                    generate_documents_async.delay(job_listing.id, self.user_id)
 
         return job_listings
 

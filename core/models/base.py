@@ -14,8 +14,8 @@ from django.apps import apps
 class TimestampMixin(models.Model):
     """Abstract base model with created and updated timestamps"""
 
-    created_at = models.DateTimeField(default=timezone.now)
-    updated_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         abstract = True
@@ -55,12 +55,13 @@ class TimestampMixin(models.Model):
 
                             # Show a summary of related objects if there are any
                             if count > 0:
-                                for index, obj in enumerate(
-                                    related_objects.all()[:5]
-                                ):  # Limit to 5
+                                # Use prefetch_related to optimize query
+                                related_objects = related_objects.all().prefetch_related()[:5]
+                                for obj in related_objects:
                                     summary = str(obj)
                                     lines.append(f"  - {summary}")
                                 if count > 5:
+
                                     lines.append(f"  ... and {count - 5} more")
 
             # Regular fields or explicitly defined relations
@@ -90,35 +91,39 @@ class TimestampMixin(models.Model):
             A dictionary containing the JSON schema for the model
         """
         # Generate basic schema from model fields
+        # Generate basic schema from model fields
         fields_dict = {}
         required_fields = []
+
+        # Define a mapping of Django field types to JSON Schema types
+        field_type_mapping = {
+            "IntegerField": "integer",
+            "AutoField": "integer",
+            "BigIntegerField": "integer",
+            "SmallIntegerField": "integer",
+            "DecimalField": "number",
+            "FloatField": "number",
+            "BooleanField": "boolean",
+            "NullBooleanField": "boolean",
+            "DateField": "string",
+            "DateTimeField": "string",
+            "TimeField": "string",
+        }
 
         # Extract information from model fields
         for field in cls._meta.fields:
             field_name = field.name
-            field_type = "string"  # Default type
+            internal_type = field.get_internal_type()
 
-            # Map Django field types to JSON Schema types
-            if field.get_internal_type() in (
-                "IntegerField",
-                "AutoField",
-                "BigIntegerField",
-                "SmallIntegerField",
-            ):
-                field_type = "integer"
-            elif field.get_internal_type() in ("DecimalField", "FloatField"):
-                field_type = "number"
-            elif field.get_internal_type() in ("BooleanField", "NullBooleanField"):
-                field_type = "boolean"
-            elif field.get_internal_type() in ("DateField", "DateTimeField", "TimeField"):
-                field_type = "string"
+            field_type = field_type_mapping.get(internal_type, "string")
+
+            if internal_type in ("DateField", "DateTimeField", "TimeField"):
                 fields_dict[field_name] = {"type": field_type, "format": "date-time"}
-                continue
+            else:
+                fields_dict[field_name] = {"type": field_type}
 
-            fields_dict[field_name] = {"type": field_type}
+                # Track required fields
 
-            # Track required fields
-            if not field.null and not field.blank:
                 required_fields.append(field_name)
 
         return {
@@ -262,3 +267,48 @@ class TimestampMixin(models.Model):
             app_label=app_label, exclude_models=exclude_models, include_abstract=include_abstract
         )
         return json.dumps(schemas, indent=indent)
+
+
+class ChatConversation(TimestampMixin):
+    """
+    Model to store chat conversations.
+    """
+
+    user = models.ForeignKey(
+        "auth.User", on_delete=models.CASCADE, related_name="chat_conversations"
+    )
+    title = models.CharField(max_length=200, blank=True)
+    job_listing = models.ForeignKey(
+        "JobListing",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chat_conversations",
+    )
+
+    def __str__(self):
+        return f"{self.user.username}'s conversation: {self.title or 'Untitled'}"
+
+
+class ChatMessage(TimestampMixin):
+    """
+    Model to store chat messages.
+    """
+
+    ROLE_CHOICES = [
+        ("user", "User"),
+        ("assistant", "Assistant"),
+        ("system", "System"),
+    ]
+
+    conversation = models.ForeignKey(
+        ChatConversation, on_delete=models.CASCADE, related_name="messages"
+    )
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES)
+    content = models.TextField()
+
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}..."
+
+    class Meta:
+        ordering = ["created_at"]

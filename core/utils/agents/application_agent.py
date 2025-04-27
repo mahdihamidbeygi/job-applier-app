@@ -639,13 +639,15 @@ class ApplicationAgent(BaseAgent):
 
         cover_letter_composition = CoverLetterComposition(
             personal_agent=self.personal_agent,
-            job_info=self.job_agent.job_record.get_formatted_info(),
+            job_agent=self.job_agent,
         )
 
         cover_letter_buffer: BytesIO = cover_letter_composition.build()
 
         # Format the filename components
-        username: Any | str = self.personal_agent.user_profile.user.username
+        username: Any | str = self.personal_agent.user_profile.user.get_full_name().replace(
+            " ", "_"
+        )
         today: str = date.today().strftime("%Y%m%d")
         company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")
@@ -714,7 +716,9 @@ class ApplicationAgent(BaseAgent):
         )
 
         # Format the filename components
-        username: Any | str = self.personal_agent.user_profile.user.username
+        username: Any | str = self.personal_agent.user_profile.user.get_full_name().replace(
+            " ", "_"
+        )
         today: str = date.today().strftime("%Y%m%d")
         company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")

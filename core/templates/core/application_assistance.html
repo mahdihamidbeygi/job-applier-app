@@ -1,4 +1,8 @@
-{% extends 'core/base.html' %} {% load static %} {% block content %}
+{% extends 'core/base.html' %}
+<!-- load static -->
+{% load static %}
+<!--start of content-->
+{% block content %}
 <div class="container mt-5">
   <div class="row justify-content-center">
     <div class="col-md-14">
@@ -22,8 +26,8 @@
                   </div>
                   <div class="message-content p-3 rounded bg-light">
                     <p>
-                      Hello! I'm your job application assistant. How can I help
-                      you today?
+                      Hello! I'm your AI-powered job application assistant. How
+                      can I help you today?
                     </p>
                     <p>I can help you with:</p>
                     <ul>
@@ -31,9 +35,14 @@
                       <li>Creating a custom cover letter</li>
                       <li>Answering application questions</li>
                       <li>Analyzing your fit for the job</li>
+                      <li>
+                        Providing personalized career advice based on your
+                        profile
+                      </li>
                     </ul>
                     <p>
-                      Just share the job description with me to get started!
+                      Just share the job description with me to get started, or
+                      ask me any questions about your job search!
                     </p>
                   </div>
                 </div>
@@ -52,30 +61,7 @@
                 <i class="fas fa-paper-plane"></i> Send
               </button>
             </div>
-          </div>
-
-          <!-- Action buttons (initially hidden) -->
-          <div id="actionButtons" class="d-grid gap-2 mb-3 d-none">
-            <button
-              type="button"
-              class="btn btn-primary"
-              id="generateResumeBtn"
-            >
-              Generate Tailored Resume
-            </button>
-            <button
-              type="button"
-              class="btn btn-primary"
-              id="generateCoverLetterBtn"
-            >
-              Generate Cover Letter
-            </button>
-            <button type="button" class="btn btn-primary" id="askQuestionsBtn">
-              Answer Application Questions
-            </button>
-            <button type="button" class="btn btn-primary" id="analyzeJobBtn">
-              Analyze Job Fit
-            </button>
+            <small id="errorMessage" class="text-danger mt-1"></small>
           </div>
 
           <!-- Save conversation button -->
@@ -94,7 +80,7 @@
             <div class="spinner-border text-primary" role="status">
               <span class="visually-hidden">Loading...</span>
             </div>
-            <p class="mt-2">Processing your request...</p>
+            <p class="mt-2">Assistant is thinking...</p>
           </div>
         </div>
       </div>
@@ -102,598 +88,181 @@
   </div>
 </div>
 
+{% block extra_js %}
 <script>
-  // Job description and questions storage
-  let jobDescription = "";
-  let applicationQuestions = [];
+  // Conversation state
   let conversationContext = {
-    jobProvided: false,
-    questionsProvided: false,
-    lastAction: null,
+    conversationId: null, // Store the conversation ID from the backend
   };
 
-  // DOM elements
+  // DOM elements (using the IDs defined in the HTML above)
   const chatMessages = document.getElementById("chatMessages");
   const userInput = document.getElementById("userInput");
   const sendButton = document.getElementById("sendButton");
-  const actionButtons = document.getElementById("actionButtons");
-  const generateResumeBtn = document.getElementById("generateResumeBtn");
-  const generateCoverLetterBtn = document.getElementById(
-    "generateCoverLetterBtn"
-  );
-  const askQuestionsBtn = document.getElementById("askQuestionsBtn");
-  const analyzeJobBtn = document.getElementById("analyzeJobBtn");
   const saveConversationBtn = document.getElementById("saveConversationBtn");
   const loadingSpinner = document.getElementById("loadingSpinner");
+  const errorMessage = document.getElementById("errorMessage");
 
-  // Event listeners
+  // --- Event listeners ---
   sendButton.addEventListener("click", handleUserMessage);
   userInput.addEventListener("keydown", function (e) {
+    // Use keydown for Enter key to allow Shift+Enter for new lines if needed later
     if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
+      e.preventDefault(); // Prevent default newline in textarea
       handleUserMessage();
     }
   });
-  generateResumeBtn.addEventListener("click", () => generateDocument("resume"));
-  generateCoverLetterBtn.addEventListener("click", () =>
-    generateDocument("cover_letter")
-  );
-  askQuestionsBtn.addEventListener("click", showQuestionsPrompt);
-  analyzeJobBtn.addEventListener("click", analyzeJobFit);
   saveConversationBtn.addEventListener("click", saveConversation);
 
-  // Main function to handle user messages
+  // --- Main function to handle user messages and interact with the Agent API ---
   async function handleUserMessage() {
     const userMessage = userInput.value.trim();
     if (!userMessage) return;
 
-    // Add user message to chat
+    // Add user message to chat UI
     addMessageToChat("user", userMessage);
-    userInput.value = "";
+    userInput.value = ""; // Clear input field
+    errorMessage.textContent = ""; // Clear previous errors
 
     // Show loading indicator
-    const typingIndicator = addTypingIndicator();
+    loadingSpinner.classList.remove("d-none");
+    sendButton.disabled = true; // Disable send button while processing
 
     try {
-      // Analyze the message content
-      if (!conversationContext.jobProvided) {
-        // If no job description yet, this might be one
-        if (userMessage.length > 100) {
-          jobDescription = userMessage;
-          conversationContext.jobProvided = true;
+      // Send message to the backend Agent API
+      const response = await fetch("{% url 'core:chat_api' %}", {
+        // Ensure this URL name is correct
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken"), // Use standard CSRF token getter
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          conversation_id: conversationContext.conversationId, // Send current conversation ID
+        }),
+      });
 
-          // Remove typing indicator
-          typingIndicator.remove();
+      if (response.ok) {
+        const data = await response.json();
 
-          // Respond to user
-          addMessageToChat(
-            "assistant",
-            `Thank you for providing the job description! I've saved it and can now help you prepare application materials. What would you like to do next?`
-          );
-
-          // Show action buttons
-          actionButtons.classList.remove("d-none");
-        } else {
-          // Message too short to be job description
-          typingIndicator.remove();
-          addMessageToChat(
-            "assistant",
-            `It seems your message might be too short to be a complete job description. Could you please share the full job posting with requirements, responsibilities, and company details?`
-          );
+        // Update conversation ID if it's new or returned
+        if (data.conversation_id) {
+          conversationContext.conversationId = data.conversation_id;
         }
-      } else if (conversationContext.lastAction === "askingForQuestions") {
-        // User is providing application questions
-        applicationQuestions = userMessage.split("\n").filter((q) => q.trim());
-        conversationContext.questionsProvided = true;
 
-        // Process questions
-        typingIndicator.remove();
-        await generateAnswers();
+        // Add AI response to chat UI
+        // Replace newlines in the response with <br> for HTML display
+        addMessageToChat("assistant", data.response.replace(/\n/g, "<br>"));
       } else {
-        // General conversation
-        const response = await analyzeUserIntent(userMessage);
-        typingIndicator.remove();
-        addMessageToChat("assistant", response);
+        // Handle backend errors (e.g., 4xx, 5xx)
+        let errorMsg = "An unknown error occurred.";
+        try {
+          const errorData = await response.json();
+          errorMsg =
+            errorData.error ||
+            `Server responded with status ${response.status}`;
+        } catch (e) {
+          errorMsg = `Server responded with status ${response.status}. Could not parse error details.`;
+        }
+        console.error("Backend Error:", errorMsg);
+        errorMessage.textContent = `Error: ${errorMsg}`; // Display error to user
+        addMessageToChat(
+          "assistant",
+          `Sorry, I encountered an error processing your request. Please try again.`
+        ); // Add generic error to chat
       }
     } catch (error) {
-      console.error("Error:", error);
-      typingIndicator.remove();
+      // Handle network errors or other fetch issues
+      console.error("Fetch Error:", error);
+      errorMessage.textContent = `Error: ${
+        error.message || "Could not connect to the server."
+      }`; // Display error
       addMessageToChat(
         "assistant",
-        `I'm sorry, I encountered an error: ${error.message}`
-      );
+        `Sorry, I couldn't connect to the assistant. Please check your connection and try again.`
+      ); // Add connection error to chat
+    } finally {
+      // Hide loading indicator and re-enable button regardless of success/failure
+      loadingSpinner.classList.add("d-none");
+      sendButton.disabled = false;
+      userInput.focus(); // Focus back on input
     }
   }
 
-  // Analyze user intent (this would ideally call an API endpoint)
-  async function analyzeUserIntent(message) {
-    // Simple keyword matching for now
-    const lowerMessage = message.toLowerCase();
-
-    if (lowerMessage.includes("resume") || lowerMessage.includes("cv")) {
-      if (conversationContext.jobProvided) {
-        generateDocument("resume");
-        return "I'll generate a tailored resume for you based on the job description you provided.";
-      } else {
-        return "I'd be happy to help with your resume. Could you please share the job description first?";
-      }
-    } else if (
-      lowerMessage.includes("cover letter") ||
-      lowerMessage.includes("coverletter")
-    ) {
-      if (conversationContext.jobProvided) {
-        generateDocument("cover_letter");
-        return "I'll create a cover letter for you based on the job description you provided.";
-      } else {
-        return "I'd be happy to help with your cover letter. Could you please share the job description first?";
-      }
-    } else if (
-      lowerMessage.includes("question") &&
-      (lowerMessage.includes("application") || lowerMessage.includes("answer"))
-    ) {
-      conversationContext.lastAction = "askingForQuestions";
-      return "Sure, I can help with application questions. Please share the questions (one per line) and I'll help generate appropriate answers based on your profile.";
-    } else if (
-      lowerMessage.includes("match") ||
-      lowerMessage.includes("analyze") ||
-      lowerMessage.includes("fit") ||
-      lowerMessage.includes("compatibility")
-    ) {
-      if (conversationContext.jobProvided) {
-        analyzeJobFit();
-        return "I'll analyze how well your profile matches this job posting.";
-      } else {
-        return "I'd be happy to analyze your fit for a job. Could you please share the job description first?";
-      }
-    } else if (
-      lowerMessage.includes("thanks") ||
-      lowerMessage.includes("thank you")
-    ) {
-      return "You're welcome! Is there anything else I can help you with?";
-    } else {
-      return "I'm here to help you with your job application. I can generate a tailored resume, create a cover letter, analyze job fit, or help with application questions. What would you like to do?";
-    }
-  }
-
-  // Function to add messages to the chat
+  // --- Function to add messages to the chat UI ---
   function addMessageToChat(sender, content) {
     const messageDiv = document.createElement("div");
+    // Use the more detailed structure for consistency
     messageDiv.className = `message ${sender} mb-3`;
     messageDiv.dataset.timestamp = new Date().toISOString();
     messageDiv.dataset.sender = sender;
-    messageDiv.dataset.content = content.replace(/<[^>]*>/g, ""); // Store plain text version for export
+    // Store plain text version for potential export, stripping HTML
+    messageDiv.dataset.content = content
+      .replace(/<[^>]*>/g, "")
+      .replace(/<br>/gi, "\n");
 
     const iconClass = sender === "user" ? "fa-user" : "fa-robot";
     const bgClass = sender === "user" ? "bg-primary text-white" : "bg-light";
+    const justifyClass = sender === "user" ? "justify-content-end" : "";
+    const avatarHTML = `<div class="avatar me-2"><i class="fas ${iconClass} ${
+      sender === "user" ? "text-white" : "text-primary"
+    }"></i></div>`;
+    const avatarHTMLUserEnd = `<div class="avatar ms-2"><i class="fas ${iconClass} ${
+      sender === "user" ? "text-white" : "text-primary"
+    }"></i></div>`;
 
     messageDiv.innerHTML = `
-      <div class="d-flex ${sender === "user" ? "justify-content-end" : ""}">
-        ${
-          sender === "assistant"
-            ? `<div class="avatar me-2"><i class="fas ${iconClass} ${
-                sender === "user" ? "text-white" : "text-primary"
-              }"></i></div>`
-            : ""
-        }
+      <div class="d-flex ${justifyClass}">
+        ${sender === "assistant" ? avatarHTML : ""}
         <div class="message-content p-3 rounded ${bgClass}">
-          ${content}
+          ${content} {# Display content which might contain <br> tags #}
         </div>
-        ${
-          sender === "user"
-            ? `<div class="avatar ms-2"><i class="fas ${iconClass} ${
-                sender === "user" ? "text-white" : "text-primary"
-              }"></i></div>`
-            : ""
-        }
+        ${sender === "user" ? avatarHTMLUserEnd : ""}
       </div>
     `;
 
     chatMessages.appendChild(messageDiv);
+    // Scroll to the bottom of the chat messages
     chatMessages.scrollTop = chatMessages.scrollHeight;
   }
 
-  // Add typing indicator
+  // --- Add typing indicator (Optional but nice UX) ---
   function addTypingIndicator() {
     const typingDiv = document.createElement("div");
     typingDiv.className = "message assistant typing mb-3";
+    typingDiv.id = "typingIndicator"; // Give it an ID for easy removal
     typingDiv.innerHTML = `
       <div class="d-flex">
         <div class="avatar me-2"><i class="fas fa-robot text-primary"></i></div>
         <div class="message-content p-3 rounded bg-light">
           <span class="typing-dots">
-            <span class="dot"></span>
-            <span class="dot"></span>
-            <span class="dot"></span>
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
           </span>
         </div>
       </div>
     `;
     chatMessages.appendChild(typingDiv);
     chatMessages.scrollTop = chatMessages.scrollHeight;
-    return typingDiv;
+    return typingDiv; // Return the element so it can be removed
   }
 
-  // Generate document (resume or cover letter)
-  async function generateDocument(type) {
-    if (!jobDescription) {
-      addMessageToChat(
-        "assistant",
-        "I need a job description first. Could you please share the job posting?"
-      );
-      return;
-    }
-
-    // Show loading spinner
-    loadingSpinner.classList.remove("d-none");
-    loadingSpinner.querySelector("p").textContent = `Generating your ${
-      type === "resume" ? "resume" : "cover letter"
-    }...`;
-
-    try {
-      // Extract job title and company name from context if possible
-      const jobTitle = extractJobTitle(jobDescription) || "Job Position";
-      const company = extractCompany(jobDescription) || "Company";
-
-      const response = await fetch("/process-application/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCookie("csrftoken"),
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          job_title: jobTitle,
-          job_description: jobDescription,
-          company: company,
-          application_url: window.location.href,
-          document_type: type,
-          additional_services: {
-            answer_questions: false,
-            prepare_interview: false,
-          },
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Convert base64 to blob
-        const base64Data = data.documents[type];
-        const byteCharacters = atob(base64Data);
-        const byteArrays = [];
-
-        for (let offset = 0; offset < byteCharacters.length; offset += 1024) {
-          const slice = byteCharacters.slice(offset, offset + 1024);
-          const byteNumbers = new Array(slice.length);
-
-          for (let i = 0; i < slice.length; i++) {
-            byteNumbers[i] = slice.charCodeAt(i);
-          }
-
-          const byteArray = new Uint8Array(byteNumbers);
-          byteArrays.push(byteArray);
-        }
-        const userName = "{{ request.user.get_full_name }}";
-        const blob = new Blob(byteArrays, { type: "application/pdf" });
-        const now = new Date();
-        const date = now.toISOString().split("T")[0];
-        const time = now.toTimeString().split(" ")[0].replace(/:/g, "");
-        const fileName = `${
-          type === "resume" ? "resume" : "cover_letter"
-        }_${userName}_${date}_${time}.pdf`;
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fileName;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-
-        // Add message to chat about successful generation
-        addMessageToChat(
-          "assistant",
-          `Your ${
-            type === "resume" ? "tailored resume" : "cover letter"
-          } has been generated and downloaded. Is there anything else you need help with?`
-        );
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `Failed to generate ${type}`);
-      }
-    } catch (error) {
-      addMessageToChat(
-        "assistant",
-        `I'm sorry, I encountered an error generating your ${type}: ${error.message}`
-      );
-      console.error("Error:", error);
-    } finally {
-      // Hide loading spinner
-      loadingSpinner.classList.add("d-none");
+  // --- Remove typing indicator ---
+  function removeTypingIndicator() {
+    const indicator = document.getElementById("typingIndicator");
+    if (indicator) {
+      indicator.remove();
     }
   }
 
-  // Show questions prompt
-  function showQuestionsPrompt() {
-    conversationContext.lastAction = "askingForQuestions";
-    addMessageToChat(
-      "assistant",
-      "Please share the application questions (one per line) and I'll help generate appropriate answers based on your profile and the job description."
-    );
-  }
-
-  // Generate answers for application questions
-  async function generateAnswers() {
-    if (!jobDescription) {
-      addMessageToChat(
-        "assistant",
-        "I need a job description first. Could you please share the job posting?"
-      );
-      return;
-    }
-
-    if (!applicationQuestions.length) {
-      addMessageToChat(
-        "assistant",
-        "Please provide the application questions first."
-      );
-      return;
-    }
-
-    // Show loading spinner
-    loadingSpinner.classList.remove("d-none");
-    loadingSpinner.querySelector("p").textContent = "Generating answers...";
-
-    try {
-      // Extract job title and company name from context if possible
-      const jobTitle = extractJobTitle(jobDescription) || "Job Position";
-      const company = extractCompany(jobDescription) || "Company";
-
-      const response = await fetch("/process-application/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCookie("csrftoken"),
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          job_title: jobTitle,
-          job_description: jobDescription,
-          company: company,
-          application_url: window.location.href,
-          questions: applicationQuestions,
-          document_type: "none",
-          additional_services: {
-            answer_questions: true,
-            prepare_interview: false,
-          },
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        // Format the answers for chat display
-        let answersHTML =
-          "<strong>Here are suggested answers to your questions:</strong><br><br>";
-
-        if (Array.isArray(data.answers)) {
-          data.answers.forEach((answer) => {
-            answersHTML += `<div class="mb-3">
-              <strong>Q: ${answer.question}</strong><br>
-              A: ${answer.answer}
-            </div>`;
-          });
-        } else {
-          answersHTML += data.answers.replace(/\n/g, "<br>");
-        }
-
-        // Add answers to chat
-        addMessageToChat("assistant", answersHTML);
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to generate answers");
-      }
-    } catch (error) {
-      addMessageToChat(
-        "assistant",
-        `I'm sorry, I encountered an error generating answers: ${error.message}`
-      );
-      console.error("Error:", error);
-    } finally {
-      // Hide loading spinner
-      loadingSpinner.classList.add("d-none");
-      // Reset the action
-      conversationContext.lastAction = null;
-    }
-  }
-
-  // Analyze job fit
-  async function analyzeJobFit() {
-    if (!jobDescription) {
-      addMessageToChat(
-        "assistant",
-        "I need a job description first. Could you please share the job posting?"
-      );
-      return;
-    }
-
-    // Show loading spinner
-    loadingSpinner.classList.remove("d-none");
-    loadingSpinner.querySelector("p").textContent = "Analyzing job fit...";
-
-    try {
-      // Extract job title and company name from context if possible
-      const jobTitle = extractJobTitle(jobDescription) || "Job Position";
-      const company = extractCompany(jobDescription) || "Company";
-
-      const response = await fetch("/process-application/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCookie("csrftoken"),
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          job_title: jobTitle,
-          job_description: jobDescription,
-          company: company,
-          application_url: window.location.href,
-          document_type: "none",
-          additional_services: {
-            analyze_job_fit: true,
-            answer_questions: false,
-            prepare_interview: false,
-          },
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-
-        if (data.job_analysis) {
-          // Format the job analysis for chat display
-          const analysis = data.job_analysis;
-          let analysisHTML = "<strong>Job Fit Analysis</strong><br><br>";
-
-          // Overall match score
-          const matchScore =
-            analysis.match_score || analysis.match_percentage || 0;
-          analysisHTML += `<div class="mb-3">
-            <strong>Overall Match:</strong> ${matchScore.toFixed(1)}%
-            <div class="progress">
-              <div class="progress-bar ${getMatchScoreClass(
-                matchScore
-              )}" role="progressbar" style="width: ${matchScore}%" aria-valuenow="${matchScore}" aria-valuemin="0" aria-valuemax="100"></div>
-            </div>
-          </div>`;
-
-          // Skills match - handle both old and new formats
-          if (analysis.skills_match || analysis.key_matching_skills) {
-            analysisHTML += `<div class="mb-3">
-              <strong>Skills Match:</strong><br>
-              <ul>`;
-
-            // Matching skills - support both new and old formats
-            const matchingSkills =
-              analysis.skills_match?.matching ||
-              analysis.key_matching_skills ||
-              [];
-
-            if (matchingSkills.length > 0) {
-              analysisHTML += `<li><strong>Matching Skills:</strong> ${matchingSkills.join(
-                ", "
-              )}</li>`;
-            }
-
-            // Missing skills - support both new and old formats
-            const missingSkills =
-              analysis.skills_match?.missing || analysis.potential_gaps || [];
-
-            if (missingSkills.length > 0) {
-              analysisHTML += `<li><strong>Skills to Develop:</strong> ${missingSkills.join(
-                ", "
-              )}</li>`;
-            }
-
-            analysisHTML += `</ul></div>`;
-          }
-
-          // Recommendations - support both formats
-          const recommendations =
-            analysis.recommendations ||
-            (analysis.application_strategy
-              ? [analysis.application_strategy]
-              : []);
-
-          if (recommendations && recommendations.length > 0) {
-            analysisHTML += `<div class="mb-3">
-              <strong>Recommendations:</strong><br>
-              <ul>`;
-
-            recommendations.forEach((rec) => {
-              analysisHTML += `<li>${rec}</li>`;
-            });
-
-            analysisHTML += `</ul></div>`;
-          }
-
-          // Company fit
-          if (analysis.company_fit) {
-            analysisHTML += `<div class="mb-3">
-              <strong>Company Fit:</strong><br>
-              <p>${analysis.company_fit}</p>
-            </div>`;
-          }
-
-          // Add analysis to chat
-          addMessageToChat("assistant", analysisHTML);
-        } else {
-          addMessageToChat(
-            "assistant",
-            "Sorry, I couldn't generate a job analysis at this time."
-          );
-        }
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to analyze job fit");
-      }
-    } catch (error) {
-      addMessageToChat(
-        "assistant",
-        `I'm sorry, I encountered an error analyzing the job fit: ${error.message}`
-      );
-      console.error("Error:", error);
-    } finally {
-      // Hide loading spinner
-      loadingSpinner.classList.add("d-none");
-    }
-  }
-
-  // Helper function to get progress bar class based on match score
-  function getMatchScoreClass(score) {
-    if (score >= 80) return "bg-success";
-    if (score >= 60) return "bg-info";
-    if (score >= 40) return "bg-warning";
-    return "bg-danger";
-  }
-
-  // Helper function to extract job title from job description
-  function extractJobTitle(description) {
-    // Try to find a job title by looking for common patterns
-    const titleRegex = /job title|position|role|job|title|:\s*([^\n.]+)/i;
-    const match = description.match(titleRegex);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-    // If no match, return the first non-empty line that's shorter than 100 chars
-    const lines = description.split("\n");
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (trimmed && trimmed.length < 100 && !trimmed.includes("http")) {
-        return trimmed;
-      }
-    }
-    return null;
-  }
-
-  // Helper function to extract company from job description
-  function extractCompany(description) {
-    // Try to find company name by looking for common patterns
-    const companyRegex = /company|employer|organization|at\s+([^,.\n]+)/i;
-    const match = description.match(companyRegex);
-    if (match && match[1]) {
-      return match[1].trim();
-    }
-    return null;
-  }
-
+  // --- Standard function to get CSRF token from cookies ---
   function getCookie(name) {
     let cookieValue = null;
     if (document.cookie && document.cookie !== "") {
       const cookies = document.cookie.split(";");
       for (let i = 0; i < cookies.length; i++) {
         const cookie = cookies[i].trim();
+        // Does this cookie string begin with the name we want?
         if (cookie.substring(0, name.length + 1) === name + "=") {
           cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
           break;
@@ -703,106 +272,142 @@
     return cookieValue;
   }
 
-  // Save conversation to text file
+  // --- Save conversation to text file (Client-side) ---
   function saveConversation() {
-    // Get all message elements
     const messages = document.querySelectorAll("#chatMessages .message");
+    if (messages.length <= 1) {
+      // Only welcome message exists
+      alert("No conversation to save yet!");
+      return;
+    }
     let conversationText = `Job Application Conversation - ${new Date().toLocaleString()}\n\n`;
 
-    // Format each message
     messages.forEach((msg) => {
+      // Skip typing indicator if present
+      if (msg.classList.contains("typing")) return;
+
       const sender = msg.dataset.sender === "user" ? "You" : "Assistant";
       const timestamp = new Date(msg.dataset.timestamp).toLocaleTimeString();
-      const content = msg.dataset.content || msg.textContent.trim();
+      // Use the stored plain text content
+      const content =
+        msg.dataset.content || "Error retrieving message content.";
 
       conversationText += `[${timestamp}] ${sender}:\n${content.trim()}\n\n`;
     });
 
-    // Add job description if available
-    if (jobDescription) {
-      conversationText += `\n--- Job Description ---\n${jobDescription}\n`;
-    }
-
     // Create and download the file
-    const blob = new Blob([conversationText], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `job_application_conversation_${new Date()
-      .toISOString()
-      .slice(0, 10)}.txt`;
-    document.body.appendChild(a);
-    a.click();
-    URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    try {
+      const blob = new Blob([conversationText], {
+        type: "text/plain;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none"; // Hide the link
+      a.href = url;
+      a.download = `job_app_conversation_${new Date()
+        .toISOString()
+        .slice(0, 10)}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url); // Clean up
+      document.body.removeChild(a); // Clean up
 
-    // Notify user
-    addMessageToChat(
-      "assistant",
-      "Conversation saved! The text file has been downloaded to your device."
-    );
+      // Notify user (optional, could use a less intrusive notification)
+      // alert("Conversation saved!");
+    } catch (e) {
+      console.error("Error saving conversation:", e);
+      alert("Failed to save conversation.");
+    }
   }
 </script>
-
+{% endblock%}
+<!-- Chat styling -->
+{% block extra_css %}
 <style>
   /* Chat styling */
   .message {
-    margin-bottom: 15px;
+    margin-bottom: 15px; /* Spacing between messages */
   }
 
   .message .avatar {
-    width: 30px;
+    width: 30px; /* Size of avatar icon container */
     height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
+    border-radius: 50%; /* Make it circular */
+    flex-shrink: 0; /* Prevent avatar from shrinking */
   }
 
   .message .message-content {
-    max-width: 80%;
-    word-wrap: break-word;
+    max-width: 80%; /* Limit message width */
+    word-wrap: break-word; /* Allow long words to break */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle shadow */
   }
 
+  /* User message specific styles */
   .message.user .message-content {
-    background-color: #007bff;
+    background-color: #007bff; /* Bootstrap primary blue */
     color: white;
   }
+  .message.user .avatar i {
+    color: #007bff; /* Match user color if needed, or keep white */
+    /* If avatar background is needed: background-color: white; */
+  }
 
+  /* Assistant message specific styles */
+  .message.assistant .message-content {
+    background-color: #f8f9fa; /* Light grey background */
+    color: #212529; /* Default text color */
+  }
+  .message.assistant .avatar i {
+    color: #007bff; /* Primary color for assistant icon */
+  }
+
+  /* Typing indicator styles */
+  .message.typing .message-content {
+    background-color: #f8f9fa;
+    display: inline-block; /* Make it only as wide as the dots */
+    padding: 10px 12px !important; /* Adjust padding for dots */
+  }
   .typing-dots {
     display: flex;
+    align-items: center; /* Vertically center dots */
+    height: 1em; /* Match typical text height */
   }
-
   .typing-dots .dot {
-    background-color: #888;
+    background-color: #adb5bd; /* Grey color for dots */
     border-radius: 50%;
-    width: 8px;
-    height: 8px;
+    width: 6px; /* Smaller dots */
+    height: 6px;
     margin: 0 2px;
-    animation: bounce 1.5s infinite ease-in-out;
+    animation: bounce 1.4s infinite ease-in-out both;
   }
-
   .typing-dots .dot:nth-child(1) {
-    animation-delay: 0s;
+    animation-delay: -0.32s;
   }
-
   .typing-dots .dot:nth-child(2) {
-    animation-delay: 0.3s;
+    animation-delay: -0.16s;
   }
-
   .typing-dots .dot:nth-child(3) {
-    animation-delay: 0.6s;
+    animation-delay: 0s;
   }
 
   @keyframes bounce {
     0%,
     80%,
     100% {
-      transform: translateY(0);
+      transform: scale(0);
     }
     40% {
-      transform: translateY(-8px);
+      transform: scale(1);
     }
   }
+
+  /* Ensure textarea resizes reasonably */
+  #userInput {
+    resize: vertical; /* Allow vertical resize only */
+    min-height: 60px; /* Minimum height */
+  }
 </style>
-{% endblock %}
+{% endblock %} {% endblock %}

@@ -1,10 +1,17 @@
 from django.contrib.auth import views as auth_views
+from django.contrib.auth.decorators import login_required
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
+from django.conf import settings
+from django.views.generic import TemplateView
 
 from . import views
 from .views import schema_views
+from .views.api_views import *
+from .views.auth_views import *
+from .views.job_views import *
+from .views.utility_views import *
 
 app_name = "core"
 
@@ -82,6 +89,7 @@ document_urls = [
     path("api/generate-documents/", views.generate_documents, name="generate_documents"),
     path("api/generate-answers/", views.generate_answers, name="generate_answers"),
     path("api/fill-form/", views.fill_form, name="fill-form"),
+    path("chat-api/", chat_api, name="chat_api"),
 ]
 
 # API Documentation URLs

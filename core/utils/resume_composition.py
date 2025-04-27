@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime
 from io import BytesIO
 from typing import Any, Dict, List, LiteralString, Tuple
@@ -14,6 +15,8 @@ from django.core.files.storage import default_storage
 
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.local_llms import GoogleClient, OllamaClient
+
+logger = logging.getLogger(__name__)  # <-- Add logger instance
 
 
 class ResumeComposition:
@@ -31,8 +34,8 @@ class ResumeComposition:
         self.ollama_client = OllamaClient(model="llama3:latest", temperature=0.0)
         self.google_client = GoogleClient()
         self.professional_summary: str = ""
-        self.projects: str = ""
-        self.skills: str = ""
+        self.projects: List[str] = []
+        self.skills: List[str] = []
 
     def _setup_styles(self):
         # Header style
@@ -268,19 +271,19 @@ class ResumeComposition:
         # Sort experiences by start date (most recent first)
         sorted_experiences = sorted(
             self.personal_agent.user_profile.work_experiences.all(),
-            key=lambda x: x.get("start_date", "1900-01-01").strftime("%Y-%m-%d"),
+            key=lambda x: x.start_date.strftime("%Y-%m-%d"),
             reverse=True,
         )
         for exp in sorted_experiences:
             # Title, Company, Location and Date in one row
-            position_text = f"<b>{exp['position']}</b>"
-            if exp.get("company"):
-                position_text += f", {exp['company']}"
-            if exp.get("location"):
-                position_text += f", {exp['location']}"
+            position_text = f"<b>{exp.position}</b>"
+            if exp.company:
+                position_text += f", {exp.company}"
+            if exp.location:
+                position_text += f", {exp.location}"
 
-            start_date: str = self._format_date(exp.get("start_date"))
-            end_date: str = self._format_date(exp.get("end_date"))
+            start_date: str = self._format_date(exp.start_date)
+            end_date: str = self._format_date(exp.end_date)
             date_text: str = f"{start_date}-{end_date}"
 
             experience_data: List[List[Paragraph]] = [
@@ -310,18 +313,34 @@ class ResumeComposition:
             self.elements.append(experience_table)
 
             # Convert description to bullet points if it exists
-            if exp.get("description"):
+            if exp.description:
                 additional_bullets: List[str] = self._convert_description_to_bullets(
-                    exp["description"]
+                    exp.description
                 )
                 if additional_bullets:
-                    exp.setdefault("bullet_points", []).extend(additional_bullets)
+                    # Ensure exp.bullet_points exists and is a list before extending
+                    if not hasattr(exp, "bullet_points") or not isinstance(exp.bullet_points, list):
+                        # If the attribute doesn't exist or isn't a list, initialize it.
+                        # Note: This assumes you WANT to modify the object in memory.
+                        # If bullet_points isn't a field on the model, this won't persist.
+                        # If it IS a field (like JSONField), this is okay for in-memory use.
+                        exp.bullet_points = []
 
-            # Bullet points
-            for bullet in exp.get("bullet_points", []):
-                if not bullet.startswith("•"):
-                    bullet = f"• {bullet}"
-                self.elements.append(Paragraph(bullet, self.styles["ResumeBullet"]))
+                    # Now extend the list
+                    exp.bullet_points.extend(additional_bullets)
+
+            # Bullet points - This part assumes exp.bullet_points is now a valid list
+            # Check if bullet_points actually exists and is iterable before looping
+            if hasattr(exp, "bullet_points") and isinstance(exp.bullet_points, list):
+                for bullet in exp.bullet_points:
+                    if not bullet.startswith("•"):
+                        bullet: str = f"• {bullet}"
+                    self.elements.append(Paragraph(bullet, self.styles["ResumeBullet"]))
+            # --- Optional: Handle case where bullet_points might still be missing/None ---
+            else:
+                logger.warning(
+                    f"No bullet points found or attribute missing for experience ID {exp.id if hasattr(exp, 'id') else 'unknown'}"
+                )
 
             self.elements.append(Spacer(1, 2))
 
@@ -333,7 +352,7 @@ class ResumeComposition:
         vectorizer = CountVectorizer(stop_words="english")
 
         # Combine project title, description and technologies
-        project_text = f"{project.get('title', '')} {project.get('description', '')} {' '.join(project.get('technologies', []))}"
+        project_text = f"{project.title} {project.description} {' '.join(project.technologies)}"
 
         try:
             # Create document vectors
@@ -351,16 +370,16 @@ class ResumeComposition:
         scored_projects: List[Tuple[float, Dict[str, Any]]] = []
         for project in self.personal_agent.user_profile.projects.all():
             # Clean the project title by removing anything in parentheses
-            title: str = project.get("title", "")
+            title: str = project.title
             cleaned_title = title.split("(")[0].strip()
-            project["title"] = cleaned_title
+            project.title = cleaned_title
 
             score = self._score_project_relevance(project, job_description)
             scored_projects.append((score, project))
 
         # Sort by score (descending) and limit to max_projects
         sorted_projects: List[Tuple[float, Dict[str, Any]]] = sorted(
-            scored_projects, key=lambda x: (-x[0], x[1].get("title", ""))
+            scored_projects, key=lambda x: (-x[0], x[1].title)
         )
         relevant_projects: List[Dict[str, Any]] = [
             proj for _, proj in sorted_projects[:max_projects]
@@ -373,13 +392,13 @@ class ResumeComposition:
 
         for project in relevant_projects:
             # Project title and dates row
-            title_text = f"<b>{project['title']}</b>"
+            title_text = f"<b>{project.title}</b>"
             # TODO: Add technologies to project title
             # if project.get('technologies'):
             #     title_text += f" ({', '.join(project['technologies'])})"
 
-            start_date: str = self._format_date(project.get("start_date"))
-            end_date: str = self._format_date(project.get("end_date"))
+            start_date: str = self._format_date(project.start_date)
+            end_date: str = self._format_date(project.end_date)
             date_text: str = f"{start_date}-{end_date}"
 
             project_data: List[List[Paragraph]] = [
@@ -409,8 +428,8 @@ class ResumeComposition:
             self.elements.append(project_table)
 
             # Convert description to bullet points
-            if project.get("description"):
-                bullets = self._convert_description_to_bullets(project["description"])
+            if project.description:
+                bullets = self._convert_description_to_bullets(project.description)
                 for bullet in bullets:
                     self.elements.append(Paragraph(f"• {bullet}", self.styles["ResumeBullet"]))
 
@@ -423,11 +442,11 @@ class ResumeComposition:
         self.elements.append(Paragraph("CERTIFICATIONS", self.styles["ResumeSectionHeader"]))
 
         for cert in self.personal_agent.user_profile.certifications.all():
-            cert_text: str = f"{cert['name']}"
-            if cert.get("issuer"):
-                cert_text += f" - {cert['issuer']}"
-            if cert.get("date"):
-                cert_text += f" ({self._format_date(cert['date'])})"
+            cert_text: str = f"{cert.name}"
+            if cert.issuer:
+                cert_text += f" - {cert.issuer}"
+            if cert.issue_date:
+                cert_text += f" ({self._format_date(cert.issue_date)})"
             self.elements.append(Paragraph(cert_text, self.styles["ResumeCertification"]))
 
         self.elements.append(Spacer(1, 2))
@@ -440,13 +459,13 @@ class ResumeComposition:
         self.elements.append(Paragraph("EDUCATION", self.styles["ResumeSectionHeader"]))
 
         for edu in self.personal_agent.user_profile.education.all():
-            edu_text: str = f"{edu['institution']}"
-            if edu.get("degree"):
-                edu_text += f" - {edu['degree']}"
-            if edu.get("field_of_study"):
-                edu_text += f" in {edu['field_of_study']}"
-            if edu.get("graduation_date"):
-                edu_text += f" ({self._format_date(edu['graduation_date'])})"
+            edu_text: str = f"{edu.institution}"
+            if edu.degree:
+                edu_text += f" - {edu.degree}"
+            if edu.field_of_study:
+                edu_text += f" in {edu.field_of_study}"
+            if edu.end_date:
+                edu_text += f" ({self._format_date(edu.end_date)})"
             self.elements.append(Paragraph(edu_text, self.styles["ResumeEducation"]))
 
         self.elements.append(Spacer(1, 2))
@@ -462,9 +481,9 @@ class ResumeComposition:
         # Use lowercase name as key to ensure case-insensitive uniqueness
         skill_levels = {}
         for skill in self.personal_agent.user_profile.skills.all():
-            name = skill.get("name", "").strip()
+            name = skill.name.strip()
             name_lower = name.lower()
-            level = skill.get("level", 0)
+            level = skill.level
             # Keep the version with highest proficiency, or the original case if same proficiency
             if name_lower and (
                 name_lower not in skill_levels or level > skill_levels[name_lower][1]
@@ -480,7 +499,7 @@ class ResumeComposition:
         {job_info}
         
         Candidate's Work Experiences:
-        {', '.join([f"{exp.get('position', '')} at {exp.get('company', '')}: {exp.get('description', '')}" for exp in self.personal_agent.user_profile.work_experiences.all()])}
+        {', '.join([f"{exp.position} at {exp.company}: {exp.description}" for exp in self.personal_agent.user_profile.work_experiences.all()])}
 
         ⚠️ STRICT RESPONSE FORMAT REQUIREMENTS ⚠️
         Your response must be EXACTLY in this format, with no additional text:
@@ -544,55 +563,89 @@ class ResumeComposition:
 
     def tailor_to_job(self, job_info: str = "") -> None:
         """
-        Tailors the resume content based on the job description by:
-        1. Analyzing keywords in job description
-        2. Reordering work experiences based on relevance
-        3. Highlighting matching skills
-        4. Adjusting professional summary
+        Tailors the resume content based on the job description using structured LLM output.
 
         Args:
             job_info (str): The job information to tailor against
         """
-        # Prepare comprehensive prompt for tailoring the summary
+        logger.info(f"Tailoring resume for job info (User: {self.personal_agent.user_id})")
+        # Prepare comprehensive prompt for tailoring the summary, skills, and projects
         prompt: str = f"""
-        You are a professional resume writer. Create a tailored professional summary that highlights the candidate's relevant experience and skills for this job.
+        You are a professional resume writer. Create a tailored professional summary, identify relevant skills, and suggest relevant projects based on the candidate's background and the target job description.
 
         Job Description:
         {job_info}
-        
+
         Candidate Background Summary:
-        {self.personal_agent.get_background_str()}   
-                     
-        Applicant Skills:
-        {', '.join([skill.get('name', '') for skill in self.personal_agent.user_profile.skills.all()])}
+        {self.personal_agent.get_background_str()}
+
+        Applicant Skills (Full List):
+        {', '.join([skill.name for skill in self.personal_agent.user_profile.skills.all()])}
+
+        Applicant Projects (Full List):
+        {', '.join([proj.title for proj in self.personal_agent.user_profile.projects.all()])}
 
         Instructions:
-        1. Analyze the job description and identify key requirements and skills
-        2. Review the candidate's background, GitHub profile, and identify relevant experience
-        3. Create a compelling 2-3 sentence summary that:
-           - Maintains the candidate's authentic voice and style
-           - Highlights relevant experience and skills from their background
-           - Emphasizes alignment with the job requirements
-           - Uses specific examples from their work history and GitHub contributions
-           - Incorporates relevant technical skills naturally
-        4. Keep the tone professional but engaging
-        5. Focus on achievements and impact rather than just responsibilities
+        1. Analyze the job description and identify key requirements and skills.
+        2. Review the candidate's background and identify relevant experience, skills, and projects.
+        3. Create a compelling 2-3 sentence professional summary highlighting the most relevant aspects for this specific job.
+        4. Identify a list of the candidate's skills (from their full list) that are most relevant to this job description (max 15).
+        5. Identify a list of the candidate's projects (from their full list) that are most relevant to this job description (max 5).
+        6. Ensure the summary maintains the candidate's authentic voice and style.
+        7. Focus on achievements and impact.
 
-        ⚠️ STRICT RESPONSE FORMAT REQUIREMENTS ⚠️
-        Your response must be EXACTLY in this format, with no additional text:
-        {{"summary": "Your tailored summary here",
-        "skills": ["skill1", "skill2", ...],
-        "projects": ["project1", "project2", ...]}}
-
-
-        Remember: Your entire response should be a single JSON object, nothing more, nothing less.
+        Return the results as a JSON object containing 'summary', 'skills', and 'projects'.
         """
-        # Get tailored summary from Ollama
-        response: str = self.google_client.generate_text(prompt)
-        response_dict = json.loads(response)
-        self.professional_summary = response_dict["summary"].strip()
-        self.projects = response_dict["projects"].strip()
-        self.skills = response_dict["skills"].strip()
+
+        # Define the expected JSON output schema using JSON-serializable descriptions
+        output_schema = {
+            "summary": "string",
+            "skills": "list of strings",
+            "projects": "list of strings",
+        }
+
+        try:
+            logger.debug("Calling google_client.generate_structured_output...")
+            # Use generate_structured_output
+            response_dict: Dict[str, Any] = self.google_client.generate_structured_output(
+                prompt=prompt, output_schema=output_schema
+            )
+            logger.debug(f"Received structured output: {response_dict}")
+
+            # Safely extract data using .get() with defaults
+            self.professional_summary = response_dict.get("summary", "").strip()
+            self.skills = response_dict.get("skills", [])
+            self.projects = response_dict.get("projects", [])
+
+            # Validate that skills and projects are lists
+            if not isinstance(self.skills, list):
+                logger.warning(
+                    f"LLM returned non-list for skills: {self.skills}. Defaulting to empty list."
+                )
+                self.skills = []
+            if not isinstance(self.projects, list):
+                logger.warning(
+                    f"LLM returned non-list for projects: {self.projects}. Defaulting to empty list."
+                )
+                self.projects = []
+
+            logger.info(
+                f"Resume tailoring successful. Summary length: {len(self.professional_summary)}, Skills found: {len(self.skills)}, Projects found: {len(self.projects)}"
+            )
+
+        except Exception as e:
+            logger.exception(f"Error during resume tailoring using structured output: {e}")
+            # Fallback or default values
+            self.professional_summary = (
+                self.personal_agent.user_profile.professional_summary
+                or "Experienced professional seeking new opportunities."
+            )
+            self.skills = [
+                skill.name for skill in self.personal_agent.user_profile.skills.all()[:10]
+            ]  # Fallback to first 10 skills
+            self.projects = [
+                proj.title.strip() for proj in self.personal_agent.user_profile.projects.all()[:3]
+            ]  # Fallback to first 3 projects
 
     def build(self, output_path, job_info: str) -> None:
         """Build the resume PDF, optionally tailoring it to a job description."""
@@ -600,10 +653,12 @@ class ResumeComposition:
         # Clear any existing elements
         self.elements = []
 
+        # Tailor content (this now sets self.professional_summary, self.skills, self.projects)
         self.tailor_to_job(job_info)
 
         # Create header
         self._create_header()
+
         # Add professional summary
         if self.professional_summary:
             self.elements.append(
@@ -611,16 +666,81 @@ class ResumeComposition:
             )
             self.elements.append(Paragraph(self.professional_summary, self.styles["ResumeSummary"]))
 
-        # Add skills section
-        self._create_skills_section(job_info)
+        # Add skills section (using the tailored list)
+        if self.skills:
+            self.elements.append(Paragraph("SKILLS", self.styles["ResumeSectionHeader"]))
+            skills_text: LiteralString = " | ".join(self.skills)  # Join the list
+            self.elements.append(Paragraph(skills_text, self.styles["ResumeBullet"]))
+            self.elements.append(Spacer(1, 2))
+        else:
+            # Optionally call the original _create_skills_section as fallback if tailoring failed
+            self._create_skills_section(job_info)
+            logger.warning("No tailored skills available to add to the resume.")
+
         # Add experience section
         self._create_experience_section()
-        # Add relevant projects section
-        self._create_projects_section(job_info)
+
+        # Add relevant projects section (using the tailored list)
+        if self.projects:
+            self.elements.append(Paragraph("PROJECTS", self.styles["ResumeSectionHeader"]))
+            # Filter the user's full project list based on the tailored titles
+            relevant_project_objects = [
+                proj
+                for proj in self.personal_agent.user_profile.projects.all()
+                if proj.title.strip() in self.projects  # Use proj.title
+            ]
+            # Sort projects (optional, maybe by date or keep LLM order)
+            relevant_project_objects.sort(
+                key=lambda p: (
+                    self.projects.index(p.title.strip())
+                    if p.title.strip() in self.projects
+                    else 999
+                )
+            )
+
+            for project in relevant_project_objects:
+                # (Keep the existing project table generation logic from _create_projects_section)
+                title_text = f"<b>{project.title}</b>"  # Use project.title
+                start_date: str = self._format_date(project.start_date)  # Use project.start_date
+                end_date: str = self._format_date(project.end_date)  # Use project.end_date
+                date_text: str = f"{start_date}-{end_date}"
+
+                project_data: List[List[Paragraph]] = [
+                    [
+                        Paragraph(title_text, self.styles["ResumeProjectTitle"]),
+                        Paragraph(date_text, self.styles["ResumeDate"]),
+                    ]
+                ]
+                project_table = Table(project_data, colWidths=[460, 100])
+                project_table.setStyle(
+                    TableStyle(
+                        [
+                            ("ALIGN", (0, 0), (0, 0), "LEFT"),
+                            ("ALIGN", (-1, -1), (-1, -1), "RIGHT"),
+                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                            ("LEFTPADDING", (0, 0), (0, 0), 0),
+                            ("RIGHTPADDING", (-1, -1), (-1, -1), 0),
+                        ]
+                    )
+                )
+                self.elements.append(project_table)
+                if project.description:  # Check attribute directly
+                    bullets = self._convert_description_to_bullets(
+                        project.description
+                    )  # Use project.description
+                    for bullet in bullets:
+                        self.elements.append(Paragraph(f"• {bullet}", self.styles["ResumeBullet"]))
+                self.elements.append(Spacer(1, 2))
+        else:
+            # Optionally call the original _create_projects_section as fallback
+            self._create_projects_section(job_info)
+            logger.warning("No tailored projects available to add to the resume.")
+
         # Add certifications section
         self._create_certifications_section()
         # Add education section
         self._create_education_section()
+
         # Create PDF
         doc = SimpleDocTemplate(
             output_path,

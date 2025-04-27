@@ -2,10 +2,16 @@
 API ViewSets for the core app.
 """
 
+import json
 import logging
+from datetime import date
 from typing import Any, Dict, List
+from django.contrib.auth.decorators import login_required
 from django.db.models import Count, QuerySet
 from django.db.models.manager import BaseManager
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+from django.views.decorators.http import require_POST, require_GET
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -21,6 +27,9 @@ from core.models import (
     Skill,
     UserProfile,
     WorkExperience,
+    JobListing,
+    ChatConversation,
+    ChatMessage,
 )
 from core.serializers import (
     CertificationSerializer,
@@ -32,6 +41,10 @@ from core.serializers import (
     UserProfileSerializer,
     WorkExperienceSerializer,
 )
+from core.utils.rag.rag import RAGProcessor
+from core.utils.rag.agentic_rag import AgenticRAGProcessor
+from core.utils.db_utils import safe_get_or_none
+from core.utils.local_llms import GoogleClient
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -308,3 +321,77 @@ class SkillViewSet(viewsets.ModelViewSet):
             .order_by("-proficiency")
         )
         return Response(proficiency_levels)
+
+
+@login_required
+@require_POST
+def chat_api(request):
+    """
+    Process a chat message using the RAGProcessor.
+
+    Handles chat interactions, leverages RAG for context-aware responses,
+    and persists the conversation.
+    """
+    try:
+        data = json.loads(request.body)
+        user_message_content = data.get("message", "")
+        conversation_id = data.get("conversation_id")  # Get existing conversation ID
+
+        if not user_message_content:
+            return JsonResponse({"error": "No message provided"}, status=400)
+
+        user_id = request.user.id
+
+        # --- Conversation Handling (Same as before) ---
+        conversation = None
+
+        first_message_preview = (
+            user_message_content[:50] + "..."
+            if len(user_message_content) > 50
+            else user_message_content
+        )
+        # --- Ensure Conversation Exists ---
+        conversation, created = ChatConversation.objects.get_or_create(
+            id=conversation_id,
+            user_id=user_id,
+            defaults={
+                "title": f"Chat on {date.today().strftime('%Y-%m-%d')}: {first_message_preview}"
+            },  # Or generate title later
+        )
+        if created:
+            conversation_id = conversation.id  # Get the new ID
+
+        # Save the user's message BEFORE calling the agent
+        ChatMessage.objects.create(
+            conversation=conversation, role="user", content=user_message_content
+        )
+
+        # --- Agentic RAG Integration ---
+        # Initialize AgenticRAGProcessor for the current user and conversation
+        agent_processor = AgenticRAGProcessor(user_id=user_id, conversation_id=conversation_id)
+
+        # --- Get Response using Agent ---
+        assistant_response_content = agent_processor.run(user_message_content)
+        # --- End Agentic RAG Integration ---
+
+        # Save the assistant's response AFTER getting it from the agent
+        ChatMessage.objects.create(
+            conversation=conversation, role="assistant", content=assistant_response_content
+        )
+
+        # Return response and the conversation ID
+        return JsonResponse(
+            {
+                "response": assistant_response_content,
+                "conversation_id": conversation_id,  # Return the potentially new ID
+            }
+        )
+
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON received in chat API")
+        return JsonResponse({"error": "Invalid JSON format"}, status=400)
+    except Exception as e:
+        logger.exception(f"Error in chat API (Agentic) for user {request.user.id}: {str(e)}")
+        return JsonResponse(
+            {"error": "An internal error occurred. Please try again later."}, status=500
+        )
