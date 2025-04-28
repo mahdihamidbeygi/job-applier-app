@@ -313,5 +313,56 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
 # Google API Settings
-GOOGLE_MODEL: str | None = os.getenv("GOOGLE_MODEL")
-GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY")
+GOOGLE_MODEL: str | None = os.environ.get("GOOGLE_MODEL")
+GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,  # Keep existing loggers (like Django's)
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {asctime} {module}: {message}",
+            "style": "{",
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": "DEBUG",  # <-- Set console handler level to DEBUG
+            "class": "logging.StreamHandler",
+            "formatter": "simple",  # Or 'verbose' for more detail
+        },
+        # Optional: Add a file handler if you want logs saved to a file
+        # 'file': {
+        #     'level': 'DEBUG',
+        #     'class': 'logging.FileHandler',
+        #     'filename': BASE_DIR / 'debug.log', # Or your preferred path
+        #     'formatter': 'verbose',
+        # },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console"],
+            "level": "INFO",  # Keep Django's core logs at INFO unless needed
+            "propagate": True,
+        },
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",  # Reduce noise from request logs if desired
+            "propagate": False,
+        },
+        # --- Add this logger for your 'core' app ---
+        "core": {
+            "handlers": ["console"],  # Send 'core' app logs to the console
+            "level": "DEBUG",  # <-- Set 'core' app level to DEBUG
+            "propagate": True,  # Allow propagation if needed
+        },
+        # --- OR configure the root logger for all apps ---
+        # '': { # Root logger
+        #     'handlers': ['console'],
+        #     'level': 'DEBUG', # Log DEBUG for everything (can be noisy)
+        # },
+    },
+}

@@ -6,22 +6,25 @@ This module imports all models to maintain Django's models discovery.
 # Base models
 from .base import TimestampMixin
 
-# User profile models
-from .profile import (
-    UserProfile,
-    WorkExperience,
-    Project,
-    Education,
-    Certification,
-    Publication,
-    Skill,
-)
+# Chat models
+from .chat import ChatConversation, ChatMessage
 
 # Job-related models
 from .jobs import JobListing, JobPlatformPreference
 
-# Chat models
-from .chat import ChatConversation, ChatMessage
+# Misc models
+from .misc import LangGraphCheckpoint
+
+# User profile models
+from .profile import (
+    Certification,
+    Education,
+    Project,
+    Publication,
+    Skill,
+    UserProfile,
+    WorkExperience,
+)
 
 __all__ = [
     "TimestampMixin",
@@ -36,4 +39,5 @@ __all__ = [
     "Skill",
     "JobListing",
     "JobPlatformPreference",
+    "LangGraphCheckpoint",
 ]
