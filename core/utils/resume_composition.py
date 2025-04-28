@@ -11,7 +11,6 @@ from reportlab.lib.styles import ParagraphStyle, StyleSheet1, getSampleStyleShee
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-from django.core.files.storage import default_storage
 
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.local_llms import GoogleClient, OllamaClient
@@ -212,8 +211,8 @@ class ResumeComposition:
                     # Format as XXX XXX XXXX
                     formatted_phone = f"{phone[:3]} {phone[3:6]} {phone[6:10]}"
                 contact_info.append(formatted_phone)
-        if self.personal_agent.user_profile.location:
-            contact_info.append(self.personal_agent.user_profile.location)
+        if self.personal_agent.user_profile.address:
+            contact_info.append(self.personal_agent.user_profile.address)
         if self.personal_agent.user_profile.linkedin_url:
             contact_info.append(self.personal_agent.user_profile.linkedin_url)
         if self.personal_agent.user_profile.github_url:

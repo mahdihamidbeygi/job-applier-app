@@ -137,7 +137,6 @@ class AgenticRAGProcessor:
 
         # Compile the graph with the custom checkpointer
         self.app: CompiledStateGraph = self.graph.compile(checkpointer=self.memory_checkpointer)
-        Image(self.app.get_graph().draw_mermaid_png(), filename="agentic_rag_graph.png")
         # --- End LangGraph Setup ---
 
     def _initialize_embeddings(self):
@@ -962,18 +961,18 @@ class AgenticRAGProcessor:
                 # Append error message
                 tool_messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call_id))
 
-        # Check if any tool messages should be shown to the user
-        for tool_message in tool_messages:
-            # If the tool message contains a URL or is a success message, add it to chat history
-            if (
-                "http" in tool_message.content
-                or "OK." in tool_message.content
-                or "Success" in tool_message.content
-            ):
-                return {
-                    "chat_history": state["chat_history"]
-                    + [AIMessage(content=tool_message.content)]
-                }
+        # # Check if any tool messages should be shown to the user
+        # for tool_message in tool_messages:
+        #     # If the tool message contains a URL or is a success message, add it to chat history
+        #     if (
+        #         "http" in tool_message.content
+        #         or "OK." in tool_message.content
+        #         or "Success" in tool_message.content
+        #     ):
+        #         return {
+        #             "chat_history": state["chat_history"]
+        #             + [AIMessage(content=tool_message.content)]
+        #         }
 
         # Return the list of ToolMessage results.
         # operator.add in the state definition will concatenate this list
