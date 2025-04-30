@@ -25,13 +25,13 @@ class JobListing(TimestampMixin):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="job_listings", null=True
     )
-    title = models.CharField(max_length=100)
-    company = models.CharField(max_length=100)
+    title = models.CharField(max_length=100, null=True, blank=True)
+    company = models.CharField(max_length=100, null=True, blank=True)
     location = models.CharField(max_length=100, blank=True, null=True)
     description = models.TextField()
     requirements = models.TextField(blank=True, null=True)
     source = models.CharField(max_length=100, choices=JOB_SOURCES, null=True, blank=True)
-    source_url = models.URLField(blank=True, null=True)
+    source_url = models.URLField(max_length=500, blank=True, null=True)
     posted_date = models.DateField(blank=True, null=True)
     salary_range = models.CharField(max_length=100, blank=True, null=True)
     job_type = models.CharField(

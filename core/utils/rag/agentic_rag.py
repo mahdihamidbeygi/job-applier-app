@@ -17,6 +17,7 @@ from langchain_core.agents import AgentAction
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import tool
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
@@ -25,6 +26,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver  # Import base class i
 # LangGraph imports
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
+from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
 # Your existing imports
@@ -116,6 +118,7 @@ class AgenticRAGProcessor:
         self.persist_directory: str = os.path.join(settings.BASE_DIR, "job_vectors")
 
         # --- Initialization Steps (Mostly the same) ---
+        self.agent = None
         self.embeddings: GoogleGenerativeAIEmbeddings | OpenAIEmbeddings = (
             self._initialize_embeddings()
         )
@@ -123,9 +126,9 @@ class AgenticRAGProcessor:
         self.vectorstore: Chroma | None = self._initialize_vectorstore(exclude_conversations=True)
         self.retriever: VectorStoreRetriever | None = self._create_retriever()
         self.tools: list[StructuredTool] = self._initialize_tools()  # Tool functions defined below
-        self.tool_map: Dict[str, StructuredTool] = {
-            tool.name: tool for tool in self.tools
-        }  # For easy lookup in tool node
+        # self.tool_map: Dict[str, StructuredTool] = {
+        #     tool.name: tool for tool in self.tools
+        # }  # For easy lookup in tool node
 
         # --- LangGraph Setup ---
         self.graph: StateGraph = self._build_graph()
@@ -167,10 +170,10 @@ class AgenticRAGProcessor:
             # os.environ["LANGCHAIN_PROJECT"] = ""
 
             llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
+                model="gemini-1.5-pro-latest",
                 api_key=settings.GOOGLE_API_KEY,
                 temperature=0.1,
-                convert_system_message_to_human=True,
+                # convert_system_message_to_human=True,
             )
             logger.info("Using Google Gemini LLM for Agent")
             return llm
@@ -337,6 +340,7 @@ class AgenticRAGProcessor:
             logger.error(f"Error populating vector store for user {self.user_id}: {str(e)}")
 
     # --- Tool Definitions (Keep the actual functions as they are) ---
+    @tool(args_schema=SearchUserContextInput)
     def search_user_context(self, query: str) -> str:
         """
         Searches the user's profile, resume, work history, projects, skills,
@@ -426,6 +430,7 @@ class AgenticRAGProcessor:
             logger.error(f"Error in get_specific_project_experience tool: {str(e)}")
             return f"Error retrieving project experience: {str(e)}"
 
+    @tool(args_schema=SaveJobDescriptionInput)
     def save_job_description(self, job_description_text: str) -> str:
         """
         Parses and saves a job description provided as text to the database.
@@ -474,6 +479,7 @@ class AgenticRAGProcessor:
                 f"An unexpected error occurred while trying to save the job description: {str(e)}"
             )
 
+    @tool(args_schema=GenerateDocumentInput)
     def generate_tailored_resume(self, job_id: int) -> str:
         """
         Generates a tailored resume PDF for the user based on a specific job listing ID.
@@ -528,6 +534,7 @@ class AgenticRAGProcessor:
             logger.exception(f"Error in generate_tailored_resume tool for job {job_id}: {str(e)}")
             return f"An unexpected error occurred while trying to generate the resume: {str(e)}"
 
+    @tool(args_schema=GenerateDocumentInput)
     def generate_tailored_cover_letter(self, job_id: int) -> str:
         """
         Generates a tailored cover letter PDF for the user based on a specific job listing ID.
@@ -590,6 +597,7 @@ class AgenticRAGProcessor:
                 f"An unexpected error occurred while trying to generate the cover letter: {str(e)}"
             )
 
+    @tool(args_schema=GetJobDetailsInput)
     def get_job_details(self, job_id: int) -> str:
         """
         Retrieves the full details (title, company, description, requirements, etc.)
@@ -617,6 +625,7 @@ class AgenticRAGProcessor:
             logger.exception(f"Error in get_job_details tool for job {job_id}: {str(e)}")
             return f"An unexpected error occurred while retrieving job details: {str(e)}"
 
+    @tool(args_schema=AnalyzeTextWithBackgroundInput)
     def analyze_text_with_background(self, context_text: str, user_query: str) -> str:
         """Analyzes provided text in the context of the user's background."""
         try:
@@ -656,6 +665,7 @@ class AgenticRAGProcessor:
             )
             return f"An unexpected error occurred during analysis: {str(e)}"
 
+    @tool(args_schema=GetJobDetailsInput)
     def get_profile_summary(self) -> str:
         """
         Retrieves a formatted summary of the user's profile, including work experience,
@@ -680,66 +690,85 @@ class AgenticRAGProcessor:
             logger.exception(f"Error in get_profile_summary tool for user {self.user_id}: {str(e)}")
             return f"An unexpected error occurred while retrieving the profile summary: {str(e)}"
 
-    def _initialize_tools(self) -> list[StructuredTool]:
+    # def _initialize_tools(self) -> list[StructuredTool]:
+    #     """Gather all defined tools for the agent using StructuredTool."""
+    #     # Make sure the docstrings of the tool functions are descriptive!
+    #     tools: list[StructuredTool] = [
+    #         StructuredTool.from_function(
+    #             func=self.search_user_context,
+    #             name="search_user_context",
+    #             description=self.search_user_context.__doc__,
+    #             args_schema=SearchUserContextInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.get_specific_work_experience,
+    #             name="get_specific_work_experience",
+    #             description=self.get_specific_work_experience.__doc__,
+    #             args_schema=GetWorkExperienceInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.get_specific_project_experience,
+    #             name="get_specific_project_experience",
+    #             description=self.get_specific_project_experience.__doc__,
+    #             args_schema=GetProjectExperienceInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.save_job_description,
+    #             name="save_job_description",
+    #             description=self.save_job_description.__doc__,
+    #             args_schema=SaveJobDescriptionInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.generate_tailored_resume,
+    #             name="generate_tailored_resume",
+    #             description=self.generate_tailored_resume.__doc__,
+    #             args_schema=GenerateDocumentInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.generate_tailored_cover_letter,
+    #             name="generate_tailored_cover_letter",
+    #             description=self.generate_tailored_cover_letter.__doc__,
+    #             args_schema=GenerateDocumentInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.get_job_details,
+    #             name="get_job_details",
+    #             description=self.get_job_details.__doc__,
+    #             args_schema=GetJobDetailsInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.analyze_text_with_background,
+    #             name="analyze_text_with_background",
+    #             description=self.analyze_text_with_background.__doc__,
+    #             args_schema=AnalyzeTextWithBackgroundInput,
+    #         ),
+    #         StructuredTool.from_function(
+    #             func=self.get_profile_summary,
+    #             name="get_profile_summary",
+    #             description=self.get_profile_summary.__doc__,
+    #             # No args_schema needed
+    #         ),
+    #     ]
+    #     return tools
+
+    def _initialize_tools(self):  # -> list[Any]  :
         """Gather all defined tools for the agent using StructuredTool."""
         # Make sure the docstrings of the tool functions are descriptive!
-        tools: list[StructuredTool] = [
-            StructuredTool.from_function(
-                func=self.search_user_context,
-                name="search_user_context",
-                description=self.search_user_context.__doc__,
-                args_schema=SearchUserContextInput,
-            ),
-            StructuredTool.from_function(
-                func=self.get_specific_work_experience,
-                name="get_specific_work_experience",
-                description=self.get_specific_work_experience.__doc__,
-                args_schema=GetWorkExperienceInput,
-            ),
-            StructuredTool.from_function(
-                func=self.get_specific_project_experience,
-                name="get_specific_project_experience",
-                description=self.get_specific_project_experience.__doc__,
-                args_schema=GetProjectExperienceInput,
-            ),
-            StructuredTool.from_function(
-                func=self.save_job_description,
-                name="save_job_description",
-                description=self.save_job_description.__doc__,
-                args_schema=SaveJobDescriptionInput,
-            ),
-            StructuredTool.from_function(
-                func=self.generate_tailored_resume,
-                name="generate_tailored_resume",
-                description=self.generate_tailored_resume.__doc__,
-                args_schema=GenerateDocumentInput,
-            ),
-            StructuredTool.from_function(
-                func=self.generate_tailored_cover_letter,
-                name="generate_tailored_cover_letter",
-                description=self.generate_tailored_cover_letter.__doc__,
-                args_schema=GenerateDocumentInput,
-            ),
-            StructuredTool.from_function(
-                func=self.get_job_details,
-                name="get_job_details",
-                description=self.get_job_details.__doc__,
-                args_schema=GetJobDetailsInput,
-            ),
-            StructuredTool.from_function(
-                func=self.analyze_text_with_background,
-                name="analyze_text_with_background",
-                description=self.analyze_text_with_background.__doc__,
-                args_schema=AnalyzeTextWithBackgroundInput,
-            ),
-            StructuredTool.from_function(
-                func=self.get_profile_summary,
-                name="get_profile_summary",
-                description=self.get_profile_summary.__doc__,
-                # No args_schema needed
-            ),
+        tools = [
+            self.search_user_context,
+            self.get_specific_work_experience,
+            self.get_specific_project_experience,
+            self.save_job_description,
+            self.generate_tailored_resume,
+            self.generate_tailored_cover_letter,
+            self.get_job_details,
+            self.analyze_text_with_background,
+            self.get_profile_summary,
         ]
         return tools
+
+    def tool_node(self):
+        return ToolNode(self.tools)
 
     # --- LangGraph Node Definitions ---
 
@@ -750,8 +779,8 @@ class AgenticRAGProcessor:
         # We need to create the agent runnable *here* or have it pre-built
         # Let's pre-build it for efficiency
 
-        # If self.agent is not defined, build it
-        if not hasattr(self, "agent"):
+        # If self.agent is None, build it
+        if getattr(self, "agent") is None:
             custom_instructions: str = self._get_agent_instructions()
             prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
                 [
@@ -769,22 +798,6 @@ class AgenticRAGProcessor:
             llm_with_tools = self.llm.bind_tools(self.tools)
             self.agent = create_tool_calling_agent(llm_with_tools, self.tools, prompt)
             logger.info("Agent runnable created.")
-
-        # Check if we've already generated a resume in this conversation
-        for msg in state["chat_history"]:
-            if (
-                isinstance(msg, AIMessage)
-                and "I have generated your tailored resume" in msg.content
-            ):
-                logger.debug("Resume already generated in this conversation.")
-                return {
-                    "chat_history": state["chat_history"]
-                    + [
-                        AIMessage(
-                            content="I've already generated a resume for this job. You can find the link in the previous message."
-                        )
-                    ]
-                }
 
         # Prepare input for the agent runnable
         # Format intermediate steps as tuples of (agent_action, observation)
@@ -939,7 +952,7 @@ class AgenticRAGProcessor:
                 tool_messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call_id))
                 continue
 
-            tool_to_call: StructuredTool = self.tool_map[tool_name]
+            tool_to_call = self.tool_map[tool_name]
 
             # Execute the tool
             observation = None
@@ -960,19 +973,6 @@ class AgenticRAGProcessor:
                 logger.exception(error_msg)
                 # Append error message
                 tool_messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call_id))
-
-        # # Check if any tool messages should be shown to the user
-        # for tool_message in tool_messages:
-        #     # If the tool message contains a URL or is a success message, add it to chat history
-        #     if (
-        #         "http" in tool_message.content
-        #         or "OK." in tool_message.content
-        #         or "Success" in tool_message.content
-        #     ):
-        #         return {
-        #             "chat_history": state["chat_history"]
-        #             + [AIMessage(content=tool_message.content)]
-        #         }
 
         # Return the list of ToolMessage results.
         # operator.add in the state definition will concatenate this list
@@ -1085,6 +1085,8 @@ class AgenticRAGProcessor:
 
         **CONTEXT AND TOOL USAGE GUIDELINES:**
 
+        # --- Keep existing rules for JOB DESCRIPTIONS and BACKGROUND QUESTIONS ---
+
         **VERY IMPORTANT RULE FOR JOB DESCRIPTIONS:**
         - If the user's input is a large block of text (more than ~100 words) and appears to be a job description (containing sections like Responsibilities, Qualifications, About the Company, etc.), you **MUST** use the `save_job_description` tool to parse and save it. Do not treat it as a conversational question unless it's very short or clearly a question *about* a job description.
         - After successfully saving, confirm with the user by providing the new Job ID.
@@ -1094,16 +1096,34 @@ class AgenticRAGProcessor:
         - If `search_user_context` fails or returns insufficient information, you MAY then use the `get_profile_summary` tool as a fallback.
         - **DO NOT** answer questions about the user's background based on general knowledge, assumptions, or by inferring from job listings mentioned in the chat. Only use information retrieved via the specified tools (`search_user_context`, `get_profile_summary`).
 
-        **OTHER TOOL USAGE GUIDELINES:**
+        # --- Keep the existing rule for HANDLING TOOL ERRORS ---
 
-        1.  **CHECK CHAT HISTORY:** Before using any tool, review the recent `chat_history`. If the user recently provided specific text (like interview answers, job description snippets) and asks a question *about that text*, prioritize using `analyze_text_with_background` or incorporate the chat context directly in your reasoning if appropriate.
-        2.  **USE `search_user_context` for GENERAL BACKGROUND:** For general questions about the user's background, skills, experience, education, projects, or suitability for a role (when specific text isn't provided in chat), **ALWAYS** use the `search_user_context` tool first. If the tool returns no relevant info, state that clearly.
-        3.  **USE `get_profile_summary` as FALLBACK:** Only use `get_profile_summary` if `search_user_context` fails or is insufficient for a background query.
-        4.  **USE `analyze_text_with_background` for SPECIFIC TEXT + BACKGROUND:** When the user provides specific text (e.g., interview questions/answers) in the chat and asks how it relates to their background or how to improve it, use the `analyze_text_with_background` tool. Provide both the text and the user's query to the tool.
-        5.  **USE `get_job_details` for SAVED JOBS:** If the user asks about a specific job previously saved (mentioning its ID), use the `get_job_details` tool with the `job_id`.
-        6.  **CHECK IDs for GENERATION:** Before using `generate_tailored_resume` or `generate_tailored_cover_letter`, check `chat_history` or `input` for a specific Job ID. If unclear, ASK the user for the ID. DO NOT GUESS.
-        7.  **REPORT TOOL RESULTS:** Clearly state the outcome of tool actions. Report errors clearly.
-        8.  **GENERAL CONVERSATION:** If no specific tool or context is relevant, engage in helpful conversation based on history and general knowledge, but remember the **VERY IMPORTANT RULES** above.
+        **VERY IMPORTANT RULE FOR HANDLING TOOL ERRORS:**
+        - After you request a tool call, you will receive the result (observation) back in the `agent_scratchpad`.
+        - If the observation contains text indicating an error (e.g., "Error:", "Failed:", "Could not find:", "An unexpected error occurred", "value too long", "violates constraint"), you **MUST NOT** pretend the tool succeeded.
+        - Instead, you **MUST** inform the user clearly about the error that occurred. For example: "Sorry, I encountered an error when trying to [action the tool was supposed to do]: [briefly mention the error message from the observation]."
+        - Do not make up results if a tool fails. Report the failure.
+
+        # --- ADD THIS NEW RULE ---
+
+        **VERY IMPORTANT RULE FOR USING TOOL RESULTS:**
+        - The `agent_scratchpad` contains the history of tool calls you made and the results (observations) you received back.
+        - When formulating your final response to the user after a tool has run, you **MUST** base your response on the *actual observation* provided in the scratchpad.
+        - For example, if the `save_job_description` tool observation is "OK. Job saved as ID: 117.", your response to the user **MUST** reflect that exact information, including the correct ID (117).
+        - **DO NOT** make up tool results or ignore the observation provided in the scratchpad. Use the information given to you.
+
+        # --- Keep the OTHER TOOL USAGE GUIDELINES ---
+
+        **OTHER TOOL USAGE GUIDELINES:**
+        # ... (rest of the guidelines remain the same) ...
+        1.  **CHECK CHAT HISTORY:** ...
+        2.  **USE `search_user_context` for GENERAL BACKGROUND:** ...
+        3.  **USE `get_profile_summary` as FALLBACK:** ...
+        4.  **USE `analyze_text_with_background` for SPECIFIC TEXT + BACKGROUND:** ...
+        5.  **USE `get_job_details` for SAVED JOBS:** ...
+        6.  **CHECK IDs for GENERATION:** ...
+        7.  **REPORT TOOL RESULTS:** Clearly state the outcome of tool actions. Report errors clearly (as per the error handling rule). Use the actual results provided (as per the using tool results rule).
+        8.  **GENERAL CONVERSATION:** ...
         """
 
     def _build_graph(self) -> StateGraph:
@@ -1112,7 +1132,8 @@ class AgenticRAGProcessor:
 
         # Add nodes
         graph.add_node("agent", self._agent_node)
-        graph.add_node("action", self._execute_tool_node)
+        # graph.add_node("action", self._execute_tool_node)
+        graph.add_node("action", self.tool_node)
 
         # Define edges
         graph.add_edge(START, "agent")  # Start by calling the agent
@@ -1129,6 +1150,8 @@ class AgenticRAGProcessor:
 
         # Edge from action node back to agent node
         graph.add_edge("action", "agent")
+        # Edge from tools node back to agent node
+        # graph.add_edge("tools", "agent")
 
         return graph
 
@@ -1183,19 +1206,17 @@ class AgenticRAGProcessor:
             }
 
             # Use proper RunnableConfig type
-            config = {
-                "configurable": {
-                    "thread_id": str(self.conversation_id or f"user_{self.user_id}_new")
-                }
+            config: Dict[str, Dict[str, str]] = {
+                "configurable": {"thread_id": str(self.conversation_id)}
             }
             final_state = self.app.invoke(initial_state, config=cast(Any, config))
 
             if final_state and final_state.get("chat_history"):
-                final_messages = [
+                final_messages: list[AIMessage] = [
                     msg for msg in final_state["chat_history"] if isinstance(msg, AIMessage)
                 ]
                 if final_messages:
-                    final_message = final_messages[-1]
+                    final_message: AIMessage = final_messages[-1]
                     if not final_message.tool_calls:
                         return str(final_message.content)
                     else:

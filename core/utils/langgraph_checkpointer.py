@@ -1,5 +1,6 @@
 # core/utils/langgraph_checkpointer.py
 
+import json
 import logging
 from typing import Any, AsyncIterator, Dict, List, Optional, Sequence, Union
 
@@ -111,6 +112,7 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                 config=checkpoint_config,
                 checkpoint=checkpoint_data,
                 parent_config=parent_config,
+                metadata={},
             )
         except ObjectDoesNotExist:  # Should be caught by .first() returning None, but good practice
             logger.debug(f"No checkpoint found for thread_id: {thread_id}")
@@ -151,6 +153,7 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
                             config=checkpoint_config,
                             checkpoint=checkpoint_data,
                             parent_config=parent_config,
+                            metadata={},
                         )
                     )
                 except Exception as e:  # Catch deserialization errors per checkpoint
@@ -200,42 +203,34 @@ class DjangoCheckpointSaver(BaseCheckpointSaver):
             logger.exception(f"Error saving checkpoint for thread_id {thread_id}: {e}")
             raise  # Re-raise errors after logging
 
-    @transaction.atomic  # Ensure atomic save operation for the whole batch
+    @transaction.atomic
     def put_writes(
         self, config: RunnableConfig, checkpoints: List[Dict[str, Any]], *args, **kwargs
     ) -> None:
-        """
-        Save a batch of checkpoints.
-        Note: The base implementation raises NotImplementedError.
-        """
         thread_id = config["configurable"]["thread_id"]
         logger.debug(
             f"Executing put_writes for thread {thread_id} with {len(checkpoints)} checkpoints."
         )
         try:
-            # Get the timestamp of the latest existing checkpoint *before* this batch starts
             current_latest = LangGraphCheckpoint.objects.filter(thread_id=thread_id).first()
             last_ts = current_latest.updated_at.isoformat() if current_latest else None
 
-            for checkpoint_data in checkpoints:
+            for i, checkpoint_data in enumerate(checkpoints):  # Add index for logging
                 serialized_checkpoint = self.serializer.dumps(checkpoint_data)
-                # Use the timestamp of the *previous* checkpoint in the batch
-                # (or the initial latest) as the parent_ts for the current one.
                 parent_ts = last_ts
                 new_checkpoint_model = LangGraphCheckpoint.objects.create(
                     thread_id=thread_id, checkpoint=serialized_checkpoint, parent_ts=parent_ts
                 )
-                # Update last_ts to the timestamp of the checkpoint just saved,
-                # so it becomes the parent for the *next* one in the batch.
                 last_ts = new_checkpoint_model.updated_at.isoformat()
-                logger.debug(f"Saved checkpoint (batch) for thread {thread_id} with ts: {last_ts}")
+                logger.debug(
+                    f"Saved checkpoint (batch item {i}) for thread {thread_id} with ts: {last_ts}"
+                )
 
-            # put_writes typically doesn't return anything, unlike put
             return
 
         except Exception as e:
             logger.exception(f"Error during put_writes for thread_id {thread_id}: {e}")
-            raise  # Re-raise errors
+            raise
 
     # --- Helper Sync Methods for Async Wrappers ---
     # These simply contain the logic of the original sync methods
