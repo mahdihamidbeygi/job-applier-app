@@ -7,6 +7,8 @@ class LangGraphCheckpoint(TimestampMixin):
     thread_id = models.CharField(max_length=255, db_index=True)
     checkpoint = models.BinaryField()  # Store the serialized checkpoint
     parent_ts = models.CharField(max_length=255, null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
     # Add other fields if needed based on LangGraph checkpoint structure
 
     class Meta:

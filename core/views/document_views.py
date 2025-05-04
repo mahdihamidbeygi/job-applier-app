@@ -4,7 +4,7 @@ Document generation views for the core app.
 
 import json
 import logging
-from typing import Dict, Any
+from typing import Any, Dict
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -16,9 +16,9 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
-from core.utils.agents.application_agent import ApplicationAgent
-from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.agents.job_agent import JobAgent
+from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.agents.writer_agent import ApplicationAgent
 from core.utils.form_processors import process_form_fields
 
 logger = logging.getLogger(__name__)

@@ -315,6 +315,8 @@ CELERY_TIMEZONE = TIME_ZONE
 # Google API Settings
 GOOGLE_MODEL: str | None = os.environ.get("GOOGLE_MODEL")
 GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,  # Keep existing loggers (like Django's)

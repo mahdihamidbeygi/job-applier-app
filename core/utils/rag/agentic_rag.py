@@ -2,22 +2,21 @@ import json
 import logging
 import operator
 import os
-from typing import Annotated, Any, Dict, Optional, TypedDict, cast
+import uuid
+from typing import Annotated, Any, Dict, List, Optional, TypedDict, cast
 
 from django.conf import settings
 from django.db.models.manager import BaseManager
 from django.shortcuts import get_object_or_404
-from IPython.display import Image
 
 # LangChain core imports (some might be slightly different for graph nodes)
 from langchain.agents import create_tool_calling_agent  # Still used for the agent node logic
 from langchain.tools import StructuredTool
 from langchain_community.vectorstores import Chroma
-from langchain_core.agents import AgentAction
+from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.tools import tool
 from langchain_core.vectorstores.base import VectorStoreRetriever
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
@@ -26,7 +25,6 @@ from langgraph.checkpoint.base import BaseCheckpointSaver  # Import base class i
 # LangGraph imports
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 from pydantic import BaseModel, Field
 
 # Your existing imports
@@ -40,9 +38,9 @@ from core.models import (
     WorkExperience,
 )
 from core.models.chat import ChatMessage
-from core.utils.agents.application_agent import ApplicationAgent
 from core.utils.agents.job_agent import JobAgent
 from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.agents.writer_agent import ApplicationAgent
 from core.utils.db_utils import safe_get_or_none
 from core.utils.langgraph_checkpointer import DjangoCheckpointSaver
 
@@ -89,18 +87,12 @@ class AnalyzeTextWithBackgroundInput(BaseModel):
 
 # --- LangGraph State Definition ---
 class AgentState(TypedDict):
-    # Input query
     input: str
-    # Conversation history (list of BaseMessage objects)
     chat_history: list[BaseMessage]
-    # List of tool calls and their outputs (AgentAction, ToolMessage tuples)
-    # Use Annotated and operator.add for accumulation
     intermediate_steps: Annotated[list, operator.add]
-    # User and conversation context
     user_id: int
     conversation_id: Optional[int]
     job_id: Optional[int]
-    # Potentially add other state variables if needed, e.g., current_job_id
 
 
 # --- AgenticRAGProcessor Class (LangGraph) ---
@@ -118,7 +110,6 @@ class AgenticRAGProcessor:
         self.persist_directory: str = os.path.join(settings.BASE_DIR, "job_vectors")
 
         # --- Initialization Steps (Mostly the same) ---
-        self.agent = None
         self.embeddings: GoogleGenerativeAIEmbeddings | OpenAIEmbeddings = (
             self._initialize_embeddings()
         )
@@ -126,16 +117,14 @@ class AgenticRAGProcessor:
         self.vectorstore: Chroma | None = self._initialize_vectorstore(exclude_conversations=True)
         self.retriever: VectorStoreRetriever | None = self._create_retriever()
         self.tools: list[StructuredTool] = self._initialize_tools()  # Tool functions defined below
-        # self.tool_map: Dict[str, StructuredTool] = {
-        #     tool.name: tool for tool in self.tools
-        # }  # For easy lookup in tool node
+        self.tool_map: Dict[str, StructuredTool] = {tool.name: tool for tool in self.tools}
+        self.agent = self._create_agent_runnable()
 
         # --- LangGraph Setup ---
         self.graph: StateGraph = self._build_graph()
         # --- Checkpointing Setup (Django ORM) ---
         # Instantiate your custom saver
         self.memory_checkpointer: BaseCheckpointSaver = DjangoCheckpointSaver()
-        logger.info("Using Django ORM checkpointer (DjangoCheckpointSaver).")
         # --- End Checkpointing Setup ---
 
         # Compile the graph with the custom checkpointer
@@ -144,38 +133,27 @@ class AgenticRAGProcessor:
 
     def _initialize_embeddings(self):
         """Initialize the embedding model."""
-        try:
-            if settings.GOOGLE_API_KEY:
-                embeddings = GoogleGenerativeAIEmbeddings(
-                    model="models/text-embedding-004",
-                    google_api_key=settings.GOOGLE_API_KEY,
-                )
-                logger.info("Using Google AI embeddings")
-            else:
-                embeddings = OpenAIEmbeddings()
-                logger.info("Using OpenAI embeddings")
-            return embeddings
-        except Exception as e:
-            logger.error(f"Error initializing embeddings: {str(e)}")
-            logger.info("Falling back to OpenAI embeddings")
-            return OpenAIEmbeddings()
+        if settings.GOOGLE_API_KEY:
+            embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/text-embedding-004",
+                google_api_key=settings.GOOGLE_API_KEY,
+            )
+        else:
+            embeddings = OpenAIEmbeddings()
+        return embeddings
 
     def _initialize_llm(self) -> ChatGoogleGenerativeAI:
         """Initialize the LLM for generation and agent control."""
         try:
-            # # Disable LangSmith tracing to avoid connection issues
-            # os.environ["LANGCHAIN_TRACING_V2"] = "false"
-            # os.environ["LANGCHAIN_ENDPOINT"] = ""
-            # os.environ["LANGCHAIN_API_KEY"] = ""
-            # os.environ["LANGCHAIN_PROJECT"] = ""
 
             llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-pro-latest",
+                # model="gemini-2.5-flash-preview-04-17",
+                model="gemini-1.5-pro",
+                # model="gemini-2.5-flash-preview-04-17",
                 api_key=settings.GOOGLE_API_KEY,
                 temperature=0.1,
                 # convert_system_message_to_human=True,
             )
-            logger.info("Using Google Gemini LLM for Agent")
             return llm
         except Exception as e:
             logger.error(f"Error initializing LLM: {str(e)}")
@@ -197,9 +175,6 @@ class AgenticRAGProcessor:
             if not vectorstore._collection.count() > 0:
                 self._populate_vectorstore(vectorstore, exclude_conversations)
 
-            logger.info(
-                f"Vector store initialized with {vectorstore._collection.count()} documents"
-            )
             return vectorstore
 
         except Exception as e:
@@ -229,9 +204,6 @@ class AgenticRAGProcessor:
                         + f"Title: {profile.title}\n"
                         + f"Summary: {profile.professional_summary}\n"
                         + f"Years of Experience: {profile.years_of_experience}"
-                    )
-                    logger.warning(
-                        "UserProfile.get_all_user_info_formatted() not found, using basic profile info."
                     )
 
                 profile_doc: Document = Document(
@@ -325,14 +297,8 @@ class AgenticRAGProcessor:
 
             # Add documents to the vectorstore
             if documents:
-                logger.info(
-                    f"Attempting to add {len(documents)} documents to vector store for user {self.user_id}. First doc type: {documents[0].metadata.get('type')}"
-                )
                 vectorstore.add_documents(documents)
                 vectorstore.persist()
-                logger.info(
-                    f"Successfully added {len(documents)} documents. Vector store count now: {vectorstore._collection.count()}"
-                )  # Check count after adding
             else:
                 logger.warning(f"No documents found to add to vector store for user {self.user_id}")
 
@@ -340,16 +306,13 @@ class AgenticRAGProcessor:
             logger.error(f"Error populating vector store for user {self.user_id}: {str(e)}")
 
     # --- Tool Definitions (Keep the actual functions as they are) ---
-    @tool(args_schema=SearchUserContextInput)
+
     def search_user_context(self, query: str) -> str:
         """
         Searches the user's profile, resume, work history, projects, skills,
         and past job applications to find relevant information to answer the user's question.
         Use this tool **ONLY** when the user asks a question directly about their own background, skills, experience, or profile details (e.g., 'What are my skills?', 'Tell me about my experience'). Input is the specific question or topic to search for.
         """
-        logger.info(
-            f"Agent Tool: search_user_context called with query: '{query}' for user {self.user_id}"
-        )
         if not self.retriever:
             return "Error: Retriever not available."
         try:
@@ -373,9 +336,6 @@ class AgenticRAGProcessor:
         Use this if the user asks about a particular job they held or if context search mentions a specific experience ID.
         Input must be the integer ID of the work experience.
         """
-        logger.info(
-            f"Agent Tool: get_specific_work_experience called with ID: {experience_id} for user {self.user_id}"
-        )
         try:
             # No need to get profile first if using safe_get_or_none with user_id filter
             experience: WorkExperience | None = safe_get_or_none(
@@ -406,9 +366,6 @@ class AgenticRAGProcessor:
         Use this if the user asks about a particular project they completed or if context search mentions a specific project ID.
         Input must be the integer ID of the project experience.
         """
-        logger.info(
-            f"Agent Tool: get_specific_project_experience called with ID: {experience_id} for user {self.user_id}"
-        )
         try:
             # No need to get profile first if using safe_get_or_none with user_id filter
             project: Project | None = safe_get_or_none(
@@ -430,7 +387,6 @@ class AgenticRAGProcessor:
             logger.error(f"Error in get_specific_project_experience tool: {str(e)}")
             return f"Error retrieving project experience: {str(e)}"
 
-    @tool(args_schema=SaveJobDescriptionInput)
     def save_job_description(self, job_description_text: str) -> str:
         """
         Parses and saves a job description provided as text to the database.
@@ -439,7 +395,6 @@ class AgenticRAGProcessor:
         Input MUST be the full text of the job description.
         Returns a confirmation message with the new Job ID if successful, or an error message.
         """
-        logger.info(f"Agent Tool: save_job_description called for user {self.user_id}")
         if not job_description_text or len(job_description_text) < 50:  # Basic validation
             return "Please provide the full job description text for me to save."
         try:
@@ -451,18 +406,12 @@ class AgenticRAGProcessor:
                 new_job_id: int = job_agent.job_record.id
                 job_title: str = job_agent.job_record.title
                 company: str = job_agent.job_record.company
-                logger.info(
-                    f"Successfully saved job description as Job ID: {new_job_id} for user {self.user_id}"
-                )
                 return (
                     f"OK. I've saved the job description for '{job_title}' at '{company}' as Job ID: {new_job_id}. "
                     f"Would you like me to generate a resume or cover letter for this job now?"
                 )
             else:
                 # This case might happen if JobAgent's LLM call fails validation but doesn't raise an error
-                logger.error(
-                    f"JobAgent did not successfully create a job record from text for user {self.user_id}. LLM output might be invalid."
-                )
                 return "Sorry, I encountered an issue while trying to parse and save the job description. The format might be unexpected."
 
         except (
@@ -479,7 +428,6 @@ class AgenticRAGProcessor:
                 f"An unexpected error occurred while trying to save the job description: {str(e)}"
             )
 
-    @tool(args_schema=GenerateDocumentInput)
     def generate_tailored_resume(self, job_id: int) -> str:
         """
         Generates a tailored resume PDF for the user based on a specific job listing ID.
@@ -487,9 +435,6 @@ class AgenticRAGProcessor:
         Input MUST be the integer ID of the job listing saved in the system.
         Returns the URL of the generated resume PDF or an error message.
         """
-        logger.info(
-            f"Agent Tool: generate_tailored_resume called for job ID: {job_id} for user {self.user_id}"
-        )
         try:
             # Verify the job exists and belongs to the user
             job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
@@ -509,16 +454,12 @@ class AgenticRAGProcessor:
             resume_url = application_agent.generate_resume()
 
             if resume_url:
-                logger.info(f"Successfully generated resume for job {job_id}. URL: {resume_url}")
                 return f"OK. I have generated your tailored resume for the '{job_listing.title}' position at '{job_listing.company}'. You can access it here: {resume_url}"
             else:
                 logger.error(f"ApplicationAgent failed to generate resume URL for job {job_id}")
                 return "Sorry, I encountered an issue while generating the resume file."
 
         except JobListing.DoesNotExist:
-            logger.warning(
-                f"generate_tailored_resume tool: JobListing ID {job_id} not found for user {self.user_id}"
-            )
             return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
         except json.JSONDecodeError as json_err:
             logger.error(
@@ -526,15 +467,11 @@ class AgenticRAGProcessor:
             )
             return f"Sorry, I encountered an issue processing the data to generate the resume for job {job_id}. The internal language model might have returned an unexpected format. Please try again."
         except ValueError as ve:  # Catch error from JobAgent init if job not found by ID
-            logger.warning(
-                f"generate_tailored_resume tool: Value error during processing for job ID {job_id}: {ve}"
-            )
             return f"I couldn't find or process the job with ID {job_id}. Please double-check the ID. Error: {ve}"
         except Exception as e:
             logger.exception(f"Error in generate_tailored_resume tool for job {job_id}: {str(e)}")
             return f"An unexpected error occurred while trying to generate the resume: {str(e)}"
 
-    @tool(args_schema=GenerateDocumentInput)
     def generate_tailored_cover_letter(self, job_id: int) -> str:
         """
         Generates a tailored cover letter PDF for the user based on a specific job listing ID.
@@ -542,9 +479,6 @@ class AgenticRAGProcessor:
         Input MUST be the integer ID of the job listing saved in the system.
         Returns the URL of the generated cover letter PDF or an error message.
         """
-        logger.info(
-            f"Agent Tool: generate_tailored_cover_letter called for job ID: {job_id} for user {self.user_id}"
-        )
         try:
             # Verify the job exists and belongs to the user
             job_listing: JobListing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
@@ -564,9 +498,6 @@ class AgenticRAGProcessor:
             cover_letter_url = application_agent.generate_cover_letter()
 
             if cover_letter_url:
-                logger.info(
-                    f"Successfully generated cover letter for job {job_id}. URL: {cover_letter_url}"
-                )
                 return f"OK. I have generated your tailored cover letter for the '{job_listing.title}' position at '{job_listing.company}'. You can access it here: {cover_letter_url}"
             else:
                 logger.error(
@@ -575,9 +506,6 @@ class AgenticRAGProcessor:
                 return "Sorry, I encountered an issue while generating the cover letter file."
 
         except JobListing.DoesNotExist:
-            logger.warning(
-                f"generate_tailored_cover_letter tool: JobListing ID {job_id} not found for user {self.user_id}"
-            )
             return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
         except json.JSONDecodeError as json_err:
             logger.error(
@@ -585,9 +513,6 @@ class AgenticRAGProcessor:
             )
             return f"Sorry, I encountered an issue processing the data to generate the cover letter for job {job_id}. The internal language model might have returned an unexpected format. Please try again."
         except ValueError as ve:  # Catch error from JobAgent init if job not found by ID
-            logger.warning(
-                f"generate_tailored_cover_letter tool: Error initializing JobAgent for job ID {job_id}: {ve}"
-            )
             return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
         except Exception as e:
             logger.exception(
@@ -597,7 +522,6 @@ class AgenticRAGProcessor:
                 f"An unexpected error occurred while trying to generate the cover letter: {str(e)}"
             )
 
-    @tool(args_schema=GetJobDetailsInput)
     def get_job_details(self, job_id: int) -> str:
         """
         Retrieves the full details (title, company, description, requirements, etc.)
@@ -606,9 +530,6 @@ class AgenticRAGProcessor:
         especially if the job details were saved previously using 'save_job_description'.
         Input must be the integer ID of the job listing.
         """
-        logger.info(
-            f"Agent Tool: get_job_details called for job ID: {job_id} for user {self.user_id}"
-        )
         try:
             # Use get_object_or_404 for safety, ensuring job belongs to user
             job_listing: JobListing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
@@ -617,25 +538,21 @@ class AgenticRAGProcessor:
             logger.info(f"Retrieved details for job ID: {job_id}")
             return details
         except JobListing.DoesNotExist:
-            logger.warning(
-                f"get_job_details tool: JobListing ID {job_id} not found for user {self.user_id}"
-            )
             return f"Error: Job listing with ID {job_id} not found for this user."
         except Exception as e:
             logger.exception(f"Error in get_job_details tool for job {job_id}: {str(e)}")
             return f"An unexpected error occurred while retrieving job details: {str(e)}"
 
-    @tool(args_schema=AnalyzeTextWithBackgroundInput)
     def analyze_text_with_background(self, context_text: str, user_query: str) -> str:
         """Analyzes provided text in the context of the user's background."""
         try:
             personal_agent = PersonalAgent(user_id=self.user_id)
-            background_summary = personal_agent.get_formatted_background()
+            background_summary: Dict[str, Any] = personal_agent.get_formatted_background()
 
-            prompt = f"""
+            prompt: str = f"""
             You are an expert assistant helping a user answer a question based on provided text and their background.
 
-            User's Background Summary:
+            User's Background:
             ---
             {json.dumps(background_summary, indent=2)}
             ---
@@ -650,13 +567,13 @@ class AgenticRAGProcessor:
             {user_query}
             ---
 
-            Based *only* on the User's Background Summary and the Provided Context Text, answer the User's Question accurately and concisely.
+            Based *only* on the User's Background and the Provided Context Text, answer the User's Question accurately and concisely.
             Focus on highlighting relevant skills and experiences from the background that relate to the context text and the question.
-            If the background doesn't contain relevant information, state that clearly.
+            
             """
 
             # Use invoke instead of generate_text
-            response = self.llm.invoke(prompt)
+            response: BaseMessage = self.llm.invoke(prompt)
             return str(response.content)
 
         except Exception as e:
@@ -665,153 +582,114 @@ class AgenticRAGProcessor:
             )
             return f"An unexpected error occurred during analysis: {str(e)}"
 
-    @tool(args_schema=GetJobDetailsInput)
     def get_profile_summary(self) -> str:
         """
         Retrieves a formatted summary of the user's profile, including work experience,
         education, skills, and projects directly from their saved profile data.
         Use this as a quick way to get the user's overall background if vector search fails or is too slow, or as a fallback if `search_user_context` fails.
         """
-        logger.info(f"Agent Tool: get_profile_summary called for user {self.user_id}")
         try:
             personal_agent = PersonalAgent(user_id=self.user_id)
             # Use the method that returns a dictionary or well-formatted string
-            summary_data = personal_agent.get_formatted_background()  # Returns dict
+            summary_data: Dict[str, Any] = personal_agent.get_formatted_background()  # Returns dict
             # Convert dict to string for the agent
-            summary_str = json.dumps(summary_data, indent=2)
+            summary_str: str = json.dumps(summary_data, indent=2)
             logger.info("Successfully retrieved profile summary.")
             return summary_str
         except UserProfile.DoesNotExist:
-            logger.warning(
-                f"get_profile_summary tool: UserProfile not found for user {self.user_id}"
-            )
             return "Error: User profile could not be loaded."
         except Exception as e:
             logger.exception(f"Error in get_profile_summary tool for user {self.user_id}: {str(e)}")
             return f"An unexpected error occurred while retrieving the profile summary: {str(e)}"
 
-    # def _initialize_tools(self) -> list[StructuredTool]:
-    #     """Gather all defined tools for the agent using StructuredTool."""
-    #     # Make sure the docstrings of the tool functions are descriptive!
-    #     tools: list[StructuredTool] = [
-    #         StructuredTool.from_function(
-    #             func=self.search_user_context,
-    #             name="search_user_context",
-    #             description=self.search_user_context.__doc__,
-    #             args_schema=SearchUserContextInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.get_specific_work_experience,
-    #             name="get_specific_work_experience",
-    #             description=self.get_specific_work_experience.__doc__,
-    #             args_schema=GetWorkExperienceInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.get_specific_project_experience,
-    #             name="get_specific_project_experience",
-    #             description=self.get_specific_project_experience.__doc__,
-    #             args_schema=GetProjectExperienceInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.save_job_description,
-    #             name="save_job_description",
-    #             description=self.save_job_description.__doc__,
-    #             args_schema=SaveJobDescriptionInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.generate_tailored_resume,
-    #             name="generate_tailored_resume",
-    #             description=self.generate_tailored_resume.__doc__,
-    #             args_schema=GenerateDocumentInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.generate_tailored_cover_letter,
-    #             name="generate_tailored_cover_letter",
-    #             description=self.generate_tailored_cover_letter.__doc__,
-    #             args_schema=GenerateDocumentInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.get_job_details,
-    #             name="get_job_details",
-    #             description=self.get_job_details.__doc__,
-    #             args_schema=GetJobDetailsInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.analyze_text_with_background,
-    #             name="analyze_text_with_background",
-    #             description=self.analyze_text_with_background.__doc__,
-    #             args_schema=AnalyzeTextWithBackgroundInput,
-    #         ),
-    #         StructuredTool.from_function(
-    #             func=self.get_profile_summary,
-    #             name="get_profile_summary",
-    #             description=self.get_profile_summary.__doc__,
-    #             # No args_schema needed
-    #         ),
-    #     ]
-    #     return tools
-
-    def _initialize_tools(self):  # -> list[Any]  :
+    def _initialize_tools(self) -> list[StructuredTool]:
         """Gather all defined tools for the agent using StructuredTool."""
         # Make sure the docstrings of the tool functions are descriptive!
-        tools = [
-            self.search_user_context,
-            self.get_specific_work_experience,
-            self.get_specific_project_experience,
-            self.save_job_description,
-            self.generate_tailored_resume,
-            self.generate_tailored_cover_letter,
-            self.get_job_details,
-            self.analyze_text_with_background,
-            self.get_profile_summary,
+        tools: list[StructuredTool] = [
+            StructuredTool.from_function(
+                func=self.search_user_context,
+                name="search_user_context",
+                description=self.search_user_context.__doc__,
+                args_schema=SearchUserContextInput,
+            ),
+            StructuredTool.from_function(
+                func=self.get_specific_work_experience,
+                name="get_specific_work_experience",
+                description=self.get_specific_work_experience.__doc__,
+                args_schema=GetWorkExperienceInput,
+            ),
+            StructuredTool.from_function(
+                func=self.get_specific_project_experience,
+                name="get_specific_project_experience",
+                description=self.get_specific_project_experience.__doc__,
+                args_schema=GetProjectExperienceInput,
+            ),
+            StructuredTool.from_function(
+                func=self.save_job_description,
+                name="save_job_description",
+                description=self.save_job_description.__doc__,
+                args_schema=SaveJobDescriptionInput,
+            ),
+            StructuredTool.from_function(
+                func=self.generate_tailored_resume,
+                name="generate_tailored_resume",
+                description=self.generate_tailored_resume.__doc__,
+                args_schema=GenerateDocumentInput,
+            ),
+            StructuredTool.from_function(
+                func=self.generate_tailored_cover_letter,
+                name="generate_tailored_cover_letter",
+                description=self.generate_tailored_cover_letter.__doc__,
+                args_schema=GenerateDocumentInput,
+            ),
+            StructuredTool.from_function(
+                func=self.get_job_details,
+                name="get_job_details",
+                description=self.get_job_details.__doc__,
+                args_schema=GetJobDetailsInput,
+            ),
+            StructuredTool.from_function(
+                func=self.analyze_text_with_background,
+                name="analyze_text_with_background",
+                description=self.analyze_text_with_background.__doc__,
+                args_schema=AnalyzeTextWithBackgroundInput,
+            ),
+            StructuredTool.from_function(
+                func=self.get_profile_summary,
+                name="get_profile_summary",
+                description=self.get_profile_summary.__doc__,
+                # No args_schema needed
+            ),
         ]
         return tools
 
-    def tool_node(self):
-        return ToolNode(self.tools)
-
     # --- LangGraph Node Definitions ---
+
+    def _create_agent_runnable(self):
+        """Creates the agent runnable chain."""
+        custom_instructions: str = self._get_agent_instructions()
+        prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
+            [
+                ("system", custom_instructions),
+                MessagesPlaceholder(variable_name="chat_history"),
+                ("human", "{input}"),
+                MessagesPlaceholder(variable_name="agent_scratchpad"),
+            ]
+        )
+        llm_with_tools = self.llm.bind_tools(self.tools)
+        agent = create_tool_calling_agent(llm_with_tools, self.tools, prompt)
+        return agent
 
     def _agent_node(self, state: AgentState):
         """Invokes the agent model to decide the next action or respond."""
-        logger.debug(f"--- Calling Agent Node ---")
-        # The agent needs the specific prompt structure defined earlier
-        # We need to create the agent runnable *here* or have it pre-built
-        # Let's pre-build it for efficiency
 
-        # If self.agent is None, build it
-        if getattr(self, "agent") is None:
-            custom_instructions: str = self._get_agent_instructions()
-            prompt: ChatPromptTemplate = ChatPromptTemplate.from_messages(
-                [
-                    ("system", custom_instructions),
-                    MessagesPlaceholder(variable_name="chat_history"),
-                    ("human", "{input}"),
-                    MessagesPlaceholder(
-                        variable_name="agent_scratchpad"
-                    ),  # Use intermediate_steps directly
-                ]
-            )
-            # Adapt create_tool_calling_agent if needed, or use a pre-built agent structure
-            # The key is that it takes 'input', 'chat_history', 'intermediate_steps'
-            # and returns AgentAction or AgentFinish
-            llm_with_tools = self.llm.bind_tools(self.tools)
-            self.agent = create_tool_calling_agent(llm_with_tools, self.tools, prompt)
-            logger.info("Agent runnable created.")
-
+        self._validate_state(state)
         # Prepare input for the agent runnable
         # Format intermediate steps as tuples of (agent_action, observation)
         formatted_steps = []
         for step in state["intermediate_steps"]:
-            if isinstance(step, AIMessage) and step.tool_calls:
-                # Convert AIMessage with tool calls to AgentAction
-                for tool_call in step.tool_calls:
-                    action = AgentAction(
-                        tool=tool_call["name"],
-                        tool_input=tool_call["args"],
-                        log=f"Calling {tool_call['name']} with args: {tool_call['args']}",
-                    )
-                    formatted_steps.append((action, None))
+            if isinstance(step, AgentAction):
+                formatted_steps.append((step, None))
             elif isinstance(step, ToolMessage):
                 # If the last step was an AgentAction, pair it with this observation
                 if formatted_steps and formatted_steps[-1][1] is None:
@@ -825,13 +703,14 @@ class AgenticRAGProcessor:
             "input": state["input"],
             "chat_history": state["chat_history"],
             "intermediate_steps": formatted_steps,
+            "job_id": state["job_id"],
+            "user_id": state["user_id"],
+            "conversation_id": state["conversation_id"],
         }
-        logger.info(f"Agent Node Input: {agent_input}")
 
         # Invoke the agent logic
         try:
             agent_output = self.agent.invoke(agent_input)
-            logger.info(f"Agent Node Output: {agent_output}")
         except Exception as e:
             logger.error(f"Error invoking agent: {str(e)}")
             return {
@@ -843,56 +722,14 @@ class AgenticRAGProcessor:
                 ]
             }
 
-        # Handle direct response from LLM (no tool calls)
-        if isinstance(agent_output, str):
-            logger.debug("Agent output is a direct string response.")
-            ai_message = AIMessage(content=agent_output)
-            return {"chat_history": state["chat_history"] + [ai_message]}
-
-        # Handle AIMessage with tool calls
-        if isinstance(agent_output, AIMessage) and agent_output.tool_calls:
-            logger.debug("Agent output is AIMessage with tool_calls.")
-            # Return the AIMessage itself. operator.add will append it to the list.
-            return_value = {"intermediate_steps": [agent_output]}
-            logger.debug(f"Agent node returning AIMessage with tool calls: {return_value}")
+        if isinstance(agent_output, list) and isinstance(agent_output[0], AgentAction):
+            return_value = {"intermediate_steps": agent_output}
             return return_value
-
-        # Handle AIMessage without tool calls (direct response)
-        elif isinstance(agent_output, AIMessage):
-            logger.debug(f"Agent output is AIMessage (direct response): {agent_output}")
-            return {"chat_history": state["chat_history"] + [agent_output]}
-
-        # Check if the output is directly a list of tool actions/calls
-        elif (
-            isinstance(agent_output, list)
-            and agent_output
-            and hasattr(agent_output[0], "tool")
-            and hasattr(agent_output[0], "tool_input")
-        ):
-            logger.debug("Agent output is a list of tool actions (e.g., ToolAgentAction).")
-            # Convert to AIMessage format for consistency
-            tool_calls_for_aimessage = []
-            for action in agent_output:
-                tool_calls_for_aimessage.append(
-                    {
-                        "name": action.tool,
-                        "args": action.tool_input,
-                        "id": getattr(action, "id", None),
-                    }
-                )
-
-            ai_message_with_calls = AIMessage(content="", tool_calls=tool_calls_for_aimessage)
-            return_value = {"intermediate_steps": [ai_message_with_calls]}
-            logger.debug(f"Agent node converting list of actions to AIMessage: {return_value}")
-            return return_value
-
-        # Handle older AgentFinish case
-        elif hasattr(agent_output, "return_values") and "output" in agent_output.return_values:
-            logger.debug("Agent output is legacy AgentFinish.")
-            final_output = agent_output.return_values["output"]
-            return {"chat_history": state["chat_history"] + [AIMessage(content=final_output)]}
-
-        # Handle unexpected output format
+        elif isinstance(agent_output, AgentFinish):
+            return {
+                "chat_history": state["chat_history"]
+                + [AIMessage(content=agent_output.return_values["output"])]
+            }
         else:
             logger.error(f"Unexpected agent output format: {agent_output}")
             error_message = AIMessage(content="Error: Unexpected agent response format.")
@@ -908,100 +745,73 @@ class AgenticRAGProcessor:
         Returns a dictionary with 'intermediate_steps' containing a list
         of ToolMessage objects corresponding to the results.
         """
-        logger.debug(f"--- Calling Tool Node ---")
-        # The last step added by _agent_node should be an AIMessage with tool_calls
+        self._validate_state(state)
         last_step = state["intermediate_steps"][-1] if state["intermediate_steps"] else None
-        logger.debug(f"Tool node processing last step: {last_step} (type: {type(last_step)})")
 
         # Validate the expected input format
-        if not isinstance(last_step, AIMessage) or not last_step.tool_calls:
-            error_msg = f"Tool node expected AIMessage with tool_calls, but got {type(last_step)}. Cannot execute tools."
+        if not isinstance(last_step, AgentAction):
+            error_msg = f"Tool node expected AgentAction as last step, but got {type(last_step)}. Cannot execute tools."
             logger.error(error_msg)
-            # Return an empty list to append to intermediate_steps, effectively adding no tool results
-            # and allowing the agent to potentially recover or report the error.
             return {"intermediate_steps": []}
 
-        tool_calls_list = (
-            last_step.tool_calls
-        )  # This is a list of dicts {'name': ..., 'args': ..., 'id': ...}
-        tool_messages: list[ToolMessage] = []  # This will be the list of results to return
+        tool_messages: list[ToolMessage] = []
 
-        logger.info(f"Executing {len(tool_calls_list)} tool call(s)...")
+        # Safely extract tool details from the dictionary
+        tool_name: str = last_step.tool
+        tool_args = last_step.tool_input
+        tool_call_id: Any | str = getattr(last_step, "id", str(uuid.uuid4()))
 
-        for tool_call in tool_calls_list:
-            # Safely extract tool details from the dictionary
-            tool_name = tool_call.get("name")
-            tool_args = tool_call.get("args", {})
-            # Ensure tool_call_id is a string, use a default if None
-            tool_call_id = str(tool_call.get("id", f"tool_{len(tool_messages)}"))
+        if not tool_name:
+            error_msg = f"Error: Tool call missing 'name'. Tool call data: {tool_name}"
+            logger.error(error_msg)
+            tool_message = ToolMessage(
+                content=error_msg,
+                tool_call_id=tool_call_id,
+                action=last_step,
+            )
+            tool_messages.append(tool_message)
+            raise ValueError(error_msg)
 
-            logger.debug(
-                f"Processing tool call: name='{tool_name}', id='{tool_call_id}', args={tool_args}"
+        # Look up the tool function in the map
+        if tool_name not in self.tool_map:
+            error_msg = f"Error: Tool '{tool_name}' not found."
+            logger.error(error_msg)
+            tool_message = ToolMessage(
+                content=error_msg,
+                tool_call_id=tool_call_id,
+                action=last_step,
+            )
+            tool_messages.append(tool_message)
+            raise ValueError(error_msg)
+
+        tool_to_call: StructuredTool = self.tool_map[tool_name]
+        observation = None
+        try:
+            observation = tool_to_call.invoke(tool_args)
+            tool_message = ToolMessage(
+                content=observation,
+                tool_call_id=tool_call_id,
+                action=last_step,
             )
 
-            if not tool_name:
-                error_msg = f"Error: Tool call missing 'name'. Tool call data: {tool_call}"
-                logger.error(error_msg)
-                tool_messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call_id))
-                continue
+            # Append success message
+            tool_messages.append(tool_message)
 
-            # Look up the tool function in the map
-            if tool_name not in self.tool_map:
-                error_msg = f"Error: Tool '{tool_name}' not found."
-                logger.error(error_msg)
-                tool_messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call_id))
-                continue
+        except Exception as e:
+            # Log the full exception traceback for debugging
+            error_msg: str = f"Error executing tool '{tool_name}' with args {tool_args}: {e}"
+            tool_message = ToolMessage(
+                content=error_msg,
+                tool_call_id=tool_call_id,
+                action=last_step,
+            )
+            tool_messages.append(tool_message)
+            logger.exception(error_msg)
 
-            tool_to_call = self.tool_map[tool_name]
+        # Prepare the dictionary to return, always include intermediate_steps
+        return_dict: Dict[str, Any] = {"intermediate_steps": tool_messages}
 
-            # Execute the tool
-            observation = None
-            try:
-                # Invoke the tool with the arguments dictionary
-                # StructuredTool handles Pydantic model validation if args_schema is set
-                logger.info(f"Invoking tool '{tool_name}' with args: {tool_args}")
-                observation = tool_to_call.invoke(tool_args)
-                logger.debug(f"Tool '{tool_name}' observation: {observation}")
-                # Append success message
-                tool_messages.append(
-                    ToolMessage(content=str(observation), tool_call_id=tool_call_id)
-                )
-
-            except Exception as e:
-                # Log the full exception traceback for debugging
-                error_msg = f"Error executing tool '{tool_name}' with args {tool_args}: {e}"
-                logger.exception(error_msg)
-                # Append error message
-                tool_messages.append(ToolMessage(content=error_msg, tool_call_id=tool_call_id))
-
-        # Return the list of ToolMessage results.
-        # operator.add in the state definition will concatenate this list
-        # with the existing intermediate_steps list.
-        logger.debug(f"Tool node returning {len(tool_messages)} message(s): {tool_messages}")
-        return {"intermediate_steps": tool_messages}
-
-    def _format_intermediate_steps(self, intermediate_steps):
-        """Helper to format tool calls and results for the agent_scratchpad."""
-        # This needs to match what create_tool_calling_agent expects
-        # Typically, it's a list of AIMessage (with tool calls) and ToolMessage pairs
-        log = []
-        for item in intermediate_steps:
-            # item could be a list of tool calls (from agent) or list of ToolMessages (from tool node)
-            if isinstance(item, list):
-                if item and hasattr(
-                    item[0], "tool"
-                ):  # Agent tool calls (might need adjustment based on actual object)
-                    log.append(AIMessage(content="", tool_calls=item))
-                elif item and isinstance(item[0], ToolMessage):  # Tool results
-                    log.extend(item)
-            # Handle older formats if necessary
-            elif hasattr(item, "tool_calls"):  # AIMessage with tool calls
-                log.append(item)
-            elif isinstance(item, ToolMessage):  # Single ToolMessage
-                log.append(item)
-
-        logger.debug(f"Formatted Scratchpad: {log}")
-        return log
+        return return_dict
 
     # --- LangGraph Edge Logic ---
 
@@ -1011,66 +821,25 @@ class AgenticRAGProcessor:
         Checks if the agent node's output (the last intermediate step)
         indicates a tool call request.
         """
-        logger.debug(f"--- Checking should_continue ---")
-        logger.debug(f"Current intermediate_steps: {state['intermediate_steps']}")
         last_intermediate_step = (
             state["intermediate_steps"][-1] if state["intermediate_steps"] else None
         )
-        logger.debug(f"Last intermediate step type: {type(last_intermediate_step)}")
-        if last_intermediate_step:
-            logger.debug(f"Last intermediate step content: {last_intermediate_step}")
-
-        # If there are no intermediate steps, check if we have a direct response in chat history
         if not last_intermediate_step:
-            if state["chat_history"] and isinstance(state["chat_history"][-1], AIMessage):
-                logger.debug("No intermediate steps, but found direct response in chat history.")
-                return END
-            logger.debug("No intermediate steps and no direct response found.")
             return END
 
         # Check for tool calls in the last step
         tool_call_detected = False
 
-        # Case 1: AIMessage with tool_calls
-        if isinstance(last_intermediate_step, AIMessage) and last_intermediate_step.tool_calls:
+        if isinstance(last_intermediate_step, AgentAction):
             tool_call_detected = True
-            logger.debug("Tool call detected: AIMessage with tool_calls.")
 
-        # Case 2: Dictionary with tool call structure
-        elif isinstance(last_intermediate_step, dict):
-            if "name" in last_intermediate_step and (
-                "args" in last_intermediate_step or "arguments" in last_intermediate_step
-            ):
-                tool_call_detected = True
-                logger.debug("Tool call detected: Dict with name/args structure.")
-
-        # Case 3: Object with tool/tool_input attributes
-        elif hasattr(last_intermediate_step, "tool") and hasattr(
-            last_intermediate_step, "tool_input"
-        ):
-            tool_call_detected = True
-            logger.debug("Tool call detected: Object with tool/tool_input attributes.")
-
-        # Case 4: List of tool calls
-        elif isinstance(last_intermediate_step, list) and last_intermediate_step:
-            first_item = last_intermediate_step[0]
-            if (
-                isinstance(first_item, dict)
-                and "name" in first_item
-                and ("args" in first_item or "arguments" in first_item)
-            ):
-                tool_call_detected = True
-                logger.debug("Tool call detected: List of dicts with name/args structure.")
-            elif hasattr(first_item, "tool") and hasattr(first_item, "tool_input"):
-                tool_call_detected = True
-                logger.debug("Tool call detected: List of objects with tool/tool_input attributes.")
+        elif isinstance(last_intermediate_step, ToolMessage):
+            tool_call_detected = False
 
         # Decision Logic
         if tool_call_detected:
-            logger.debug("Decision: Agent requested tool execution. Returning 'action'.")
             return "action"
         else:
-            logger.debug("Decision: No tool call request detected. Returning END.")
             return END
 
     # --- Graph Building ---
@@ -1078,52 +847,41 @@ class AgenticRAGProcessor:
     def _get_agent_instructions(self) -> str:
         """Returns the system prompt instructions for the agent."""
         return f"""
-        **AGENT BEHAVIOR RULES (User ID: {self.user_id}):**
+        **AGENT IDENTITY (User ID: {self.user_id}):**
 
-        You are a helpful job application assistant for User ID {self.user_id}.
-        Your goal is to assist the user with their job search and application process using the available tools and context.
+        You ARE the user with ID {self.user_id}. You're not just assisting them - you ARE them in their job application process. 
+        When writing resumes, cover letters, or answering screening questions, write from the FIRST PERSON perspective as if you are the actual job applicant.
 
-        **CONTEXT AND TOOL USAGE GUIDELINES:**
+        **CORE BEHAVIOR:**
+        - Respond as "I" not as an assistant helping someone else
+        - Use the user's background, skills, and experiences AS YOUR OWN when crafting responses
+        - Generate authentic, personalized content that genuinely represents why YOU (as the user) are interested in positions
+        - Show enthusiasm appropriate for a job applicant when discussing opportunities
 
-        # --- Keep existing rules for JOB DESCRIPTIONS and BACKGROUND QUESTIONS ---
+        **TOOL USAGE GUIDELINES:**
 
-        **VERY IMPORTANT RULE FOR JOB DESCRIPTIONS:**
-        - If the user's input is a large block of text (more than ~100 words) and appears to be a job description (containing sections like Responsibilities, Qualifications, About the Company, etc.), you **MUST** use the `save_job_description` tool to parse and save it. Do not treat it as a conversational question unless it's very short or clearly a question *about* a job description.
-        - After successfully saving, confirm with the user by providing the new Job ID.
+        1. **Self-Knowledge:**
+        - Use `search_user_context` and `get_profile_summary` to access YOUR background, skills, experiences, and projects
+        - Always retrieve YOUR profile information before crafting personalized responses
+        - NEVER invent details about yourself - only use information from your profile
 
-        **VERY IMPORTANT RULE FOR BACKGROUND QUESTIONS:**
-        - When the user asks questions like "What do you know about my background?", "What are my skills?", "Tell me about my experience?", or any question asking about *their own profile information*, you **MUST** use the `search_user_context` tool first.
-        - If `search_user_context` fails or returns insufficient information, you MAY then use the `get_profile_summary` tool as a fallback.
-        - **DO NOT** answer questions about the user's background based on general knowledge, assumptions, or by inferring from job listings mentioned in the chat. Only use information retrieved via the specified tools (`search_user_context`, `get_profile_summary`).
+        2. **Job Processing:**
+        - When you encounter job descriptions, use `save_job_description` to parse and save them
+        - After saving, reference the job details when discussing why YOU are interested or qualified
+        
+        3. **Document Generation:**
+        - Generate YOUR resume and cover letter using `generate_tailored_resume` and `generate_tailored_cover_letter`
+        - These documents should represent YOU applying for the position
+        
+        4. **Application Questions:**
+        - When answering screening questions, use `analyze_text_with_background` to craft authentic responses
+        - Write answers that reflect YOUR genuine interest and qualifications
+        - Focus on making compelling connections between YOUR background and the job requirements
 
-        # --- Keep the existing rule for HANDLING TOOL ERRORS ---
-
-        **VERY IMPORTANT RULE FOR HANDLING TOOL ERRORS:**
-        - After you request a tool call, you will receive the result (observation) back in the `agent_scratchpad`.
-        - If the observation contains text indicating an error (e.g., "Error:", "Failed:", "Could not find:", "An unexpected error occurred", "value too long", "violates constraint"), you **MUST NOT** pretend the tool succeeded.
-        - Instead, you **MUST** inform the user clearly about the error that occurred. For example: "Sorry, I encountered an error when trying to [action the tool was supposed to do]: [briefly mention the error message from the observation]."
-        - Do not make up results if a tool fails. Report the failure.
-
-        # --- ADD THIS NEW RULE ---
-
-        **VERY IMPORTANT RULE FOR USING TOOL RESULTS:**
-        - The `agent_scratchpad` contains the history of tool calls you made and the results (observations) you received back.
-        - When formulating your final response to the user after a tool has run, you **MUST** base your response on the *actual observation* provided in the scratchpad.
-        - For example, if the `save_job_description` tool observation is "OK. Job saved as ID: 117.", your response to the user **MUST** reflect that exact information, including the correct ID (117).
-        - **DO NOT** make up tool results or ignore the observation provided in the scratchpad. Use the information given to you.
-
-        # --- Keep the OTHER TOOL USAGE GUIDELINES ---
-
-        **OTHER TOOL USAGE GUIDELINES:**
-        # ... (rest of the guidelines remain the same) ...
-        1.  **CHECK CHAT HISTORY:** ...
-        2.  **USE `search_user_context` for GENERAL BACKGROUND:** ...
-        3.  **USE `get_profile_summary` as FALLBACK:** ...
-        4.  **USE `analyze_text_with_background` for SPECIFIC TEXT + BACKGROUND:** ...
-        5.  **USE `get_job_details` for SAVED JOBS:** ...
-        6.  **CHECK IDs for GENERATION:** ...
-        7.  **REPORT TOOL RESULTS:** Clearly state the outcome of tool actions. Report errors clearly (as per the error handling rule). Use the actual results provided (as per the using tool results rule).
-        8.  **GENERAL CONVERSATION:** ...
+        5. **Conversation Flow:**
+        - Maintain the perspective of being the job applicant throughout all interactions
+        - If asked for clarification about your background, experience, or motivations, always retrieve this information from your profile first
+        - Be proactive about next steps in YOUR application process
         """
 
     def _build_graph(self) -> StateGraph:
@@ -1132,8 +890,7 @@ class AgenticRAGProcessor:
 
         # Add nodes
         graph.add_node("agent", self._agent_node)
-        # graph.add_node("action", self._execute_tool_node)
-        graph.add_node("action", self.tool_node)
+        graph.add_node("action", self._execute_tool_node)
 
         # Define edges
         graph.add_edge(START, "agent")  # Start by calling the agent
@@ -1150,8 +907,6 @@ class AgenticRAGProcessor:
 
         # Edge from action node back to agent node
         graph.add_edge("action", "agent")
-        # Edge from tools node back to agent node
-        # graph.add_edge("tools", "agent")
 
         return graph
 
@@ -1176,9 +931,6 @@ class AgenticRAGProcessor:
                             # For now, treat all assistant messages as plain AI messages for history.
                             chat_history.append(AIMessage(content=msg.content))
                         # Ignore system messages for basic history
-                    logger.info(
-                        f"Loaded {len(chat_history)} messages into memory for conversation {self.conversation_id}"
-                    )
             except Exception as e:
                 logger.error(
                     f"Error loading chat history for conversation {self.conversation_id}: {str(e)}"
@@ -1193,8 +945,7 @@ class AgenticRAGProcessor:
                 f"Running Agentic RAG (LangGraph) for user {self.user_id}, conversation {self.conversation_id}"
             )
 
-            current_chat_history = self._load_memory()
-            logger.debug(f"Initial Chat History Loaded: {current_chat_history}")
+            current_chat_history: List[BaseMessage] = self._load_memory()
 
             initial_state: AgentState = {
                 "input": user_input,
@@ -1209,6 +960,7 @@ class AgenticRAGProcessor:
             config: Dict[str, Dict[str, str]] = {
                 "configurable": {"thread_id": str(self.conversation_id)}
             }
+
             final_state = self.app.invoke(initial_state, config=cast(Any, config))
 
             if final_state and final_state.get("chat_history"):
@@ -1259,7 +1011,6 @@ class AgenticRAGProcessor:
             ids_to_delete = temp_vectorstore.get().get("ids", [])
             if ids_to_delete:
                 temp_vectorstore.delete(ids=ids_to_delete)
-                logger.info(f"Cleared existing vector store data for user {self.user_id}")
 
             # Repopulate with fresh data (excluding conversations)
             self._populate_vectorstore(temp_vectorstore, exclude_conversations=True)
@@ -1268,8 +1019,15 @@ class AgenticRAGProcessor:
             self.vectorstore: Chroma = temp_vectorstore
             self.retriever: VectorStoreRetriever = self._create_retriever()
 
-            logger.info(f"Vector store refreshed successfully for user {self.user_id}")
             return True
         except Exception as e:
             logger.error(f"Error refreshing vector store for user {self.user_id}: {str(e)}")
             return False
+
+    def _validate_state(self, state: Any) -> Dict[str, Any]:
+        """Ensure state is properly formatted before checkpointing"""
+        if isinstance(state, tuple):
+            return {state[0]: state[1]}  # Convert (key,value) to {key:value}
+        elif not isinstance(state, dict):
+            raise ValueError(f"Invalid state format: {type(state)}. Expected dict")
+        return state

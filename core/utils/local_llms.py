@@ -2,10 +2,9 @@
 Local LLM clients for text generation.
 """
 
+import json
 import logging
 import os
-
-import json
 from typing import Any, Dict
 
 import requests
@@ -14,7 +13,6 @@ from google import genai
 from google.api_core import retry
 from google.genai import types
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -22,7 +20,7 @@ class BaseLLMClient:
     """Base class for local LLM clients."""
 
     def __init__(self, **kwargs) -> None:
-        self.model: str = kwargs.get("model", "gemini-2.0-flash")
+        self.model: str = kwargs.get("model", "gemini-2.5-flash-preview-04-17")
         self.temperature: float = kwargs.get("temperature", settings.TEMPERATURE)
         self.api_key: str | None = kwargs.get("api_key", None)
         self.max_tokens: int = kwargs.get("max_tokens", 100)

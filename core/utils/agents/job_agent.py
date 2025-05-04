@@ -43,9 +43,6 @@ class JobAgent(BaseAgent):
             # Extract details and create a new job listing if only text is provided
             # Ensure user_id is passed to _extract_job_details_from_text if needed, or set here
             self._extract_job_details_from_text(text)
-            logger.info(
-                "JobAgent initialized by extracting details from text (new JobListing created)"
-            )
         else:
             # If neither job_id nor text is provided, raise an error
             raise ValueError("Either job_id or text must be provided to JobAgent")
@@ -156,7 +153,6 @@ class JobAgent(BaseAgent):
             logger.warning(f"Field 'title' exceeds max length {max_len}. Truncating.")
             cleaned_data["title"] = cleaned_data["title"][:max_len]
 
-        logger.debug(f"Validated and cleaned job data: {cleaned_data}")
         return cleaned_data
 
     def _extract_job_details_from_text(self, text: str) -> None:
@@ -167,7 +163,6 @@ class JobAgent(BaseAgent):
         logger.debug(
             f"Attempting to extract job details from text for user {self.user_id}. Text length: {len(text)}"
         )
-        logger.debug(f"Input text snippet: {text[:500]}...")
 
         # --- Step 2: Prepare Schema and Prompt ---
         job_details_schema: Dict[str, Any] = JobListing.get_schema()["properties"]
@@ -189,10 +184,14 @@ class JobAgent(BaseAgent):
             job_details_schema.pop(field, None)
 
         # Updated prompt (as used before)
-        prompt: str = f"""Extract the job details from the text below based on the provided schema.
+        prompt: str = f"""
+            you are an excellent job detail extractor from text.
+            Extract the job details from the text below based on the provided schema.
+            Title, company name and description are necessary. it's possible that title or company name isn't explicitly mentioned.
             Ensure the output is a single, valid JSON object matching the schema structure.
             **IMPORTANT: For any date fields like 'posted_date', use the 'YYYY-MM-DD' format.**
             For other empty fields, use null or an appropriate empty value (e.g., "", []).
+            
 
             Schema properties expected: {list(job_details_schema.keys())}
 
@@ -203,20 +202,17 @@ class JobAgent(BaseAgent):
 
         try:
             # --- Step 3: Call LLM ---
-            logger.debug("Calling LLM generate_structured_output...")
             raw_job_record_dict: Dict[str, Any] = self.llm.generate_structured_output(
                 prompt=prompt,
                 output_schema=job_details_schema,
                 temperature=0.0,
             )
-            logger.debug(f"LLM raw structured output received (type: {type(raw_job_record_dict)}).")
 
             # --- Step 4: Validate and Clean Data ---
             job_record_dict = self._validate_and_clean_job_data(raw_job_record_dict)
 
             # --- Step 5: Add User ID and Create Record ---
             job_record_dict["user_id"] = self.user_id
-            logger.debug(f"Attempting to create JobListing with cleaned data: {job_record_dict}")
             self.job_record = JobListing.objects.create(**job_record_dict)
             logger.info(f"New JobListing created with ID: {self.job_record.id}")
 
