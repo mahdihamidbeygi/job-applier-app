@@ -18,7 +18,7 @@ from rest_framework.response import Response
 
 from core.utils.agents.job_agent import JobAgent
 from core.utils.agents.personal_agent import PersonalAgent
-from core.utils.agents.writer_agent import ApplicationAgent
+from core.utils.agents.writer_agent import WriterAgent
 from core.utils.form_processors import process_form_fields
 
 logger = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ def generate_documents(request):
             + f"user: {personal_agent.user_profile.user.username}",
         )
         # Initialize application agent
-        application_agent = ApplicationAgent(
+        application_agent = WriterAgent(
             user_id=request.user.id,
             personal_agent=personal_agent,
             job_agent=job_agent,
@@ -108,7 +108,7 @@ def generate_answers(request):
             + f"user: {personal_agent.user_profile.user.username}",
         )
         # Initialize application agent
-        application_agent = ApplicationAgent(
+        application_agent = WriterAgent(
             user_id=request.user.id,
             personal_agent=personal_agent,
             job_agent=job_agent,
@@ -168,7 +168,7 @@ def process_job_application(request):
         )
 
         # Initialize application agent
-        application_agent = ApplicationAgent(
+        application_agent = WriterAgent(
             user_id=request.user.id,
             personal_agent=agent_personal,
             job_agent=agent_job,
@@ -218,7 +218,7 @@ def fill_form(request):
             + f"user: {personal_agent.user_profile.user.username}",
         )
         # Initialize application agent
-        application_agent = ApplicationAgent(
+        application_agent = WriterAgent(
             user_id=user_id,
             personal_agent=personal_agent,
             job_agent=job_agent,

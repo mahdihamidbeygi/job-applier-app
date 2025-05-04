@@ -10,7 +10,7 @@ from core.utils.agents.job_agent import JobAgent
 
 # Assuming PersonalAgent and JobAgent are importable for type hinting, but we'll mock them.
 from core.utils.agents.personal_agent import PersonalAgent
-from core.utils.agents.writer_agent import ApplicationAgent
+from core.utils.agents.writer_agent import WriterAgent
 from core.utils.cover_letter_composition import CoverLetterComposition
 
 
@@ -31,7 +31,7 @@ class TestCoverLetterComposition(unittest.TestCase):
         self.job_agent = JobAgent(user_id=self.user_id, job_id=self.job_id)  # Load by ID
 
         # Initialize ApplicationAgent
-        self.application_agent = ApplicationAgent(
+        self.application_agent = WriterAgent(
             user_id=self.user_id,
             personal_agent=self.personal_agent,
             job_agent=self.job_agent,

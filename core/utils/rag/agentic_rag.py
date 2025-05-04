@@ -40,7 +40,7 @@ from core.models import (
 from core.models.chat import ChatMessage
 from core.utils.agents.job_agent import JobAgent
 from core.utils.agents.personal_agent import PersonalAgent
-from core.utils.agents.writer_agent import ApplicationAgent
+from core.utils.agents.writer_agent import WriterAgent
 from core.utils.db_utils import safe_get_or_none
 from core.utils.langgraph_checkpointer import DjangoCheckpointSaver
 
@@ -444,7 +444,7 @@ class AgenticRAGProcessor:
             job_agent = JobAgent(user_id=self.user_id, job_id=job_id)  # Load by ID
 
             # Initialize ApplicationAgent
-            application_agent = ApplicationAgent(
+            application_agent = WriterAgent(
                 user_id=self.user_id,
                 personal_agent=personal_agent,
                 job_agent=job_agent,
@@ -488,7 +488,7 @@ class AgenticRAGProcessor:
             job_agent = JobAgent(user_id=self.user_id, job_id=job_id)  # Load by ID
 
             # Initialize ApplicationAgent
-            application_agent = ApplicationAgent(
+            application_agent = WriterAgent(
                 user_id=self.user_id,
                 personal_agent=personal_agent,
                 job_agent=job_agent,

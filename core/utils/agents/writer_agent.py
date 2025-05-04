@@ -2,27 +2,28 @@
 Application agent for processing job applications.
 """
 
-from io import BytesIO
 import logging
-from typing import Any, Dict, List, Optional
 from datetime import date
+from io import BytesIO
+from typing import Any, Dict, List, Optional
 
-from core.utils.agents.base_agent import BaseAgent
-from core.utils.agents.personal_agent import PersonalAgent
-from core.utils.agents.job_agent import JobAgent
-from core.utils.rag.job_knowledge import JobKnowledgeBase
-from core.utils.logging_utils import log_exceptions
-from core.utils.resume_composition import ResumeComposition
-from core.utils.cover_letter_composition import CoverLetterComposition
-from core.models.jobs import JobListing
-from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from django.utils.text import slugify
+
+from core.models.jobs import JobListing
+from core.utils.agents.base_agent import BaseAgent
+from core.utils.agents.job_agent import JobAgent
+from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.cover_letter_composition import CoverLetterComposition
+from core.utils.logging_utils import log_exceptions
+from core.utils.rag.job_knowledge import JobKnowledgeBase
+from core.utils.resume_composition import ResumeComposition
 
 logger = logging.getLogger(__name__)
 
 
-class ApplicationAgent(BaseAgent):
+class WriterAgent(BaseAgent):
     """
     Agent for assisting with job applications, including form-filling
     and question answering.
