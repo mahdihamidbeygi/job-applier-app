@@ -567,7 +567,6 @@ class ResumeComposition:
         Args:
             job_info (str): The job information to tailor against
         """
-        logger.info(f"Tailoring resume for job info (User: {self.personal_agent.user_id})")
         # Prepare comprehensive prompt for tailoring the summary, skills, and projects
         prompt: str = f"""
         You are a professional resume writer. Create a tailored professional summary, identify relevant skills, and suggest relevant projects based on the candidate's background and the target job description.
@@ -604,7 +603,6 @@ class ResumeComposition:
         }
 
         try:
-            logger.debug("Calling google_client.generate_structured_output...")
             # Use generate_structured_output
             response_dict: Dict[str, Any] = self.google_client.generate_structured_output(
                 prompt=prompt, output_schema=output_schema

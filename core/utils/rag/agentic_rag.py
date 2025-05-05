@@ -961,6 +961,7 @@ class AgenticRAGProcessor:
         tool_to_call: StructuredTool = self.tool_map[tool_name]
         observation = None
         try:
+            logger.info(f"Executing tool '{tool_name}' with args {tool_args}")
             observation = tool_to_call.invoke(tool_args)
             tool_message = ToolMessage(
                 content=observation,
@@ -1062,6 +1063,7 @@ class AgenticRAGProcessor:
             - Maintain the perspective of being the job applicant throughout all interactions
             - If asked for clarification about your background, experience, or motivations, always retrieve this information from your profile first
             - Be proactive about next steps in YOUR application process
+            - No need to mention Job ID in answering application questions.
             """
 
     def _build_graph(self) -> StateGraph:
