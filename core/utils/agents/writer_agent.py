@@ -489,24 +489,18 @@ class WriterAgent(BaseAgent):
 
         return "\n".join([f"{k}: {v}" for k, v in background_info.items() if v])
 
-    def fill_application_form(
-        self, form_fields: List[Dict[str, Any]], job_description: str
-    ) -> Dict[str, Any]:
+    def fill_application_form(self, form_fields: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Fills out job application forms"""
-        # Get company context
-        company_context = self.knowledge_base.get_company_context(
-            job_description.split("\n")[0]  # Assuming first line contains company name
-        )
 
         responses = {}
         for field in form_fields:
             prompt = f"""
             Field: {field['label']}
             Type: {field['type']}
-            Job Context: {job_description[:100]}...
+            Job Context: {self.job_agent.job_record.get_formatted_info()}...
             
             Company Context:
-            {company_context}
+            {self.job_agent.job_record.company}
             
             Relevant Experience:
             {self.personal_agent.get_relevant_experience(field['label'])}
@@ -525,13 +519,11 @@ class WriterAgent(BaseAgent):
 
         return responses
 
-    def handle_screening_questions(
-        self, questions: List[str], job_context: str
-    ) -> List[Dict[str, Any]]:
+    def handle_screening_questions(self, questions: List[str]) -> List[Dict[str, Any]]:
         """Handles pre-screening questions"""
         # Get relevant interview questions from knowledge base
         relevant_questions = self.knowledge_base.get_relevant_interview_questions(
-            job_context.split("\n")[0]  # Assuming first line contains job title
+            self.job_agent.job_record.title  # Assuming first line contains job title
         )
 
         responses = []
@@ -546,7 +538,7 @@ class WriterAgent(BaseAgent):
 
             prompt = f"""
             Question: {question}
-            Job Context: {job_context}
+            Job Context: {self.job_agent.job_record.get_formatted_info()}
             
             Similar Questions Found:
             {similar_questions}
@@ -614,9 +606,7 @@ class WriterAgent(BaseAgent):
         """Prepares potential interview responses"""
         # Get relevant interview questions
         relevant_questions = self.knowledge_base.get_relevant_interview_questions(
-            self.job_agent.job_record.description.split("\n")[
-                0
-            ]  # Assuming first line contains job title
+            self.job_agent.job_record.title
         )
 
         prompt = f"""

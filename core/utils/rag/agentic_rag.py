@@ -85,6 +85,30 @@ class AnalyzeTextWithBackgroundInput(BaseModel):
     )
 
 
+class GenerateAnswerInput(BaseModel):
+    question: str = Field(description="The job application question that needs to be answered")
+    job_id: int = Field(description="The integer ID of the job listing saved in the system.")
+
+
+class FormField(BaseModel):
+    id: str = Field(description="Unique identifier for the form field")
+    label: str = Field(description="Label or question text for the form field")
+    type: str = Field(description="Type of form field (text, select, checkbox, date, etc.)")
+    options: Optional[List[str]] = Field(
+        None, description="Available options for select or checkbox fields"
+    )
+
+
+class FillFormInput(BaseModel):
+    fields: List[FormField] = Field(description="List of form fields to be filled")
+    job_id: int = Field(description="The integer ID of the job listing saved in the system.")
+
+
+class HandleScreeningInput(BaseModel):
+    questions: List[str] = Field(description="List of screening questions to answer")
+    job_id: int = Field(description="The integer ID of the job listing saved in the system.")
+
+
 # --- LangGraph State Definition ---
 class AgentState(TypedDict):
     input: str
@@ -444,14 +468,14 @@ class AgenticRAGProcessor:
             job_agent = JobAgent(user_id=self.user_id, job_id=job_id)  # Load by ID
 
             # Initialize ApplicationAgent
-            application_agent = WriterAgent(
+            writer_agent = WriterAgent(
                 user_id=self.user_id,
                 personal_agent=personal_agent,
                 job_agent=job_agent,
             )
 
             # Call the generation method within ApplicationAgent
-            resume_url = application_agent.generate_resume()
+            resume_url = writer_agent.generate_resume()
 
             if resume_url:
                 return f"OK. I have generated your tailored resume for the '{job_listing.title}' position at '{job_listing.company}'. You can access it here: {resume_url}"
@@ -488,14 +512,14 @@ class AgenticRAGProcessor:
             job_agent = JobAgent(user_id=self.user_id, job_id=job_id)  # Load by ID
 
             # Initialize ApplicationAgent
-            application_agent = WriterAgent(
+            writer_agent = WriterAgent(
                 user_id=self.user_id,
                 personal_agent=personal_agent,
                 job_agent=job_agent,
             )
 
             # Call the generation method within ApplicationAgent
-            cover_letter_url = application_agent.generate_cover_letter()
+            cover_letter_url = writer_agent.generate_cover_letter()
 
             if cover_letter_url:
                 return f"OK. I have generated your tailored cover letter for the '{job_listing.title}' position at '{job_listing.company}'. You can access it here: {cover_letter_url}"
@@ -602,6 +626,138 @@ class AgenticRAGProcessor:
             logger.exception(f"Error in get_profile_summary tool for user {self.user_id}: {str(e)}")
             return f"An unexpected error occurred while retrieving the profile summary: {str(e)}"
 
+    def fill_application_form(self, form_data: Dict[str, Any], job_id: int) -> Dict[str, Any]:
+        """
+        Automatically fills application form fields based on user profile and job requirements.
+        Use this tool when the user needs to complete a job application form with multiple fields.
+        Inputs: form field specifications and the integer ID of the job listing.
+        Returns a dictionary of field IDs mapped to completed values or an error message.
+        """
+        try:
+            # Verify the job exists and belongs to the user
+            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+
+            # Initialize necessary agents
+            personal_agent = PersonalAgent(user_id=self.user_id)
+            job_agent = JobAgent(user_id=self.user_id, job_id=job_id)
+
+            # Initialize WriterAgent
+            writer_agent = WriterAgent(
+                user_id=self.user_id,
+                personal_agent=personal_agent,
+                job_agent=job_agent,
+            )
+
+            # Fill the form fields
+            form_fields = form_data.get("fields", [])
+            job_description = job_listing.description
+
+            filled_form = writer_agent.fill_application_form(form_fields, job_description)
+
+            if filled_form:
+                return {
+                    "status": "success",
+                    "message": f"I've completed the application form for '{job_listing.title}' at '{job_listing.company}'.",
+                    "form_data": filled_form,
+                }
+            else:
+                logger.error(f"WriterAgent failed to fill form for job {job_id}")
+                return {
+                    "status": "error",
+                    "message": "Sorry, I encountered an issue while filling the application form.",
+                }
+
+        except JobListing.DoesNotExist:
+            return {
+                "status": "error",
+                "message": f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID.",
+            }
+        except Exception as e:
+            logger.exception(f"Error in fill_application_form tool for job {job_id}: {str(e)}")
+            return {
+                "status": "error",
+                "message": f"An unexpected error occurred while filling the application form: {str(e)}",
+            }
+
+    def prepare_interview_responses(self, job_id: int) -> str:
+        """
+        Prepares potential interview questions and responses based on the job description and user profile.
+        Use this tool when the user is preparing for an interview for a specific job listing.
+        Input MUST be the integer ID of the job listing saved in the system.
+        Returns interview preparation materials or an error message.
+        """
+        try:
+            # Verify the job exists and belongs to the user
+            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+
+            # Initialize necessary agents
+            personal_agent = PersonalAgent(user_id=self.user_id)
+            job_agent = JobAgent(user_id=self.user_id, job_id=job_id)
+
+            # Initialize WriterAgent
+            writer_agent = WriterAgent(
+                user_id=self.user_id,
+                personal_agent=personal_agent,
+                job_agent=job_agent,
+            )
+
+            # Generate interview responses
+            interview_prep = writer_agent.prepare_interview_responses()
+
+            if interview_prep:
+                formatted_prep = self._format_interview_prep(interview_prep, job_listing)
+                return formatted_prep
+            else:
+                logger.error(f"WriterAgent failed to generate interview prep for job {job_id}")
+                return "Sorry, I encountered an issue while preparing interview materials."
+
+        except JobListing.DoesNotExist:
+            return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
+        except Exception as e:
+            logger.exception(
+                f"Error in prepare_interview_responses tool for job {job_id}: {str(e)}"
+            )
+            return f"An unexpected error occurred while preparing interview materials: {str(e)}"
+
+    def generate_answer_to_question(self, question: str, job_id: int) -> str:
+        """
+        Generates a professional answer to a job application question based on user profile and job details.
+        Use this tool when the user needs help answering a specific job application question for a known job.
+        Inputs: the question text and the integer ID of the job listing saved in the system.
+        Returns: A tailored professional answer or an error message.
+        """
+        try:
+            # Verify the job exists and belongs to the user
+            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+
+            # Initialize necessary agents
+            personal_agent = PersonalAgent(user_id=self.user_id)
+            job_agent = JobAgent(user_id=self.user_id, job_id=job_id)
+
+            # Initialize WriterAgent
+            writer_agent = WriterAgent(
+                user_id=self.user_id,
+                personal_agent=personal_agent,
+                job_agent=job_agent,
+            )
+
+            # Generate the answer
+            answer = writer_agent.generate_answer(question)
+
+            if answer:
+                return f"Here's a suggested answer for your application to '{job_listing.title}' at '{job_listing.company}':\n\n{answer}"
+            else:
+                logger.error(f"WriterAgent failed to generate answer for job {job_id}")
+                return "Sorry, I encountered an issue while generating your answer."
+
+        except JobListing.DoesNotExist:
+            return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
+        except Exception as e:
+            logger.exception(
+                f"Error in generate_answer_to_question tool for job {job_id}: {str(e)}"
+            )
+            return f"An unexpected error occurred while generating your answer: {str(e)}"
+
     def _initialize_tools(self) -> list[StructuredTool]:
         """Gather all defined tools for the agent using StructuredTool."""
         # Make sure the docstrings of the tool functions are descriptive!
@@ -659,6 +815,24 @@ class AgenticRAGProcessor:
                 name="get_profile_summary",
                 description=self.get_profile_summary.__doc__,
                 # No args_schema needed
+            ),
+            StructuredTool.from_function(
+                func=self.fill_application_form,
+                name="fill_application_form",
+                description=self.fill_application_form.__doc__,
+                args_schema=FillFormInput,
+            ),
+            StructuredTool.from_function(
+                func=self.prepare_interview_responses,
+                name="prepare_interview_responses",
+                description=self.prepare_interview_responses.__doc__,
+                args_schema=GenerateDocumentInput,
+            ),
+            StructuredTool.from_function(
+                func=self.generate_answer_to_question,
+                name="generate_answer_to_question",
+                description=self.generate_answer_to_question.__doc__,
+                args_schema=GenerateAnswerInput,
             ),
         ]
         return tools
@@ -847,42 +1021,48 @@ class AgenticRAGProcessor:
     def _get_agent_instructions(self) -> str:
         """Returns the system prompt instructions for the agent."""
         return f"""
-        **AGENT IDENTITY (User ID: {self.user_id}):**
+            **AGENT IDENTITY (User ID: {self.user_id}):**
 
-        You ARE the user with ID {self.user_id}. You're not just assisting them - you ARE them in their job application process. 
+        You are an excellent job applicant assistant. But to increase the quality of responses, you act as You ARE the user with ID {self.user_id} when writing documents or answering application questions.
+        in that case You're not just assisting them - you ARE them in their job application process. 
         When writing resumes, cover letters, or answering screening questions, write from the FIRST PERSON perspective as if you are the actual job applicant.
 
-        **CORE BEHAVIOR:**
-        - Respond as "I" not as an assistant helping someone else
-        - Use the user's background, skills, and experiences AS YOUR OWN when crafting responses
-        - Generate authentic, personalized content that genuinely represents why YOU (as the user) are interested in positions
-        - Show enthusiasm appropriate for a job applicant when discussing opportunities
+            **CORE BEHAVIOR:**
+            - Act as applicants when responding to writing requests, as "I" not as an assistant helping someone else
+            - Use the user's background, skills, and experiences AS YOUR OWN when crafting responses
+            - Generate authentic, personalized content that genuinely represents why YOU (as the user) are interested in positions
+            - Show enthusiasm appropriate for a job applicant when discussing opportunities
 
-        **TOOL USAGE GUIDELINES:**
+            **TOOL USAGE GUIDELINES:**
 
-        1. **Self-Knowledge:**
-        - Use `search_user_context` and `get_profile_summary` to access YOUR background, skills, experiences, and projects
-        - Always retrieve YOUR profile information before crafting personalized responses
-        - NEVER invent details about yourself - only use information from your profile
+            1. **Self-Knowledge:**
+            - Use `search_user_context` and `get_profile_summary` to access YOUR background, skills, experiences, and projects
+            - Always retrieve YOUR profile information before crafting personalized responses
+            - NEVER invent details about yourself - only use information from your profile
 
-        2. **Job Processing:**
-        - When you encounter job descriptions, use `save_job_description` to parse and save them
-        - After saving, reference the job details when discussing why YOU are interested or qualified
-        
-        3. **Document Generation:**
-        - Generate YOUR resume and cover letter using `generate_tailored_resume` and `generate_tailored_cover_letter`
-        - These documents should represent YOU applying for the position
-        
-        4. **Application Questions:**
-        - When answering screening questions, use `analyze_text_with_background` to craft authentic responses
-        - Write answers that reflect YOUR genuine interest and qualifications
-        - Focus on making compelling connections between YOUR background and the job requirements
-
-        5. **Conversation Flow:**
-        - Maintain the perspective of being the job applicant throughout all interactions
-        - If asked for clarification about your background, experience, or motivations, always retrieve this information from your profile first
-        - Be proactive about next steps in YOUR application process
-        """
+            2. **Job Processing:**
+            - When you encounter text appearing to be like job descriptions, use `save_job_description` to parse and save them and Job IDs
+            - After saving, keep the Job IDs in the conversation, and return Job ID to screen
+            - Reference the job details when discussing why YOU are interested or qualified
+            
+            3. **Document Generation:**
+            - Generate YOUR resume and cover letter using `generate_tailored_resume` and `generate_tailored_cover_letter`
+            - These documents should represent YOU applying for the position
+            - These tools return url of generated documents that users need to access
+            
+            4. **Application Assistance:**
+            - When answering application questions, use `generate_answer_to_question` to craft professional responses
+            - For job application forms, use `fill_application_form` to complete multiple fields at once
+            - Handle screening questions with `handle_screening_questions` tool
+            - Prepare for interviews using `prepare_interview_responses` tool
+            - All responses should be in YOUR voice as the applicant
+            
+            5. **Conversation Flow:**
+            - If tools have specific returned values that users should have, return them to users
+            - Maintain the perspective of being the job applicant throughout all interactions
+            - If asked for clarification about your background, experience, or motivations, always retrieve this information from your profile first
+            - Be proactive about next steps in YOUR application process
+            """
 
     def _build_graph(self) -> StateGraph:
         """Constructs the LangGraph StateGraph."""
