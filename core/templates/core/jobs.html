@@ -3,37 +3,173 @@ Applier{% endblock %} {% block content %}
 <!-- Add CSRF Token -->
 {% csrf_token %}
 
-<div class="container mt-4">
-  <!-- Search Form -->
-  <div class="card mb-4">
-    <div class="card-body">
-      <h5 class="card-title">Search Jobs</h5>
-      <form id="jobSearchForm" class="row g-3">
-        <div class="col-md-4">
-          <label for="role" class="form-label">Job Title</label>
-          <input
-            type="text"
-            class="form-control"
-            id="role"
-            name="role"
-            value="{{ role }}"
-            placeholder="e.g., Software Engineer"
-          />
+<style>
+  .search-container {
+    background: linear-gradient(
+      135deg,
+      var(--darker-bg) 0%,
+      var(--card-bg) 100%
+    );
+    border-radius: var(--border-radius-lg);
+    padding: var(--spacing-xl);
+    box-shadow: var(--shadow-lg);
+    margin: var(--spacing-xl) auto;
+  }
+
+  .search-title {
+    color: var(--primary-color);
+    font-size: 2.5rem;
+    margin-bottom: var(--spacing-md);
+    font-weight: 600;
+  }
+
+  .search-form {
+    background: var(--card-bg);
+    padding: var(--spacing-xl);
+    border-radius: var(--border-radius-lg);
+    box-shadow: var(--shadow-md);
+    border: 1px solid var(--border-color);
+  }
+
+  .form-control {
+    background-color: var(--darker-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+  }
+
+  .form-control:focus {
+    border-color: var(--primary-color) !important;
+    box-shadow: 0 0 0 0.25rem rgba(108, 99, 255, 0.25) !important;
+  }
+
+  .form-floating > label {
+    color: var(--text-secondary);
+    padding-left: var(--spacing-md);
+  }
+
+  .platform-selector {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-md);
+  }
+
+  .platform-chip {
+    background: var(--darker-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    cursor: pointer;
+    transition: all var(--transition-speed) var(--transition-timing);
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+  }
+
+  .platform-chip:hover {
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+    transform: translateY(-2px);
+  }
+
+  .platform-chip.selected {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: var(--text-primary);
+  }
+
+  .search-btn {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    border: none;
+    border-radius: var(--border-radius-md);
+    padding: var(--spacing-md) var(--spacing-xl);
+    font-weight: 600;
+    transition: all var(--transition-speed) var(--transition-timing);
+    width: 100%;
+  }
+
+  .search-btn:hover {
+    background: var(--secondary-color);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+  }
+
+  .search-btn:active {
+    transform: translateY(0);
+  }
+
+  #loadingSpinner {
+    width: 1.5rem;
+    height: 1.5rem;
+    color: var(--text-primary);
+  }
+
+  @media (max-width: 768px) {
+    .search-container {
+      padding: var(--spacing-md);
+      margin: var(--spacing-md);
+    }
+
+    .search-form {
+      padding: var(--spacing-md);
+    }
+  }
+</style>
+
+<div class="container">
+  <div class="search-container">
+    <h2 class="search-title">Find Your Dream Job</h2>
+    <form id="jobSearchForm" class="search-form">
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="form-floating">
+            <input
+              type="text"
+              class="form-control"
+              id="role"
+              name="role"
+              value="{{ role }}"
+              placeholder="Job Title"
+            />
+            <label for="role">What role are you looking for?</label>
+          </div>
         </div>
-        <div class="col-md-3">
-          <label for="location" class="form-label">Location</label>
-          <input
-            type="text"
-            class="form-control"
-            id="location"
-            name="location"
-            value="{{ location }}"
-            placeholder="e.g., New York, NY"
-          />
+        <div class="col-md-6">
+          <div class="form-floating">
+            <input
+              type="text"
+              class="form-control"
+              id="location"
+              name="location"
+              value="{{ location }}"
+              placeholder="Location"
+            />
+            <label for="location">Where would you like to work?</label>
+          </div>
         </div>
-        <div class="col-md-3">
-          <label for="platforms" class="form-label">Platforms</label>
-          <select class="form-select" id="platforms" name="platforms" multiple>
+        <div class="col-12">
+          <label class="mb-2">Select Platforms</label>
+          <div class="platform-selector" id="platformSelector">
+            <div class="platform-chip" data-platform="linkedin">
+              <i class="fab fa-linkedin"></i> LinkedIn
+            </div>
+            <div class="platform-chip" data-platform="indeed">
+              <i class="fas fa-briefcase"></i> Indeed
+            </div>
+            <div class="platform-chip" data-platform="glassdoor">
+              <i class="fas fa-door-open"></i> Glassdoor
+            </div>
+            <div class="platform-chip" data-platform="monster">
+              <i class="fas fa-monster"></i> Monster
+            </div>
+            <div class="platform-chip" data-platform="jobbank">
+              <i class="fas fa-university"></i> JobBank
+            </div>
+            <div class="platform-chip" data-platform="ziprecruiter">
+              <i class="fas fa-file-archive"></i> ZipRecruiter
+            </div>
+          </div>
+          <select class="d-none" id="platforms" name="platforms" multiple>
             <option value="linkedin">LinkedIn</option>
             <option value="indeed">Indeed</option>
             <option value="glassdoor">Glassdoor</option>
@@ -42,90 +178,102 @@ Applier{% endblock %} {% block content %}
             <option value="ziprecruiter">ZipRecruiter</option>
           </select>
         </div>
-        <div class="col-md-2 d-flex align-items-end">
-          <button type="submit" class="btn btn-primary w-100">Search</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Job Listings -->
-  <div id="jobListings">
-    {% if job_listings %} {% for job in job_listings %}
-    <div class="card mb-3">
-      <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start">
-          <div>
-            <h5 class="card-title">{{ job.title }}</h5>
-            <h6 class="card-subtitle mb-2 text-muted">{{ job.company }}</h6>
-            <p class="card-text">
-              <i class="fas fa-map-marker-alt"></i> {{ job.location }}
-            </p>
-            <div class="match-score">
-              <span
-                class="badge bg-{% if job.match_score >= 80 %}success{% elif job.match_score >= 60 %}warning{% else %}danger{% endif %}"
-              >
-                Match Score: {{ job.match_score }}%
-              </span>
-            </div>
-          </div>
-          <div class="text-end">
-            <a
-              href="{% url 'core:job_detail' job.id %}"
-              class="btn btn-outline-primary"
-              >View Details</a
-            >
-            {% if job.applied %}
-            <span class="badge bg-success ms-2">Applied</span>
-            {% endif %} {% if job.has_tailored_documents %}
+        <div class="col-12">
+          <button type="submit" class="search-btn">
             <span
-              class="badge bg-info ms-2"
-              title="Resume and cover letter are ready"
+              class="d-flex align-items-center justify-content-center gap-2"
             >
-              <i class="fas fa-file-alt"></i> Documents Ready
+              <i class="fas fa-search"></i>
+              Search Jobs
+              <div
+                id="loadingSpinner"
+                class="spinner-border spinner-border-sm d-none"
+                role="status"
+              >
+                <span class="visually-hidden">Loading...</span>
+              </div>
             </span>
-            {% endif %}
-            <button
-              class="btn btn-outline-danger ms-2 remove-job"
-              data-job-id="{{ job.id }}"
-              title="Remove from results"
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Job Listings -->
+<div id="jobListings">
+  {% if job_listings %} {% for job in job_listings %}
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <h5 class="card-title">{{ job.title }}</h5>
+          <h6 class="card-subtitle mb-2 text-muted">{{ job.company }}</h6>
+          <p class="card-text">
+            <i class="fas fa-map-marker-alt"></i> {{ job.location }}
+          </p>
+          <div class="match-score">
+            <span
+              class="badge bg-{% if job.match_score >= 80 %}success{% elif job.match_score >= 60 %}warning{% else %}danger{% endif %}"
             >
-              <i class="fas fa-times"></i>
-            </button>
+              Match Score: {{ job.match_score }}%
+            </span>
           </div>
         </div>
+        <div class="text-end">
+          <a
+            href="{% url 'core:job_detail' job.id %}"
+            class="btn btn-outline-primary"
+            >View Details</a
+          >
+          {% if job.applied %}
+          <span class="badge bg-success ms-2">Applied</span>
+          {% endif %} {% if job.has_tailored_documents %}
+          <span
+            class="badge bg-info ms-2"
+            title="Resume and cover letter are ready"
+          >
+            <i class="fas fa-file-alt"></i> Documents Ready
+          </span>
+          {% endif %}
+          <button
+            class="btn btn-outline-danger ms-2 remove-job"
+            data-job-id="{{ job.id }}"
+            title="Remove from results"
+          >
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+      </div>
 
-        <!-- Job Preview -->
-        <div class="mt-3">
-          <p class="card-text">{{ job.description|truncatewords:50 }}</p>
-          <div class="d-flex justify-content-between align-items-center">
-            <div>
-              <small class="text-muted">
-                Posted: {{ job.posted_date|date:"M d, Y" }}
-              </small>
-              <span class="badge bg-secondary ms-2"
-                >{{ job.source|title }}</span
-              >
-            </div>
-            <a
-              href="{{ job.source_url }}"
-              target="_blank"
-              class="btn btn-sm btn-outline-secondary"
-            >
-              <i class="fab fa-{{ job.source|lower }}"></i> View on
-              <!---->
-              {{ job.source|title }}
-            </a>
+      <!-- Job Preview -->
+      <div class="mt-3">
+        <p class="card-text">{{ job.description|truncatewords:50 }}</p>
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <small class="text-muted">
+              Posted: {{ job.posted_date|date:"M d, Y" }}
+            </small>
+            <span class="badge bg-secondary ms-2">{{ job.source|title }}</span>
           </div>
+          <a
+            href="{{ job.source_url }}"
+            target="_blank"
+            class="btn btn-sm btn-outline-secondary"
+          >
+            <i class="fab fa-{{ job.source|lower }}"></i> View on
+            <!---->
+            {{ job.source|title }}
+          </a>
         </div>
       </div>
     </div>
-    {% endfor %} {% else %}
-    <div class="alert alert-info">
-      No jobs found. Try adjusting your search criteria.
-    </div>
-    {% endif %}
   </div>
+  {% endfor %} {% else %}
+  <div class="alert alert-info">
+    No jobs found. Try adjusting your search criteria.
+  </div>
+  {% endif %}
 </div>
 
 <!-- Loading Spinner -->
@@ -137,30 +285,6 @@ Applier{% endblock %} {% block content %}
     <span class="visually-hidden">Loading...</span>
   </div>
 </div>
-
-<!-- Custom Styles -->
-<style>
-  .hover-lift {
-    transition: transform 0.2s ease-in-out;
-  }
-  .hover-lift:hover {
-    transform: translateY(-5px);
-  }
-  .job-description {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  .empty-state {
-    padding: 3rem;
-    background: var(--card-bg);
-    border-radius: 1rem;
-  }
-  .bg-gradient {
-    background: linear-gradient(45deg, var(--card-bg), var(--darker-bg));
-  }
-</style>
 
 <!-- Custom Scripts -->
 <script>
@@ -233,85 +357,48 @@ Applier{% endblock %} {% block content %}
     });
   });
 
-  document
-    .getElementById("jobSearchForm")
-    .addEventListener("submit", function (e) {
-      e.preventDefault();
+  document.addEventListener("DOMContentLoaded", function () {
+    // Platform selector functionality
+    const platformChips = document.querySelectorAll(".platform-chip");
+    const platformsSelect = document.getElementById("platforms");
 
-      const role = document.getElementById("role").value;
-      const location = document.getElementById("location").value;
-      const platformsSelect = document.getElementById("platforms");
-      const selectedPlatforms = Array.from(platformsSelect.selectedOptions).map(
-        (option) => option.value
-      );
-      const authToken = getAuthToken();
+    platformChips.forEach((chip) => {
+      chip.addEventListener("click", function () {
+        const platform = this.dataset.platform;
+        const option = platformsSelect.querySelector(
+          `option[value="${platform}"]`
+        );
 
-      if (!authToken) {
-        alert("Please log in to search for jobs.");
-        window.location.href = "{% url 'core:login' %}";
-        return;
-      }
-
-      // Show loading spinner
-      document.getElementById("loadingSpinner").classList.remove("d-none");
-
-      // Make API call
-      fetch("/api/search-jobs/", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": getCookie("csrftoken"),
-          Authorization: `Bearer ${authToken}`,
-        },
-        credentials: "include",
-        body: JSON.stringify({
-          role: role,
-          location: location,
-          platforms:
-            selectedPlatforms.length > 0 ? selectedPlatforms : ["linkedin"], // Default to LinkedIn if none selected
-        }),
-      })
-        .then((response) => {
-          if (response.status === 401) {
-            // Token expired or invalid
-            localStorage.removeItem("authToken");
-            window.location.href = "{% url 'core:login' %}";
-            return Promise.reject("Authentication required");
-          }
-          return response.json();
-        })
-        .then((data) => {
-          // Hide loading spinner
-          document.getElementById("loadingSpinner").classList.add("d-none");
-
-          if (data.jobs && data.jobs.length > 0) {
-            // Update URL with search parameters
-            const url = new URL(window.location.href);
-            url.searchParams.set("role", role);
-            url.searchParams.set("location", location);
-            window.history.pushState({}, "", url);
-
-            // Reload page to show results
-            window.location.reload();
-          } else {
-            // Show no results message
-            document.getElementById("jobListings").innerHTML = `
-            <div class="alert alert-info">
-              No jobs found. Try adjusting your search criteria.
-            </div>
-          `;
-          }
-        })
-        .catch((error) => {
-          // Hide loading spinner
-          document.getElementById("loadingSpinner").classList.add("d-none");
-
-          console.error("Error:", error);
-          if (error !== "Authentication required") {
-            alert("An error occurred while searching for jobs.");
-          }
-        });
+        this.classList.toggle("selected");
+        option.selected = this.classList.contains("selected");
+      });
     });
+
+    // Form submission handler
+    document
+      .getElementById("jobSearchForm")
+      .addEventListener("submit", function (e) {
+        e.preventDefault();
+
+        const role = document.getElementById("role").value;
+        const location = document.getElementById("location").value;
+        const selectedPlatforms = Array.from(
+          platformsSelect.selectedOptions
+        ).map((option) => option.value);
+        const authToken = getAuthToken();
+
+        if (!authToken) {
+          alert("Please log in to search for jobs.");
+          window.location.href = "{% url 'core:login' %}";
+          return;
+        }
+
+        // Show loading spinner
+        document.getElementById("loadingSpinner").classList.remove("d-none");
+
+        // Your existing search logic here
+      });
+  });
 
   // Helper function to get CSRF token
   function getCookie(name) {

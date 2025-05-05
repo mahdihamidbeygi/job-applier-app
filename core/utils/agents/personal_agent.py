@@ -7,8 +7,6 @@ from typing import Any, Dict, List, Optional
 
 from core.models import JobListing, UserProfile
 from core.utils.agents.base_agent import BaseAgent
-from core.utils.cover_letter_composition import CoverLetterComposition
-from core.utils.resume_composition import ResumeComposition
 
 logger = logging.getLogger(__name__)
 
@@ -26,59 +24,53 @@ class PersonalBackground:
 
 
 class PersonalAgent(BaseAgent):
-    def __init__(self, user_id: int):
+    def __init__(self, user_id: int) -> None:
         super().__init__(user_id)
-        self.background: Optional[PersonalBackground] = None
+        self.load_user_profile()
 
-    def load_background(self, background: PersonalBackground):
-        """Load or update the agent's background knowledge"""
-        self.background = background
+    def load_user_profile(self) -> None:
+        self.user_profile: UserProfile = UserProfile.objects.get(user_id=self.user_id)
         self._initialize_self_knowledge()
 
     def _initialize_self_knowledge(self):
         """Initialize the agent with understanding of its own background"""
-        if not self.background:
-            raise ValueError("Background not loaded. Call load_background first.")
+        if not self.user_profile:
+            raise ValueError("User profile not loaded. Call load_user_profile first.")
 
-        prompt = f"""
+        prompt: str = f"""
         You are now embodying a job applicant with the following background:
         
-        Professional Experience:
-        {self._format_experience(self.background.work_experience)}
-        
-        Education:
-        {self._format_education(self.background.education)}
-        
-        Skills:
-        {', '.join([skill['name'] for skill in self.background.skills])}
-        
-        Projects:
-        {self._format_projects(self.background.projects)}
-        
-        GitHub Activity:
-        {self._format_github_data(self.background.github_data)}
-        
-        Achievements:
-        {', '.join(self.background.achievements)}
+        User Profile: {self.user_profile.get_all_user_info()}
         
         You should respond to questions as if you are this person, maintaining consistency
         with this background while being natural and professional.
         """
 
-        response: str = self.llm.generate(prompt, resp_in_json=False)
+        response: str = self.llm.generate_text(prompt, temperature=0.0)
         self.save_context("Initialize personal background", response)
 
     def get_background_summary(self) -> str:
         """Get a concise summary of the background"""
-        if not self.background:
-            raise ValueError("Background not loaded. Call load_background first.")
+        if not self.user_profile:
+            raise ValueError("Background not loaded. Call load_user_profile first.")
 
         return f"""
-        Professional Experience: {len(self.background.work_experience)} positions
-        Education: {len(self.background.education)} institutions
-        Skills: {len(self.background.skills)} skills
-        Projects: {len(self.background.projects)} projects
+        Professional Experience: {len(self.user_profile.work_experiences.all())} positions
+        Education: {len(self.user_profile.education.all())} institutions
+        Skills: {len(self.user_profile.skills.all())} skills
+        Projects: {len(self.user_profile.projects.all())} projects
         """
+
+    def get_background_str(self) -> str:
+        """Get the background of the user"""
+
+        if not self.get_memory():
+            self._initialize_self_knowledge()
+        return self.get_memory()
+
+    def get_formatted_background(self) -> Dict[str, Any]:
+        """Get the background of the user"""
+        return self.user_profile.get_all_user_info()
 
     def get_relevant_experience(self, context: str) -> str:
         """Get experience relevant to a specific context"""
@@ -86,12 +78,12 @@ class PersonalAgent(BaseAgent):
         Context: {context}
         
         Based on this background:
-        {self.get_background_summary()}
+        {self.get_background_str()}
         
         Provide the most relevant experience and skills for this context.
         """
 
-        return self.llm.generate(prompt)
+        return self.llm.generate_text(prompt)
 
     def _format_experience(self, experience: List[Dict[str, Any]]) -> str:
         return "\n".join(
@@ -119,101 +111,17 @@ class PersonalAgent(BaseAgent):
             ]
         )
 
+    def _format_skills(self, skills: List[Dict[str, Any]]) -> str:
+        return "\n".join(
+            [f"- {skill.get('name', '')} ({skill.get('level', '')})" for skill in skills]
+        )
+
     def _format_github_data(self, github_data: Dict[str, Any]) -> str:
         return f"""
         Repositories: {len(github_data.get('repositories', []))}
         Contributions: {github_data.get('contributions', 0)}
         Languages: {', '.join(github_data.get('languages', []))}
         """
-
-    def generate_tailored_documents(self, job_listing: JobListing) -> bool:
-        """
-        Generate tailored resume and cover letter for a job listing.
-        This can be called separately after job search or via a button click.
-
-        Args:
-            job_listing (JobListing): The job listing to generate documents for
-
-        Returns:
-            bool: True if documents were generated successfully, False otherwise
-        """
-        if not self.background:
-            logger.error(
-                "Cannot generate documents: Background not loaded. Call load_background first."
-            )
-            return False
-
-        try:
-            # Get the UserProfile instance first
-            user_profile: UserProfile = UserProfile.objects.get(user_id=self.user_id)
-
-            # Get personal background
-            background: str = self.get_background_summary()
-
-            # Extract required skills from job description
-            required_skills: List[str] = self._extract_required_skills(job_listing.description)
-
-            # Generate tailored resume
-            resume_composer = ResumeComposition(self)
-            tailored_resume: BytesIO = resume_composer.generate_tailored_resume(
-                job_listing.title,
-                job_listing.company,
-                job_listing.description,
-                required_skills,
-                background,
-            )
-
-            # Save tailored resume
-            if tailored_resume:
-                # Create a safe filename
-                safe_name = "".join(
-                    c for c in user_profile.name if c.isalnum() or c in (" ", "_")
-                ).strip()
-                safe_title = "".join(
-                    c for c in job_listing.title if c.isalnum() or c in (" ", "_")
-                ).strip()
-                safe_company = "".join(
-                    c for c in job_listing.company if c.isalnum() or c in (" ", "_")
-                ).strip()
-
-                # Create a shorter filename using a hash of the components
-                resume_filename = f"{safe_name}_{safe_title[:10]}_{safe_company[:10]}_resume.pdf"
-                job_listing.tailored_resume.save(resume_filename, tailored_resume)
-
-            # Generate tailored cover letter
-            cover_letter_composer = CoverLetterComposition(user_profile, job_listing.description)
-            tailored_cover_letter: BytesIO = cover_letter_composer.generate_tailored_cover_letter(
-                job_listing.title,
-                job_listing.company,
-                job_listing.description,
-                required_skills,
-                background,
-            )
-
-            # Save tailored cover letter
-            if tailored_cover_letter:
-                # Create a safe filename
-                safe_name = "".join(
-                    c for c in user_profile.name if c.isalnum() or c in (" ", "_")
-                ).strip()
-                safe_title = "".join(
-                    c for c in job_listing.title if c.isalnum() or c in (" ", "_")
-                ).strip()
-                safe_company = "".join(
-                    c for c in job_listing.company if c.isalnum() or c in (" ", "_")
-                ).strip()
-                # Create a safe filename
-                cover_letter_filename = (
-                    f"{safe_name}_{safe_title[:10]}_{safe_company[:10]}_cover_letter.pdf"
-                )
-                job_listing.tailored_cover_letter.save(cover_letter_filename, tailored_cover_letter)
-
-            job_listing.save()
-            return True
-
-        except Exception as e:
-            logger.error("Error generating tailored documents: %s", str(e))
-            return False
 
     def _extract_required_skills(self, job_description: str) -> List[str]:
         """Extract required skills from job description using Ollama"""
@@ -228,7 +136,7 @@ class PersonalAgent(BaseAgent):
             Return only the JSON array, no other text. Example format: ["Python", "JavaScript", "React"]
             """
 
-            response = self.llm.generate(prompt)
+            response = self.llm.generate_structured_output(prompt, {"skills": list[str]})
             # Clean the response to ensure it's valid JSON
             response = response.strip()
             if not response.startswith("["):
