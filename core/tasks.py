@@ -3,7 +3,8 @@ import logging
 from core.models import JobListing, UserProfile
 from core.utils.agents.personal_agent import PersonalAgent, PersonalBackground
 from job_applier.celery_config import app
-from .utils.rag.agentic_rag import AgenticRAGProcessor as PrimaryProcessor
+
+from .utils.agents.assistant_agent import AssistantAgent as PrimaryProcessor
 
 logger = logging.getLogger(__name__)
 

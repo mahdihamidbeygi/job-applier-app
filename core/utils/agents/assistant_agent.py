@@ -120,7 +120,7 @@ class AgentState(TypedDict):
 
 
 # --- AgenticRAGProcessor Class (LangGraph) ---
-class AgenticRAGProcessor:
+class AssistantAgent:
     """
     Agentic Retrieval Augmented Generation (RAG) processor using LangGraph.
     """

@@ -42,7 +42,7 @@ from core.serializers import (
     UserProfileSerializer,
     WorkExperienceSerializer,
 )
-from core.utils.rag.agentic_rag import AgenticRAGProcessor
+from core.utils.agents.assistant_agent import AssistantAgent
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -367,7 +367,7 @@ def chat_api(request):
 
         # --- Agentic RAG Integration ---
         # Initialize AgenticRAGProcessor for the current user and conversation
-        agent_processor = AgenticRAGProcessor(user_id=user_id, conversation_id=conversation_id)
+        agent_processor = AssistantAgent(user_id=user_id, conversation_id=conversation_id)
 
         # --- Get Response using Agent ---
         assistant_response_content = agent_processor.run(user_message_content)

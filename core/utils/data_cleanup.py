@@ -7,7 +7,7 @@ from django.db import transaction
 
 from core.models import ChatConversation, JobListing
 from core.models.misc import LangGraphCheckpoint
-from core.utils.rag.agentic_rag import AgenticRAGProcessor  # Or RAGProcessor if you use that
+from core.utils.agents.assistant_agent import AssistantAgent  # Or RAGProcessor if you use that
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -82,7 +82,7 @@ def clear_all_user_data(user_id: int) -> Tuple[bool, str]:
         # Instantiate the processor used (AgenticRAGProcessor seems more current)
         # This will rebuild the vector store based on the now-empty DB records
         try:
-            rag_processor = AgenticRAGProcessor(user_id=user_id)
+            rag_processor = AssistantAgent(user_id=user_id)
             refreshed = rag_processor.refresh_vectorstore()
             if refreshed:
                 logger.info("Successfully refreshed vector store.")
