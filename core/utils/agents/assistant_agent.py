@@ -172,8 +172,8 @@ class AssistantAgent:
 
             llm = ChatGoogleGenerativeAI(
                 # model="gemini-2.5-flash-preview-04-17",
-                model="gemini-1.5-pro",
-                # model="gemini-2.5-flash-preview-04-17",
+                # model="gemini-1.5-pro",
+                model="gemini-2.5-flash-preview-04-17",
                 api_key=settings.GOOGLE_API_KEY,
                 temperature=0.1,
                 # convert_system_message_to_human=True,
@@ -1063,7 +1063,6 @@ class AssistantAgent:
             - Maintain the perspective of being the job applicant throughout all interactions
             - If asked for clarification about your background, experience, or motivations, always retrieve this information from your profile first
             - Be proactive about next steps in YOUR application process
-            - No need to mention Job ID in answering application questions.
             """
 
     def _build_graph(self) -> StateGraph:

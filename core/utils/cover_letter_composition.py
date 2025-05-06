@@ -8,9 +8,9 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.agents.job_agent import JobAgent
-from core.utils.local_llms import GoogleClient, GrokClient
+from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.llm_clients import GoogleClient, GrokClient
 
 logger = logging.getLogger(__name__)
 

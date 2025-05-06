@@ -1,13 +1,10 @@
-import unittest
 import os
+import unittest
 from datetime import date  # Use date for consistency if models use DateField
 from io import BytesIO
 from unittest.mock import Mock, patch  # Import Mock and patch
 
 from core.utils.resume_composition import ResumeComposition
-
-# Assuming PersonalAgent is importable for type hinting, but we'll mock it.
-from core.utils.agents.personal_agent import PersonalAgent
 
 
 # Helper function to create mock model instances with attributes

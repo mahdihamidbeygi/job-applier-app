@@ -159,12 +159,10 @@ class JobAgent(BaseAgent):
         """
         Extract the job details from the text and create a new JobListing.
         """
-        # --- Step 1: Log Input Text ---
         logger.debug(
             f"Attempting to extract job details from text for user {self.user_id}. Text length: {len(text)}"
         )
 
-        # --- Step 2: Prepare Schema and Prompt ---
         job_details_schema: Dict[str, Any] = JobListing.get_schema()["properties"]
         fields_to_exclude = {
             "id",
@@ -178,54 +176,66 @@ class JobAgent(BaseAgent):
             "application_status",
             "match_score",
             "is_active",
-            # 'posted_date', # Keep posted_date if LLM can extract it
         }
         for field in fields_to_exclude:
             job_details_schema.pop(field, None)
 
-        # Updated prompt (as used before)
+        # Update the prompt to enforce strict JSON formatting
         prompt: str = f"""
-            you are an excellent job detail extractor from text.
+            You are an excellent job detail extractor from text.
             Extract the job details from the text below based on the provided schema.
-            Title, company name and description are necessary. it's possible that title or company name isn't explicitly mentioned.
-            Ensure the output is a single, valid JSON object matching the schema structure.
-            **IMPORTANT: For any date fields like 'posted_date', use the 'YYYY-MM-DD' format.**
-            For other empty fields, use null or an appropriate empty value (e.g., "", []).
+            Title, company name and description are necessary. It's possible that title or company name isn't explicitly mentioned.
             
-
+            **CRITICAL: Your output MUST be a single, valid JSON object with ALL property names enclosed in double quotes.**
+            Do not include any explanation, commentary, or additional text before or after the JSON.
+            Format dates like 'posted_date' using the 'YYYY-MM-DD' format.
+            Use null for empty fields, "" for empty strings, and [] for empty arrays.
+            
             Schema properties expected: {list(job_details_schema.keys())}
-
+            
             Text:
             {text}
-
-            Valid JSON Output:"""
+            
+            Output (VALID JSON ONLY):
+        """
 
         try:
-            # --- Step 3: Call LLM ---
-            raw_job_record_dict: Dict[str, Any] = self.llm.generate_structured_output(
+            # Add error handling for the LLM response
+            raw_response = self.llm.generate_text(
                 prompt=prompt,
-                output_schema=job_details_schema,
                 temperature=0.0,
             )
 
-            # --- Step 4: Validate and Clean Data ---
-            job_record_dict = self._validate_and_clean_job_data(raw_job_record_dict)
+            # Try to extract just the JSON part if there's any surrounding text
+            try:
+                import re
 
-            # --- Step 5: Add User ID and Create Record ---
+                json_match = re.search(r"\{.*\}", raw_response, re.DOTALL)
+                if json_match:
+                    json_text = json_match.group(0)
+                else:
+                    json_text = raw_response.strip()
+
+                raw_job_record_dict = json.loads(json_text)
+            except json.JSONDecodeError:
+                # If that fails, try a direct structured output approach
+                raw_job_record_dict = self.llm.generate_structured_output(
+                    prompt=prompt,
+                    output_schema=job_details_schema,
+                    temperature=0.0,
+                )
+
+            # Rest of the method remains the same
+            job_record_dict = self._validate_and_clean_job_data(raw_job_record_dict)
             job_record_dict["user_id"] = self.user_id
             self.job_record = JobListing.objects.create(**job_record_dict)
             logger.info(f"New JobListing created with ID: {self.job_record.id}")
 
-        except (
-            json.JSONDecodeError,
-            TypeError,
-            ValueError,
-        ) as parse_err:  # Catch validation errors too
-            logger.exception(
-                f"Error parsing, validating, or processing LLM output for user {self.user_id}: {parse_err}."
+        except (json.JSONDecodeError, TypeError, ValueError) as parse_err:
+            logger.error(
+                f"Error parsing, validating, or processing LLM output for user {self.user_id}: {parse_err}"
             )
             self.job_record = None
-            # Re-raise as ValueError to be caught by the calling tool function
             raise ValueError(
                 f"LLM failed to produce valid/processable structured output. Error: {parse_err}"
             ) from parse_err
@@ -234,7 +244,7 @@ class JobAgent(BaseAgent):
                 f"Error extracting job details or creating JobListing for user {self.user_id}"
             )
             self.job_record = None
-            raise e  # Re-raise other exceptions
+            raise e
 
     def get_formatted_info(self) -> str:
         """Returns formatted job information string."""

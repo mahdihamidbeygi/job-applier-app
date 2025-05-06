@@ -17,7 +17,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from core.models import JobListing
-from core.utils.local_llms import OllamaClient
+from core.utils.llm_clients import OllamaClient
 
 
 class LinkedInJobScraper:
@@ -149,7 +149,9 @@ class LinkedInJobScraper:
         self.driver.execute_script("window.scrollTo(0, 0);")  # scroll back to the top
         time.sleep(1)
 
-    def search_jobs(self, role: str, location: str, max_pages: int = 3, request=None) -> List[Dict[str, Any]]:
+    def search_jobs(
+        self, role: str, location: str, max_pages: int = 3, request=None
+    ) -> List[Dict[str, Any]]:
         jobs = []
         urls_done = []
         try:
@@ -184,19 +186,21 @@ class LinkedInJobScraper:
                             title=job_details["title"],
                             company=job_details["company"],
                             location=job_details["location"],
-                            source_url=job_details["source_url"]
+                            source_url=job_details["source_url"],
                         ).first()
-                        
+
                         if existing_job:
                             # Skip if job is in hidden jobs list
                             if existing_job.id in hidden_jobs:
                                 continue
-                            job_details["has_tailored_documents"] = existing_job.has_tailored_documents
+                            job_details["has_tailored_documents"] = (
+                                existing_job.has_tailored_documents
+                            )
                             job_details["id"] = existing_job.id  # Add job ID for frontend
                         else:
                             job_details["has_tailored_documents"] = False
                             job_details["id"] = None
-                            
+
                         jobs.append(job_details)
                         urls_done.append(link)
                         time.sleep(2)  # Avoid overwhelming the server

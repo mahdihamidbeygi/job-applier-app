@@ -37,6 +37,7 @@ class JobListing(TimestampMixin):
     job_type = models.CharField(
         max_length=200, blank=True, null=True
     )  # Full-time, Part-time, Contract, etc.
+    benefits = models.TextField(blank=True, null=True)
     experience_level = models.CharField(max_length=200, blank=True, null=True)
     required_skills = models.JSONField(default=list, blank=True, null=True)
     preferred_skills = models.JSONField(default=list, blank=True, null=True)

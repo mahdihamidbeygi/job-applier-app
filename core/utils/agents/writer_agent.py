@@ -19,6 +19,7 @@ from core.utils.cover_letter_composition import CoverLetterComposition
 from core.utils.logging_utils import log_exceptions
 from core.utils.rag.job_knowledge import JobKnowledgeBase
 from core.utils.resume_composition import ResumeComposition
+from core.utils.utilities import clean_string
 
 logger = logging.getLogger(__name__)
 
@@ -575,11 +576,16 @@ class WriterAgent(BaseAgent):
             " ", "_"
         )
         today: str = date.today().strftime("%Y%m%d")
-        company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
+
+        if self.job_agent.job_record.company is None:
+            company_slug = ""
+        else:
+            company_slug = self.job_agent.job_record.company.lower().replace(" ", "_")
+
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")
 
         # Define the file paths
-        cover_letter_filename: str = (
+        cover_letter_filename: str = clean_string(
             f"cover_letter_{username}_{company_slug}_{job_title_slug}_{today}.pdf"
         )
 
@@ -644,11 +650,17 @@ class WriterAgent(BaseAgent):
             " ", "_"
         )
         today: str = date.today().strftime("%Y%m%d")
-        company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
+        if self.job_agent.job_record.company is None:
+            company_slug = ""
+        else:
+            company_slug = self.job_agent.job_record.company.lower().replace(" ", "_")
+
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")
 
         # Define the file paths
-        resume_filename: str = f"resume_{username}_{company_slug}_{job_title_slug}_{today}.pdf"
+        resume_filename: str = clean_string(
+            f"resume_{username}_{company_slug}_{job_title_slug}_{today}.pdf"
+        )
 
         resume_path: str = f"documents/{username}/{resume_filename}"
 

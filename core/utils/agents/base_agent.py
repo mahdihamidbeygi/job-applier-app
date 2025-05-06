@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from langchain.memory import ConversationBufferMemory
 from langchain_core.memory import BaseMemory
 
-from core.utils.local_llms import GoogleClient
+from core.utils.llm_clients import GoogleClient
 
 LLM_CLIENT = GoogleClient
 

@@ -2,8 +2,8 @@ import ast
 import json
 import logging
 import os
-import tempfile
 import shutil
+import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -19,7 +19,7 @@ from django.utils import timezone
 from pdfminer.high_level import extract_text
 from pdfminer.layout import LAParams
 
-from .local_llms import OllamaClient
+from .llm_clients import OllamaClient
 
 logger = logging.getLogger(__name__)
 

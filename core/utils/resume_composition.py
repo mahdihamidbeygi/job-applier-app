@@ -13,7 +13,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from core.utils.agents.personal_agent import PersonalAgent
-from core.utils.local_llms import GoogleClient, OllamaClient
+from core.utils.llm_clients import GoogleClient, OllamaClient
 
 logger = logging.getLogger(__name__)  # <-- Add logger instance
 
@@ -587,6 +587,7 @@ class ResumeComposition:
         1. Analyze the job description and identify key requirements and skills.
         2. Review the candidate's background and identify relevant experience, skills, and projects.
         3. Create a compelling 2-3 sentence professional summary highlighting the most relevant aspects for this specific job.
+        4. Relevant titles to job description should be in the summary if not available, don't mention.
         4. Identify a list of the candidate's skills (from their full list) that are most relevant to this job description (max 15).
         5. Identify a list of the candidate's projects (from their full list) that are most relevant to this job description (max 5).
         6. Ensure the summary maintains the candidate's authentic voice and style.
