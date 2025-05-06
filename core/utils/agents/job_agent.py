@@ -251,3 +251,26 @@ class JobAgent(BaseAgent):
         if self.job_record:
             return self.job_record.get_formatted_info()  # Assuming JobListing has this method
         return "No job record loaded."
+
+    def update_job_record(self, data: Dict[str, Any]) -> None:
+        """
+        Update job listing with new data
+
+        Args:
+            data: Dictionary containing fields to update
+        """
+        if not self.job_record:
+            raise ValueError("No job record loaded.")
+
+        # Validate and clean data
+        validated_data = self.validate_importing_data(data, self._validate_and_clean_job_data)
+
+        # Update job fields
+        for field, value in validated_data.items():
+            if hasattr(self.job_record, field):
+                setattr(self.job_record, field, value)
+
+        # Save changes
+        self.job_record.save()
+
+        logger.info(f"Updated JobListing ID: {self.job_record.id}")

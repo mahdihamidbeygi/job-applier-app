@@ -1,10 +1,13 @@
+import logging
 from dataclasses import dataclass
+from typing import Any, Dict
 
 from langchain.memory import ConversationBufferMemory
 from langchain_core.memory import BaseMemory
 
 from core.utils.llm_clients import GoogleClient
 
+logger = logging.getLogger(__name__)
 LLM_CLIENT = GoogleClient
 
 
@@ -57,3 +60,26 @@ class BaseAgent:
     def clear_memory(self):
         """Clear agent's memory"""
         self.memory_user.clear()
+
+    def validate_importing_data(self, data: Dict[str, Any], validation_func=None) -> Dict[str, Any]:
+        """
+        Generic method to update records with validation
+
+        Args:
+            data: Dictionary of fields to update
+            validation_func: Optional function to validate and clean data
+
+        Returns:
+            Updated data dictionary after validation
+        """
+        try:
+            # Validate and clean data if validation function provided
+            if validation_func and callable(validation_func):
+                validated_data = validation_func(data)
+            else:
+                validated_data = data
+
+            return validated_data
+        except Exception as e:
+            logger.error(f"Error updating record: {str(e)}")
+            raise ValueError(f"Failed to update record: {str(e)}")

@@ -155,3 +155,94 @@ class PersonalAgent(BaseAgent):
         except Exception as e:
             logger.error("Error extracting required skills: %s", str(e))
             return []
+
+    def update_user_profile(self, data: Dict[str, Any]) -> None:
+        """
+        Update user profile with new data
+
+        Args:
+            data: Dictionary containing fields to update
+        """
+        if not self.user_profile:
+            raise ValueError("User profile not loaded. Call load_user_profile first.")
+
+        # Validate and clean data
+        validated_data = self.validate_importing_data(data, self._validate_profile_data)
+
+        # Update profile fields
+        for field, value in validated_data.items():
+            if hasattr(self.user_profile, field):
+                setattr(self.user_profile, field, value)
+
+        # Save changes
+        self.user_profile.save()
+
+        # Update related models if needed
+        self._update_related_models(validated_data)
+
+        # Refresh self-knowledge with updated profile
+        self._initialize_self_knowledge()
+
+        logger.info(f"Updated user profile for user ID: {self.user_id}")
+
+    def _validate_profile_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validates and cleans profile data before updating
+
+        Args:
+            data: Raw update data
+
+        Returns:
+            Cleaned and validated data dictionary
+        """
+        # Deep copy to avoid modifying original
+        cleaned_data = json.loads(json.dumps(data))
+
+        # Handle specific field validations
+        if "skills" in cleaned_data:
+            # Ensure skills is a list of dicts with name and level
+            if isinstance(cleaned_data["skills"], list):
+                for i, skill in enumerate(cleaned_data["skills"]):
+                    if isinstance(skill, str):
+                        cleaned_data["skills"][i] = {"name": skill, "level": "Intermediate"}
+                    elif not isinstance(skill, dict):
+                        cleaned_data["skills"][i] = {"name": str(skill), "level": "Intermediate"}
+
+        # Add more field-specific validations as needed
+
+        return cleaned_data
+
+    def _update_related_models(self, data: Dict[str, Any]) -> None:
+        """
+        Updates related models like work_experience, education, etc.
+
+        Args:
+            data: Validated data dictionary
+        """
+        # Handle related collections like work_experience
+        if "work_experience" in data and isinstance(data["work_experience"], list):
+            # Clear existing and create new
+            self.user_profile.work_experiences.all().delete()
+            for exp in data["work_experience"]:
+                self.user_profile.work_experiences.create(**exp)
+
+        # Handle education
+        if "education" in data and isinstance(data["education"], list):
+            self.user_profile.education.all().delete()
+            for edu in data["education"]:
+                self.user_profile.education.create(**edu)
+
+        # Handle projects
+        if "projects" in data and isinstance(data["projects"], list):
+            self.user_profile.projects.all().delete()
+            for proj in data["projects"]:
+                self.user_profile.projects.create(**proj)
+
+        # Handle skills (assuming skills are validated to be dicts with 'name', 'level')
+        if "skills" in data and isinstance(data["skills"], list):
+            self.user_profile.skills.all().delete()
+            for skill_data in data["skills"]:
+                # Ensure only valid fields for Skill model are passed
+                valid_skill_data = {k: v for k, v in skill_data.items() if k in ["name", "level"]}
+                if "name" in valid_skill_data:  # Ensure name is present
+                    self.user_profile.skills.create(**valid_skill_data)

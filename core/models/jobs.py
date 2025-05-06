@@ -53,6 +53,8 @@ class JobListing(TimestampMixin):
     application_date = models.DateField(null=True, blank=True)
     application_status = models.CharField(max_length=200, blank=True, null=True)
     how_to_apply = models.TextField(blank=True, null=True)
+    stengths = models.JSONField(default=list, blank=True, null=True)
+    gaps = models.JSONField(default=list, blank=True, null=True)
 
     class Meta:
         ordering = ["-posted_date", "-match_score"]

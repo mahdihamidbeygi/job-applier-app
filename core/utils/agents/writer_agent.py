@@ -678,3 +678,60 @@ class WriterAgent(BaseAgent):
             self.job_agent.job_record.save(update_fields=["tailored_resume"])
 
         return default_storage.url(resume_url)
+
+    @log_exceptions(level=logging.ERROR)
+    def generate_application_email(self) -> Dict[str, str]:
+        """
+        Generates a professional email draft for a job application.
+
+        Returns:
+            A dictionary containing the "subject" and "body" of the email.
+        """
+        if not self.personal_agent or not self.personal_agent.user_profile:
+            logger.error("Personal agent or user profile not loaded for email generation.")
+            return {
+                "subject": "Error",
+                "body": "Could not generate email: User profile not available.",
+            }
+        if not self.job_agent or not self.job_agent.job_record:
+            logger.error("Job agent or job record not loaded for email generation.")
+            return {
+                "subject": "Error",
+                "body": "Could not generate email: Job details not available.",
+            }
+
+        user_profile = self.personal_agent.user_profile
+        job_record = self.job_agent.job_record
+
+        user_full_name = user_profile.user.get_full_name()
+        user_email = user_profile.email
+        user_phone = user_profile.phone
+
+        job_title = job_record.title
+        company_name = job_record.company
+
+        subject = f"Application for {job_title} at {company_name} - {user_full_name}"
+
+        body_lines = [
+            "Dear Hiring Manager,",
+            "",
+            f"I am writing to express my keen interest in the {job_title} position at {company_name}, which I learned about through [Source/Platform - e.g., company website, LinkedIn].",
+            "",
+            "My background in [mention 1-2 key areas from your professional summary or relevant skills] and my experience in [mention a key experience from your work history] make me a strong candidate for this role. I am confident that I possess the skills and qualifications necessary to excel and contribute significantly to your team.",
+            "",
+            "My resume and cover letter, which I will attach to this email, provide further detail on my accomplishments and how they align with your requirements.",
+            "",
+            "Thank you for your time and consideration. I look forward to the possibility of discussing this exciting opportunity with you.",
+            "",
+            "Sincerely,",
+            "",
+            user_full_name,
+        ]
+        if user_email:
+            body_lines.append(user_email)
+        if user_phone:
+            body_lines.append(user_phone)
+        if user_profile.linkedin_url:
+            body_lines.append(user_profile.linkedin_url)
+
+        return {"subject": subject, "body": "\n".join(body_lines)}
