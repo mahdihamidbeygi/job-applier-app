@@ -616,11 +616,15 @@ class WriterAgent(BaseAgent):
         )
 
         prompt = f"""
-        Job Description:
+        Job Information:
         {self.job_agent.job_record.get_formatted_info()}
         
         Candidate Background:
         {self.personal_agent.get_background_str()}
+        
+        Matching information:
+        Match score: {self.job_agent.job_record.match_score}
+        Match details: {self.job_agent.job_record.match_details}
         
         Relevant Interview Questions:
         {relevant_questions}
@@ -703,35 +707,59 @@ class WriterAgent(BaseAgent):
         user_profile = self.personal_agent.user_profile
         job_record = self.job_agent.job_record
 
-        user_full_name = user_profile.user.get_full_name()
-        user_email = user_profile.email
-        user_phone = user_profile.phone
+        prompt = f"""
+        You are an expert at crafting professional job application emails.
+        Generate an email for a job application based on the following information:
 
-        job_title = job_record.title
-        company_name = job_record.company
+        Applicant Information:
+        - Full Name: {user_profile.user.get_full_name()}
+        - Email: {user_profile.email}
+        - Phone: {user_profile.phone or 'Not provided'}
+        - LinkedIn: {user_profile.linkedin_url or 'Not provided'}
+        - Professional Summary: {user_profile.professional_summary or 'Not provided'}
+        - Key Skills/Experience (select 2-3 most relevant for the job): {self.personal_agent.get_relevant_experience(job_record.title + " " + (job_record.description or ""))}
 
-        subject = f"Application for {job_title} at {company_name} - {user_full_name}"
+        Job Information:
+        - Job Title: {job_record.title}
+        - Company Name: {job_record.company}
+        - Where the job was found (placeholder): [Source/Platform - e.g., company website, LinkedIn]
 
-        body_lines = [
-            "Dear Hiring Manager,",
-            "",
-            f"I am writing to express my keen interest in the {job_title} position at {company_name}, which I learned about through [Source/Platform - e.g., company website, LinkedIn].",
-            "",
-            "My background in [mention 1-2 key areas from your professional summary or relevant skills] and my experience in [mention a key experience from your work history] make me a strong candidate for this role. I am confident that I possess the skills and qualifications necessary to excel and contribute significantly to your team.",
-            "",
-            "My resume and cover letter, which I will attach to this email, provide further detail on my accomplishments and how they align with your requirements.",
-            "",
-            "Thank you for your time and consideration. I look forward to the possibility of discussing this exciting opportunity with you.",
-            "",
-            "Sincerely,",
-            "",
-            user_full_name,
-        ]
-        if user_email:
-            body_lines.append(user_email)
-        if user_phone:
-            body_lines.append(user_phone)
-        if user_profile.linkedin_url:
-            body_lines.append(user_profile.linkedin_url)
+        Instructions for the email:
+        1.  The email should be addressed to "Dear Hiring Manager,".
+        2.  Start by expressing keen interest in the specific job title and company. Mention the placeholder for where the job was found.
+        3.  Briefly highlight 1-2 key areas from the applicant's background/summary and a key experience that makes them a strong candidate.
+        4.  Mention that the resume and cover letter (which will be attached) provide further details.
+        5.  Express gratitude for time and consideration, and look forward to discussing the opportunity.
+        6.  End with "Sincerely," followed by the applicant's full name, email, phone (if available), and LinkedIn URL (if available).
+        7.  The tone should be professional, enthusiastic, and concise.
+        8.  The output should be a JSON object with two keys: "subject" and "body".
+            - The "subject" should be: "Application for [Job Title] at [Company Name] - [Applicant Full Name]"
+            - The "body" should be the full email text as a single string with newline characters (\\n) for line breaks.
 
-        return {"subject": subject, "body": "\n".join(body_lines)}
+        Example of desired output format:
+        {{
+            "subject": "Application for Software Engineer at Tech Solutions - John Doe",
+            "body": "Dear Hiring Manager,\\n\\nI am writing to express my keen interest...\\n\\nSincerely,\\nJohn Doe\\n..."
+        }}
+        """
+
+        try:
+            response_str = self.llm.generate_text(
+                prompt=prompt,
+                max_tokens=700,  # Adjusted for potentially longer email content
+                temperature=0.3,
+            )
+            if response_str:
+                import json  # Make sure json is imported
+
+                email_data = json.loads(response_str)
+                return {
+                    "subject": email_data.get("subject", ""),
+                    "body": email_data.get("body", ""),
+                }
+            else:
+                logger.error("LLM returned an empty response for email generation.")
+                return {"subject": "Error", "body": "Could not generate email: LLM failed."}
+        except Exception as e:
+            logger.error(f"Error generating email with LLM: {e}")
+            return {"subject": "Error", "body": f"Could not generate email: {e}"}

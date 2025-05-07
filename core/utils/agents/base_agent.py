@@ -83,3 +83,51 @@ class BaseAgent:
         except Exception as e:
             logger.error(f"Error updating record: {str(e)}")
             raise ValueError(f"Failed to update record: {str(e)}")
+
+    def update_with_form(self, instance, form_class, data, partial=False):
+        """
+        Update a model instance using Django ModelForm validation
+
+        Args:
+            instance: The model instance to update (or None for create)
+            form_class: Django ModelForm class to use for validation
+            data: Dictionary containing fields to update
+            partial: Whether this is a partial update (only update specified fields)
+
+        Returns:
+            Tuple of (bool success, updated_instance or form, str error_message)
+        """
+        try:
+            if partial and instance:
+                # For partial updates, first create an empty form to get the fields
+                empty_form = form_class(instance=instance)
+
+                # Get the initial data from the instance
+                initial_data = {}
+                for field_name in empty_form.fields:
+                    if hasattr(empty_form, "initial") and field_name in empty_form.initial:
+                        initial_data[field_name] = empty_form.initial[field_name]
+
+                # Update only the fields provided in data
+                initial_data.update(data)
+
+                # Create the form with the combined data
+                form = form_class(initial_data, instance=instance)
+            else:
+                # For full updates, use the provided data directly
+                form = form_class(data, instance=instance)
+
+            if form.is_valid():
+                updated_instance = form.save()
+                logger.info(
+                    f"Successfully updated {form_class.__name__} instance ID: {instance.id if instance else 'new'}"
+                )
+                return True, updated_instance, ""
+            else:
+                error_msg = f"Validation failed: {form.errors}"
+                logger.warning(f"Form validation failed for {form_class.__name__}: {form.errors}")
+                return False, form, error_msg
+
+        except Exception as e:
+            logger.error(f"Error updating with form: {str(e)}")
+            return False, instance, f"Update failed: {str(e)}"

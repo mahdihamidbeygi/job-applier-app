@@ -2,13 +2,14 @@
 Job agent for each job listing.
 """
 
-import datetime
 import json
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
+from _collections_abc import dict_items
 from django.shortcuts import get_object_or_404
 
+from core.forms import JobListingForm
 from core.models.jobs import JobListing
 from core.utils.agents.base_agent import BaseAgent
 
@@ -47,13 +48,16 @@ class JobAgent(BaseAgent):
             # If neither job_id nor text is provided, raise an error
             raise ValueError("Either job_id or text must be provided to JobAgent")
 
-    def _validate_and_clean_job_data(self, job_data: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_and_clean_job_data(
+        self, job_data: Dict[str, Any], is_update: bool = False
+    ) -> Dict[str, Any]:
         """
         Validates and cleans the job data dictionary extracted by the LLM
         before saving it to the JobListing model.
 
         Args:
             job_data: The dictionary returned by the LLM.
+            is_update: Boolean flag, True if called during an update operation.
 
         Returns:
             A cleaned and validated dictionary, ready for model creation.
@@ -65,95 +69,106 @@ class JobAgent(BaseAgent):
             )
             raise TypeError("LLM structured output was not a dictionary.")
 
-        cleaned_data = job_data.copy()  # Work on a copy
+        # For updates, we only want to process fields present in job_data.
+        # For creates, job_data comes from LLM and might need defaults for missing required fields.
+        processed_data: Dict[str, Any] = {}
 
-        # --- 1. Handle Required Fields (Based on JobListing model) ---
-        required_text_fields = {
-            "description": "No description provided",
-            # Add other fields from JobListing that are NOT nullable/blankable
-        }
+        # Fields to iterate over: if update, only those in job_data. If create, all potential fields from schema.
+        # However, simpler to iterate job_data and then add defaults for create if missing.
 
-        for field, default_value in required_text_fields.items():
-            value = cleaned_data.get(field)
-            if not value or not isinstance(value, str) or not value.strip():
-                logger.warning(
-                    f"LLM did not extract required field '{field}' or it was empty. Setting to default: '{default_value}'."
-                )
-                cleaned_data[field] = default_value
-            else:
-                cleaned_data[field] = value.strip()  # Trim whitespace
+        # Initial population of processed_data for iteration
+        # This ensures we only operate on fields intended for update, or all fields from LLM for create.
+        source_data_iterator: dict_items[str, Any] = job_data.items()
 
-        # --- 2. Clean Specific Field Types ---
-        for key, value in cleaned_data.items():
-            # Trim other string fields
-            if isinstance(value, str):
-                cleaned_data[key] = value.strip()
+        for field_name, raw_value in source_data_iterator:
+            cleaned_value = raw_value
+
+            if isinstance(cleaned_value, str):
+                cleaned_value = cleaned_value.strip()
 
             # Clean date fields (remove "None" strings, etc.)
             # Note: The JobListing model uses DateField, not DateTimeField.
             # Let the model handle actual date parsing from string if possible.
             elif (
-                "date" in key.lower()
-                and isinstance(value, str)
-                and ("None" in value or not value.strip())
+                "date" in field_name.lower()
+                and isinstance(cleaned_value, str)
+                and ("None" in cleaned_value or not cleaned_value.strip())
             ):
-                cleaned_data[key] = None  # Set to None for the model
+                cleaned_value = None  # Set to None for the model
 
             # Ensure list fields (skills) are lists
-            elif key in ["required_skills", "preferred_skills"]:
-                if isinstance(value, str):
+            elif field_name in ["required_skills", "preferred_skills"]:
+                if isinstance(cleaned_value, str):
                     try:
                         # Try parsing if it looks like JSON list
-                        if value.strip().startswith("[") and value.strip().endswith("]"):
-                            parsed_list = json.loads(value)
-                            cleaned_data[key] = parsed_list if isinstance(parsed_list, list) else []
+                        if cleaned_value.strip().startswith("[") and cleaned_value.strip().endswith(
+                            "]"
+                        ):
+                            parsed_list = json.loads(cleaned_value)
+                            cleaned_value = parsed_list if isinstance(parsed_list, list) else []
                         # Try splitting if comma-separated
-                        elif "," in value:
-                            cleaned_data[key] = [
-                                item.strip() for item in value.split(",") if item.strip()
+                        elif "," in cleaned_value:
+                            cleaned_value = [
+                                item.strip() for item in cleaned_value.split(",") if item.strip()
                             ]
                         # Otherwise, treat as single item list if not empty
-                        elif value.strip():
-                            cleaned_data[key] = [value.strip()]
+                        elif cleaned_value.strip():
+                            cleaned_value = [cleaned_value.strip()]
                         else:
-                            cleaned_data[key] = []
+                            cleaned_value = []
                     except json.JSONDecodeError:
                         logger.warning(
-                            f"Failed to parse string '{value}' as list for field '{key}'. Defaulting to empty list."
+                            f"Failed to parse string '{raw_value}' as list for field '{field_name}'. Defaulting to empty list."
                         )
-                        cleaned_data[key] = []
-                elif value is None:
-                    cleaned_data[key] = []  # Ensure None becomes empty list
-                elif not isinstance(value, list):
+                        cleaned_value = []
+                elif cleaned_value is None:  # If explicitly passed as None (e.g. in an update)
+                    cleaned_value = []
+                elif not isinstance(cleaned_value, list):
                     logger.warning(
-                        f"Field '{key}' was not a list or string ({type(value)}). Converting to list."
+                        f"Field '{field_name}' was not a list, string, or None ({type(raw_value)}). Attempting conversion."
                     )
                     # Attempt conversion, default to empty list on failure
                     try:
-                        cleaned_data[key] = [str(value)] if value is not None else []
+                        cleaned_value = [str(cleaned_value)] if cleaned_value is not None else []
                     except:
-                        cleaned_data[key] = []
+                        cleaned_value = []
 
-        # --- 3. Ensure Default Empty Lists for JSONFields ---
-        # If skills fields are missing entirely, default them to empty lists
-        for key in ["required_skills", "preferred_skills"]:
-            if key not in cleaned_data or cleaned_data[key] is None:
-                cleaned_data[key] = []
-            # Final check to ensure it's a list
-            elif not isinstance(cleaned_data[key], list):
-                logger.error(
-                    f"Post-cleaning, field '{key}' is still not a list ({type(cleaned_data[key])}). Forcing empty list."
+            processed_data[field_name] = cleaned_value
+
+        # For create operations (not updates), apply defaults for critical missing fields
+        if not is_update:
+            if (
+                "description" not in processed_data
+                or not processed_data.get("description", "").strip()
+            ):
+                logger.warning(
+                    "LLM did not extract 'description' or it was empty. Setting to default."
                 )
-                cleaned_data[key] = []
+                processed_data["description"] = "No description provided by LLM."
+
+            for skill_field in ["required_skills", "preferred_skills"]:
+                if skill_field not in processed_data or processed_data[skill_field] is None:
+                    processed_data[skill_field] = []
+                elif not isinstance(processed_data[skill_field], list):  # Ensure it became a list
+                    logger.warning(
+                        f"Field '{skill_field}' was not a list after initial pass. Forcing to empty list for creation."
+                    )
+                    processed_data[skill_field] = []
 
         # --- 4. Add any other model-specific validation ---
         # Example: Check length constraints if needed (though DB handles this)
-        max_len = JobListing._meta.get_field("title").max_length
-        if len(cleaned_data.get("title", "")) > max_len:
-            logger.warning(f"Field 'title' exceeds max length {max_len}. Truncating.")
-            cleaned_data["title"] = cleaned_data["title"][:max_len]
+        if "title" in processed_data:  # Only if title is being processed
+            max_len = JobListing._meta.get_field("title").max_length
+            if len(processed_data.get("title", "")) > max_len:
+                logger.warning(f"Field 'title' exceeds max length {max_len}. Truncating.")
+                processed_data["title"] = processed_data["title"][:max_len]
+        elif not is_update and (
+            "title" not in processed_data or not processed_data.get("title", "").strip()
+        ):
+            logger.warning("LLM did not extract 'title'. Setting to default for creation.")
+            processed_data["title"] = "Untitled Job"
 
-        return cleaned_data
+        return processed_data
 
     def _extract_job_details_from_text(self, text: str) -> None:
         """
@@ -226,7 +241,9 @@ class JobAgent(BaseAgent):
                 )
 
             # Rest of the method remains the same
-            job_record_dict = self._validate_and_clean_job_data(raw_job_record_dict)
+            job_record_dict: Dict[str, Any] = self._validate_and_clean_job_data(
+                raw_job_record_dict, is_update=False
+            )
             job_record_dict["user_id"] = self.user_id
             self.job_record = JobListing.objects.create(**job_record_dict)
             logger.info(f"New JobListing created with ID: {self.job_record.id}")
@@ -252,25 +269,402 @@ class JobAgent(BaseAgent):
             return self.job_record.get_formatted_info()  # Assuming JobListing has this method
         return "No job record loaded."
 
-    def update_job_record(self, data: Dict[str, Any]) -> None:
+    def update_job_listing(self, data: Dict[str, Any]) -> Tuple[bool, str]:
         """
-        Update job listing with new data
+        Update job listing using Django form (partial update)
 
         Args:
-            data: Dictionary containing fields to update
+            data: Dictionary with job listing fields to update
+
+        Returns:
+            Tuple of (bool success, str message)
         """
         if not self.job_record:
             raise ValueError("No job record loaded.")
 
-        # Validate and clean data
-        validated_data = self.validate_importing_data(data, self._validate_and_clean_job_data)
+        try:
+            # Start with the existing data from the model instance
+            # This ensures we don't lose existing values
+            existing_data = {}
+            for field in self.job_record._meta.fields:
+                field_name = field.name
+                existing_data[field_name] = getattr(self.job_record, field_name)
 
-        # Update job fields
-        for field, value in validated_data.items():
-            if hasattr(self.job_record, field):
-                setattr(self.job_record, field, value)
+            # Only update fields that are provided in the input data
+            # This preserves existing values for fields not in the input
+            update_data = {**existing_data}
+            for key, value in data.items():
+                if key in update_data:
+                    update_data[key] = value
 
-        # Save changes
-        self.job_record.save()
+            # Create form with the merged data and instance
+            form = JobListingForm(data=update_data, instance=self.job_record)
 
-        logger.info(f"Updated JobListing ID: {self.job_record.id}")
+            if form.is_valid():
+                # Save the form
+                self.job_record = form.save(commit=False)
+
+                # Ensure user relationship is maintained
+                if self.user_id:
+                    self.job_record.user_id = self.user_id
+
+                # Save the record
+                self.job_record.save()
+
+                logger.info(f"Updated JobListing ID: {self.job_record.id}")
+                return True, "Job listing updated successfully"
+            else:
+                error_msg = f"Validation failed: {form.errors}"
+                logger.warning(f"Form validation failed: {form.errors}")
+                return False, error_msg
+
+        except Exception as e:
+            logger.error(f"Error updating job listing: {str(e)}")
+            return False, f"Failed to update job listing: {str(e)}"
+
+    def calculate_match_score(self, user_background: str) -> tuple[int, str]:
+        """
+        Calculates a matching score between the user's background and the current job record.
+
+        This method uses deterministic rules and rubrics to analyze the job's criteria
+        against the user's provided background information. It extracts a numerical match score,
+        identifies strengths (matching skills/experiences), and potential gaps.
+        The calculated score and details are then saved to the job record.
+
+        Args:
+            user_background: A string (typically JSON formatted) representing the user's professional
+                            background, skills, and experiences.
+
+        Returns:
+            A tuple containing:
+                - int: The calculated match score (0-100).
+                - str: A detailed explanation of the match, including strengths and gaps.
+        """
+        # Parse user background if it's a string
+        if isinstance(user_background, str):
+            try:
+                user_data = json.loads(user_background)
+            except json.JSONDecodeError:
+                # If it's not valid JSON, keep it as a string
+                user_data = user_background
+        else:
+            user_data = user_background
+
+        # Extract job requirements and skills
+        required_skills = (
+            self.job_record.required_skills if hasattr(self.job_record, "required_skills") else []
+        )
+        preferred_skills = (
+            self.job_record.preferred_skills if hasattr(self.job_record, "preferred_skills") else []
+        )
+        job_description = self.job_record.description
+
+        # Create a deterministic scoring rubric
+        scoring_rubric = {
+            "required_skills_match": {"weight": 45, "score": 0},  # 45% weight
+            "preferred_skills_match": {"weight": 25, "score": 0},  # 25% weight
+            "experience_match": {"weight": 20, "score": 0},  # 20% weight
+            "education_match": {"weight": 10, "score": 0},  # 10% weight
+        }
+
+        # Extract user skills from background
+        user_skills = []
+        if isinstance(user_data, dict):
+            # Try to extract skills from structured data
+            user_skills = user_data.get("skills", [])
+            if isinstance(user_skills, str):
+                user_skills = [s.strip() for s in user_skills.split(",")]
+
+        # Match required skills
+        required_matches = []
+        required_gaps = []
+
+        if required_skills:
+            for skill in required_skills:
+                skill_lower = skill.lower()
+                # Check if skill is in user's explicit skills list
+                skill_found = False
+
+                # Direct match in skills list
+                if isinstance(user_skills, list):
+                    for user_skill in user_skills:
+                        if isinstance(user_skill, str) and skill_lower in user_skill.lower():
+                            required_matches.append(skill)
+                            skill_found = True
+                            break
+
+                # If still not found, check in the entire background
+                if not skill_found:
+                    if (isinstance(user_data, str) and skill_lower in user_data.lower()) or (
+                        isinstance(user_data, dict)
+                        and any(
+                            skill_lower in str(val).lower() for val in user_data.values() if val
+                        )
+                    ):
+                        required_matches.append(skill)
+                    else:
+                        required_gaps.append(skill)
+
+        # Calculate required skills score (higher weight)
+        if required_skills:
+            scoring_rubric["required_skills_match"]["score"] = (
+                len(required_matches) / len(required_skills)
+            ) * 100
+        else:
+            scoring_rubric["required_skills_match"][
+                "score"
+            ] = 100  # No required skills = full score
+
+        # Match preferred skills (similar approach)
+        preferred_matches = []
+        preferred_gaps = []
+
+        if preferred_skills:
+            for skill in preferred_skills:
+                skill_lower = skill.lower()
+                # Check if skill is in user's explicit skills list
+                skill_found = False
+
+                # Direct match in skills list
+                if isinstance(user_skills, list):
+                    for user_skill in user_skills:
+                        if isinstance(user_skill, str) and skill_lower in user_skill.lower():
+                            preferred_matches.append(skill)
+                            skill_found = True
+                            break
+
+                # If still not found, check in the entire background
+                if not skill_found:
+                    if (isinstance(user_data, str) and skill_lower in user_data.lower()) or (
+                        isinstance(user_data, dict)
+                        and any(
+                            skill_lower in str(val).lower() for val in user_data.values() if val
+                        )
+                    ):
+                        preferred_matches.append(skill)
+                    else:
+                        preferred_gaps.append(skill)
+
+        # Calculate preferred skills score (less weight)
+        if preferred_skills:
+            scoring_rubric["preferred_skills_match"]["score"] = (
+                len(preferred_matches) / len(preferred_skills)
+            ) * 100
+        else:
+            scoring_rubric["preferred_skills_match"][
+                "score"
+            ] = 100  # No preferred skills = full score
+
+        # Education match - simplified for deterministic approach
+        education_required = False
+        education_level_required = "none"
+
+        # Look for education requirements in description
+        edu_terms = ["bachelor", "master", "phd", "degree", "diploma", "certification"]
+        edu_found = False
+
+        for term in edu_terms:
+            if term in job_description.lower():
+                education_required = True
+                if "bachelor" in job_description.lower():
+                    education_level_required = "bachelor"
+                elif "master" in job_description.lower() or "mba" in job_description.lower():
+                    education_level_required = "master"
+                elif "phd" in job_description.lower() or "doctorate" in job_description.lower():
+                    education_level_required = "phd"
+                edu_found = True
+                break
+
+        # Check user education
+        has_education = False
+        education_level = "none"
+
+        if isinstance(user_data, dict) and "education" in user_data:
+            has_education = True
+            user_education = user_data["education"]
+
+            # Check education level
+            if isinstance(user_education, list) and user_education:
+                # Use the highest education level if multiple entries
+                for edu in user_education:
+                    edu_str = str(edu).lower()
+                    if "phd" in edu_str or "doctorate" in edu_str:
+                        education_level = "phd"
+                        break
+                    elif "master" in edu_str or "mba" in edu_str:
+                        education_level = "master"
+                        # Keep looking for PhD
+                    elif "bachelor" in edu_str or "bs" in edu_str or "ba" in edu_str:
+                        education_level = "bachelor"
+                        # Keep looking for higher degrees
+            elif isinstance(user_education, str):
+                edu_str = user_education.lower()
+                if "phd" in edu_str or "doctorate" in edu_str:
+                    education_level = "phd"
+                elif "master" in edu_str or "mba" in edu_str:
+                    education_level = "master"
+                elif "bachelor" in edu_str or "bs" in edu_str or "ba" in edu_str:
+                    education_level = "bachelor"
+
+        # Score education match
+        education_score = 0
+        if not education_required:
+            education_score = 100
+        else:
+            education_levels = {"none": 0, "bachelor": 60, "master": 80, "phd": 100}
+            required_level_score = education_levels.get(education_level_required, 0)
+            user_level_score = education_levels.get(education_level, 0)
+
+            # If user education meets or exceeds requirement
+            if user_level_score >= required_level_score:
+                education_score = 100
+            else:
+                # Partial credit
+                education_score = (
+                    (user_level_score / required_level_score) * 100
+                    if required_level_score > 0
+                    else 0
+                )
+
+        scoring_rubric["education_match"]["score"] = education_score
+
+        # Experience match - looking for years of experience
+        import re
+
+        # Extract years of experience required from job description
+        experience_required = 0
+        experience_patterns = [
+            r"(\d+)[\+]?\s*(?:years|yrs)(?:\s+of)?\s+experience",
+            r"experience\D+(\d+)[\+]?\s*(?:years|yrs)",
+            r"minimum\s+of\s+(\d+)[\+]?\s*(?:years|yrs)",
+        ]
+
+        for pattern in experience_patterns:
+            match = re.search(pattern, job_description.lower())
+            if match:
+                experience_required = int(match.group(1))
+                break
+
+        # Extract user's years of experience
+        user_experience = 0
+        if isinstance(user_data, dict):
+            if "experience" in user_data:
+                # If it's a list of experience entries
+                if isinstance(user_data["experience"], list):
+                    # Sum up years in each experience entry, or count number of entries as a proxy
+                    for exp in user_data["experience"]:
+                        if isinstance(exp, dict) and "years" in exp:
+                            try:
+                                user_experience += float(exp["years"])
+                            except (ValueError, TypeError):
+                                # If years can't be parsed, count as 1 year per entry
+                                user_experience += 1
+                        else:
+                            # Count each entry as 1 year if no explicit duration
+                            user_experience += 1
+                elif isinstance(user_data["experience"], (int, float)):
+                    user_experience = float(user_data["experience"])
+                elif isinstance(user_data["experience"], str):
+                    # Try to extract years from a string like "5 years of experience"
+                    match = re.search(
+                        r"(\d+)[\+]?\s*(?:years|yrs)", user_data["experience"].lower()
+                    )
+                    if match:
+                        user_experience = int(match.group(1))
+                    else:
+                        # If no years mentioned, count as 1 year
+                        user_experience = 1
+
+        # Calculate experience score
+        if experience_required == 0:
+            experience_score = 100  # No experience required = full score
+        else:
+            # Calculate percentage, max out at 100%
+            experience_score = min(100, (user_experience / experience_required) * 100)
+
+        scoring_rubric["experience_match"]["score"] = experience_score
+
+        # Calculate weighted average score
+        total_score = sum(item["weight"] * item["score"] / 100 for item in scoring_rubric.values())
+
+        # Round to the nearest integer
+        match_score = round(total_score)
+
+        # Format detailed explanation
+        strengths = []
+        gaps = []
+
+        # Add required skills matches to strengths
+        for skill in required_matches:
+            strengths.append(f"Matches required skill: {skill}")
+
+        # Add preferred skills matches to strengths
+        for skill in preferred_matches:
+            strengths.append(f"Matches preferred skill: {skill}")
+
+        # Add education strength if applicable
+        if education_required and education_score > 50:
+            strengths.append(f"Education requirement met: {education_level}")
+
+        # Add experience strength if applicable
+        if experience_score > 50:
+            strengths.append(
+                f"Experience requirement met: {user_experience} years (required: {experience_required})"
+            )
+
+        # Add required skills gaps
+        for skill in required_gaps:
+            gaps.append(f"Missing required skill: {skill}")
+
+        # Add preferred skills gaps
+        for skill in preferred_gaps:
+            gaps.append(f"Missing preferred skill: {skill}")
+
+        # Add education gap if applicable
+        if education_required and education_score <= 50:
+            gaps.append(f"Education gap: {education_level_required} degree required")
+
+        # Add experience gap if applicable
+        if experience_score <= 50 and experience_required > 0:
+            gaps.append(
+                f"Experience gap: {experience_required} years required, {user_experience} years found"
+            )
+
+        # If no specific strengths identified
+        if not strengths:
+            strengths = ["No specific strengths identified."]
+
+        # If no specific gaps identified
+        if not gaps:
+            gaps = ["No specific gaps identified."]
+
+        # Format details
+        details = "Strengths:\n"
+        for strength in strengths:
+            details += f"- {strength}\n"
+
+        details += "\nPotential Gaps:\n"
+        for gap in gaps:
+            details += f"- {gap}\n"
+
+        # Add scoring breakdown for transparency
+        details += "\nScoring Breakdown:\n"
+        for category, data in scoring_rubric.items():
+            details += f"- {category.replace('_', ' ').title()}: {data['score']:.1f}% (Weight: {data['weight']}%)\n"
+        details += f"- Overall Match Score: {match_score}%\n"
+
+        # Save detailed match information to the job listing
+        details_json = json.dumps(
+            {
+                "strengths": strengths,
+                "gaps": gaps,
+                "scoring_rubric": {
+                    k: {"score": v["score"], "weight": v["weight"]}
+                    for k, v in scoring_rubric.items()
+                },
+            }
+        )
+
+        self.update_job_listing({"match_score": match_score, "match_details": details_json})
+
+        return (match_score, details)

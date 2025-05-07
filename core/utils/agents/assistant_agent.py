@@ -816,75 +816,8 @@ class AssistantAgent:
 
             job_agent = JobAgent(user_id=self.user_id, job_id=job_id)
 
-            # Extract job requirements and skills
-            job_requirements: str | None = (
-                job_agent.job_record.requirements
-                if hasattr(job_agent.job_record, "requirements")
-                else None
-            )
-            job_skills = (
-                job_agent.job_record.skills if hasattr(job_agent.job_record, "skills") else None
-            )
-            job_description = job_agent.job_record.description
-
-            # Combine job requirements for analysis
-            job_criteria = f"""
-            Title: {job_agent.job_record.title}
-            Company: {job_agent.job_record.company}
-            Description: {job_description}
-            Requirements: {job_requirements}
-            Skills: {job_skills}
-            """
-
-            # Use LLM to perform the matching analysis
-            prompt = f"""
-            Analyze the match between a job candidate's background and a job posting.
-            
-            JOB POSTING:
-            {job_criteria}
-            
-            CANDIDATE BACKGROUND:
-            {json.dumps(user_background, indent=2)}
-            
-            Provide:
-            1. An overall match percentage score (0-100%)
-            2. A breakdown of strengths (skills/experiences that match well)
-            3. A list of potential gaps (requirements not clearly met)
-            4. Format your response as a JSON object with keys: "match_score", "strengths", "gaps"
-            """
-
-            # Get analysis from LLM
-            response: BaseMessage = self.llm.invoke(prompt)
-
-            # Parse the response - assuming it returns valid JSON
-            try:
-                match_analysis = json.loads(response.content)
-                score = match_analysis.get("match_score", 0)
-
-                # Format detailed explanation
-                details = "Strengths:\n"
-                for strength in match_analysis.get("strengths", []):
-                    details += f"- {strength}\n"
-
-                details += "\nPotential Gaps:\n"
-                for gap in match_analysis.get("gaps", []):
-                    details += f"- {gap}\n"
-
-                job_agent.update_job_record(match_analysis)
-
-                return (score, details)
-
-            except json.JSONDecodeError:
-                # Fallback if LLM doesn't return valid JSON
-                logger.error("LLM didn't return valid JSON for match analysis")
-
-                # Extract score using regex as fallback
-                import re
-
-                score_match = re.search(r"(\d+)%", response.content)
-                score = int(score_match.group(1)) if score_match else 50
-
-                return (score, response.content)
+            score, details = job_agent.calculate_match_score(user_background)
+            return (score, details)
 
         except Exception as e:
             logger.exception(f"Error calculating job match score: {str(e)}")
