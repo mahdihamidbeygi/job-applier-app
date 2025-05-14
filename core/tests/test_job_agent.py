@@ -188,7 +188,7 @@ def test_calculate_match_score():
     personal_agent = PersonalAgent(user_id=1)
     user_background: Dict[str, Any] = personal_agent.get_formatted_background()
 
-    job_agent = JobAgent(user_id=1, job_id=225)
+    job_agent = JobAgent(user_id=1, job_id=346)
 
     score, details = job_agent.calculate_match_score(user_background)
     return (score, details)
@@ -196,3 +196,4 @@ def test_calculate_match_score():
 
 if __name__ == "__main__":
     run_test()
+    test_calculate_match_score()

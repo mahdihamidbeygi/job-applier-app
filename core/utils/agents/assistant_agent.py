@@ -188,7 +188,7 @@ class AssistantAgent:
             llm = ChatGoogleGenerativeAI(
                 # model="gemini-2.5-flash-preview-04-17",
                 # model="gemini-1.5-pro",
-                model="gemini-2.5-flash-preview-04-17",
+                model="gemini-2.5-pro-preview-05-06",
                 api_key=settings.GOOGLE_API_KEY,
                 temperature=0.1,
                 # convert_system_message_to_human=True,
@@ -199,7 +199,6 @@ class AssistantAgent:
             raise
 
     def _initialize_vectorstore(self, exclude_conversations: bool = False):
-        """Initialize or load the vector store."""
         """Initialize or load the vector store.
 
         Args:
@@ -787,10 +786,17 @@ class AssistantAgent:
             answer = writer_agent.generate_answer(question)
 
             if answer:
+                if "Unable to generate an answer." in answer or "Error:" in answer:
+                    logger.warning(
+                        f"AssistantAgent: WriterAgent failed to generate a specific answer for question '{question}' for job {job_id}. Response: {answer}"
+                    )
+                    return f'I was still unable to generate an answer for the question "{question}" for this job. It seems there\'s an ongoing issue with that specific request.\n\nWould you like me to try generating an answer for a different question for this job, or perhaps try generating an answer for the "{question}" question for a different job?'
                 return f"Here's a suggested answer for your application to '{job_listing.title}' at '{job_listing.company}':\n\n{answer}"
             else:
-                logger.error(f"WriterAgent failed to generate answer for job {job_id}")
-                return "Sorry, I encountered an issue while generating your answer."
+                logger.error(
+                    f"AssistantAgent: WriterAgent returned None or empty for question '{question}' for job {job_id}"
+                )
+                return f'Sorry, I encountered an unexpected issue while trying to generate an answer for question "{question}" for job {job_id}.'
 
         except JobListing.DoesNotExist:
             return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
