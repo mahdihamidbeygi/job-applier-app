@@ -575,7 +575,7 @@ class ResumeComposition:
         {job_info}
 
         Candidate Background Summary:
-        {self.personal_agent.get_background_str()}
+        {self.personal_agent.get_formatted_background()}
 
         Applicant Skills (Full List):
         {', '.join([skill.name for skill in self.personal_agent.user_profile.skills.all()])}
