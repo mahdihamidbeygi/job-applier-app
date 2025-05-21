@@ -1111,7 +1111,7 @@
           <input
             type="text"
             id="github-username"
-            placeholder="Enter your GitHub profile URL"
+            placeholder="Enter your GitHub profile Username or URL"
           />
           <button onclick="importFromGitHub()" class="retry-button">
             Import
@@ -1876,7 +1876,7 @@
                   'Content-Type': 'application/json',
                   'X-CSRFToken': getCookie('csrftoken')
               },
-              body: JSON.stringify({ github_username: username })
+              body: JSON.stringify({ github_url: username })
           });
 
           const data = await response.json();

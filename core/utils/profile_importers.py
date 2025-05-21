@@ -6,31 +6,43 @@ import shutil
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import git
 import openai
 import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
-from django.core.files.base import ContentFile
-from django.core.files.storage import default_storage
-from django.utils import timezone
-from pdfminer.high_level import extract_text
-from pdfminer.layout import LAParams
 
-from .llm_clients import OllamaClient
+from core.utils.llm_clients import GoogleClient
 
+# For parsing pyproject.toml
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    import toml as tomllib  # Fallback for older Python versions (requires `pip install toml`)
+
+# Configure logging
 logger = logging.getLogger(__name__)
 
 
 class GitHubProfileImporter:
     def __init__(self, github_username: str):
         self.github_username = github_username
-        self.client = OllamaClient()
+        self.client = GoogleClient(model="gemini-2.5-flash-preview-04-17")
+        # self.client_fast = GoogleClient()
         # Create a fresh temporary directory for this import session
-        self.temp_dir = tempfile.mkdtemp(prefix="github_import_")
+        self.temp_dir: str = tempfile.mkdtemp(prefix="github_import_")
         self.repos = []  # Keep track of Git repo objects
+        self.url_user: str = f"https://api.github.com/users/{github_username}"
+        self.headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
+        self.repos_url: str = self.url_user + "/repos"
+        # Add GitHub token if available in settings
+        if hasattr(settings, "GITHUB_TOKEN") and settings.GITHUB_TOKEN:
+            self.headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
+        else:
+            logger.error("No GitHub token found in settings")
+            raise ValueError("No GitHub token found in settings")
 
     def __enter__(self):
         return self
@@ -69,20 +81,70 @@ class GitHubProfileImporter:
                 "classes": classes,
                 "imports": imports,
             }
-        except Exception as e:
-            return {"error": str(e)}
+        except SyntaxError:
+            logger.info(
+                f"AST parsing failed for code (likely not Python or syntax error). Attempting LLM analysis."
+            )
+            prompt: str = f"""Analyze the following code snippet. It may not be Python.
+                        Identify function definitions, class definitions (or equivalent structures like structs), and any import or include statements.
+                        Return the result as a JSON object with three keys: 'functions', 'classes', and 'imports'.
+                        Each key should have a list of strings as its value, representing the names found.
+                        If no items are found for a category, provide an empty list for that category.
+
+                        Code:
+                        ```
+                        {code}
+                        ```
+
+                        Example of desired JSON Output:
+                        {{
+                        "functions": ["func_name1", "another_function"],
+                        "classes": ["ClassName1", "MyStruct"],
+                        "imports": ["module_a", "header.h", "library_x"]
+                        }}
+                        """
+            output_schema: Dict[str, str] = {
+                "functions": "list of strings, names of functions or equivalent callable units",
+                "classes": "list of strings, names of classes, structs, or equivalent data structures",
+                "imports": "list of strings, names of imported modules, included libraries/headers, or equivalent dependency statements",
+            }
+            try:
+                llm_analysis = self.client.generate_structured_output(
+                    prompt=prompt, output_schema=output_schema
+                )
+                # Ensure the LLM output conforms to the expected structure, providing defaults
+                return {
+                    "functions": llm_analysis.get("functions", []),
+                    "classes": llm_analysis.get("classes", []),
+                    "imports": llm_analysis.get("imports", []),
+                    "analyzed_by": "llm",  # Optional: to indicate how it was analyzed
+                }
+            except Exception as llm_error:
+                logger.error(
+                    f"LLM analysis failed after AST parsing error: {llm_error}. Snippet: {code[:200]}..."
+                )
+                return {
+                    "error": f"LLM analysis failed: {str(llm_error)}",
+                    "functions": [],
+                    "classes": [],
+                    "imports": [],
+                }
+        except Exception as e:  # Catch other unexpected errors from ast.walk or elsewhere
+            logger.error(f"Unexpected error analyzing code: {e}. Snippet: {code[:200]}...")
+            return {
+                "error": f"Failed to analyze code: {str(e)}",
+                "functions": [],
+                "classes": [],
+                "imports": [],
+            }
 
     def get_repository_info(self) -> List[Dict]:
         """Fetch and analyze all public repositories."""
-        repos_url = f"https://api.github.com/users/{self.github_username}/repos"
-        headers = {"Accept": "application/vnd.github.v3+json"}
-
-        # Add GitHub token if available in settings
-        if hasattr(settings, "GITHUB_TOKEN") and settings.GITHUB_TOKEN:
-            headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
 
         try:
-            response = requests.get(repos_url, headers=headers)
+            response: requests.Response = requests.get(
+                self.repos_url, headers=self.headers, timeout=30
+            )
             response.raise_for_status()
             repos = response.json()
 
@@ -121,21 +183,21 @@ class GitHubProfileImporter:
                         )
 
                 try:
-                    git_repo = git.Repo.clone_from(clone_url, repo_path)
+                    git_repo: git.Repo = git.Repo.clone_from(clone_url, repo_path)
                     self.repos.append(git_repo)  # Track the repo for cleanup
                 except Exception as e:
                     logger.error(f"Error cloning {name}: {str(e)}")
                     continue
 
                 repo_summary = []
-                for filepath in Path(repo_path).rglob("*.py"):
+                for filepath in Path(repo_path).rglob("*"):
                     try:
                         with open(filepath, "r", encoding="utf-8") as file:
                             code = file.read()
                         analysis = self.analyze_python_code(code)
                         repo_summary.append((str(filepath.relative_to(repo_path)), analysis))
                     except Exception as e:
-                        print(f"Error reading {filepath}: {e}")
+                        logger.error(f"Error reading {filepath}: {e}")
 
                 # Analyze repository structure
                 structure = self.analyze_repository_structure(repo_path)
@@ -163,7 +225,7 @@ class GitHubProfileImporter:
 
             return repo_analyses
         except Exception as e:
-            print(f"Error fetching repository info: {e}")
+            logger.error(f"Error fetching repository info: {e}")
             return []
 
     def analyze_repository_structure(self, repo_path: str) -> Dict:
@@ -186,12 +248,12 @@ class GitHubProfileImporter:
 
             return structure
         except Exception as e:
-            print(f"Error analyzing repository structure: {e}")
+            logger.error(f"Error analyzing repository structure: {e}")
             return {}
 
     def analyze_dependencies(self, repo_path: str) -> Dict:
         """Analyze project dependencies."""
-        dependencies = {"requirements": [], "setup_py": [], "imports": set()}
+        dependencies = {"requirements": [], "setup_py": [], "pyproject_toml": [], "imports": set()}
 
         try:
             # Check requirements.txt
@@ -216,6 +278,45 @@ class GitHubProfileImporter:
                         dependencies["setup_py"] = [
                             dep.strip().strip("'\"") for dep in deps if dep.strip()
                         ]
+            # Check pyproject.toml
+            pyproject_path = os.path.join(repo_path, "pyproject.toml")
+            if os.path.exists(pyproject_path):
+                try:
+                    with open(pyproject_path, "rb") as f:  # tomllib expects bytes
+                        data = tomllib.load(f)
+
+                    # Standard PEP 621 dependencies
+                    if "project" in data and "dependencies" in data["project"]:
+                        if isinstance(data["project"]["dependencies"], list):
+                            dependencies["pyproject_toml"].extend(
+                                [
+                                    dep.split("==")[0]
+                                    .split(">=")[0]
+                                    .split("<=")[0]
+                                    .split("!=")[0]
+                                    .split("~=")[0]
+                                    .strip()
+                                    for dep in data["project"]["dependencies"]
+                                ]
+                            )
+
+                    # Poetry specific dependencies
+                    if (
+                        "tool" in data
+                        and "poetry" in data["tool"]
+                        and "dependencies" in data["tool"]["poetry"]
+                    ):
+                        if isinstance(data["tool"]["poetry"]["dependencies"], dict):
+                            # Add keys (package names), ignore 'python' itself
+                            dependencies["pyproject_toml"].extend(
+                                [
+                                    pkg
+                                    for pkg in data["tool"]["poetry"]["dependencies"].keys()
+                                    if pkg.lower() != "python"
+                                ]
+                            )
+                except Exception as e:
+                    logger.error(f"Error parsing {pyproject_path}: {e}")
 
             # Collect all imports from Python files
             for filepath in Path(repo_path).rglob("*.py"):
@@ -224,19 +325,28 @@ class GitHubProfileImporter:
                         content = f.read()
                         tree = ast.parse(content)
                         for node in ast.walk(tree):
-                            if isinstance(node, (ast.Import, ast.ImportFrom)):
-                                if isinstance(node, ast.Import):
-                                    for name in node.names:
-                                        dependencies["imports"].add(name.name.split(".")[0])
-                                else:
+                            if isinstance(node, ast.Import):
+                                for alias in node.names:
+                                    dependencies["imports"].add(alias.name.split(".")[0])
+                            elif isinstance(node, ast.ImportFrom):
+                                if (
+                                    node.module
+                                ):  # For ast.ImportFrom, node.module can be None for relative imports
                                     dependencies["imports"].add(node.module.split(".")[0])
-                except Exception as e:
-                    print(f"Error analyzing imports in {filepath}: {e}")
+                except SyntaxError as e:
+                    logger.warning(
+                        f"SyntaxError analyzing imports in {filepath}: {e}. Skipping this file for import analysis."
+                    )
+                except (
+                    Exception
+                ) as e:  # Catch other potential errors during file processing or AST walking
+                    logger.error(f"Error analyzing imports in {filepath}: {e}")
 
             dependencies["imports"] = list(dependencies["imports"])
+            dependencies["pyproject_toml"] = list(set(dependencies["pyproject_toml"]))
             return dependencies
         except Exception as e:
-            print(f"Error analyzing dependencies: {e}")
+            logger.error(f"Error analyzing dependencies: {e}")
             return {}
 
     def analyze_commit_history(self, repo_path: str) -> Dict:
@@ -265,7 +375,7 @@ class GitHubProfileImporter:
             history["contributors"] = list(history["contributors"])
             return history
         except Exception as e:
-            print(f"Error analyzing commit history: {e}")
+            logger.error(f"Error analyzing commit history: {e}")
             return {}
 
     def extract_skills(self, repo_analyses: List[Dict]) -> List[Dict]:
@@ -308,7 +418,7 @@ Format as JSON:
 }}"""
 
             # Generate response with default parameters since Ollama client doesn't support max_tokens/timeout
-            response = self.client.generate(prompt)
+            response = self.client.generate_text(prompt)
             try:
                 # Validate JSON response
                 parsed_data = json.loads(response)
@@ -371,7 +481,7 @@ Format as JSON:
 
         try:
             # Generate response with default parameters since Ollama client doesn't support max_tokens/timeout
-            response = self.client.generate(prompt)
+            response = self.client.generate_text(prompt)
             try:
                 # Validate JSON response
                 parsed_data = json.loads(response)
@@ -417,17 +527,11 @@ Format as JSON:
         except Exception as e:
             raise Exception(f"Failed to extract work experience: {str(e)}")
 
-    def get_profile_info(self, username: str) -> Dict:
+    def get_profile_info(self) -> Dict:
         """Fetch user profile information from GitHub API."""
         try:
-            url = f"https://api.github.com/users/{username}"
-            headers = {"Accept": "application/vnd.github.v3+json"}
 
-            # Add GitHub token if available in settings
-            if hasattr(settings, "GITHUB_TOKEN") and settings.GITHUB_TOKEN:
-                headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
-
-            response = requests.get(url, headers=headers)
+            response: requests.Response = requests.get(self.url_user, headers=self.headers)
             response.raise_for_status()
 
             return response.json()
@@ -435,18 +539,12 @@ Format as JSON:
             logger.error(f"Error fetching GitHub profile info: {str(e)}")
             return {}
 
-    def get_contribution_data(self, username: str) -> Dict:
+    def get_contribution_data(self) -> Dict:
         """Fetch contribution data from GitHub API."""
         try:
             # Get repository languages and stats
-            repos_url = f"https://api.github.com/users/{username}/repos"
-            headers = {"Accept": "application/vnd.github.v3+json"}
 
-            # Add GitHub token if available in settings
-            if hasattr(settings, "GITHUB_TOKEN") and settings.GITHUB_TOKEN:
-                headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
-
-            repos_response = requests.get(repos_url, headers=headers)
+            repos_response = requests.get(self.repos_url, headers=self.headers)
             repos_response.raise_for_status()
             repos = repos_response.json()
 
@@ -464,7 +562,7 @@ Format as JSON:
                 if lang_url:
                     try:
                         # Use the same headers with auth token
-                        lang_response = requests.get(lang_url, headers=headers)
+                        lang_response = requests.get(lang_url, headers=self.headers)
                         if lang_response.status_code == 200:
                             repo_langs = lang_response.json()
                             for lang, bytes_count in repo_langs.items():
@@ -486,11 +584,11 @@ Format as JSON:
             logger.error(f"Error fetching GitHub contribution data: {str(e)}")
             return {"total_stars": 0, "total_commits": 0, "languages": {}}
 
-    def import_profile(self, username: str) -> str:
+    def import_profile(self) -> str:
         """Import profile data from GitHub"""
         try:
             # Get user profile info
-            profile_data = self.get_profile_info(username)
+            profile_data = self.get_profile_info()
             if not profile_data:
                 return json.dumps({"error": "Failed to fetch GitHub profile data"})
 
@@ -500,7 +598,7 @@ Format as JSON:
                 return json.dumps({"error": "Failed to fetch repository data"})
 
             # Get contribution data
-            contribution_data = self.get_contribution_data(username)
+            contribution_data = self.get_contribution_data()
             if not contribution_data:
                 return json.dumps({"error": "Failed to fetch contribution data"})
 
@@ -509,8 +607,8 @@ Format as JSON:
 
             # Combine all data
             combined_data = {
-                "username": username,
-                "profile_url": f"https://github.com/{username}",
+                "username": self.github_username,
+                "profile_url": self.url_user,
                 "avatar_url": profile_data.get("avatar_url"),
                 "bio": profile_data.get("bio"),
                 "location": profile_data.get("location"),
@@ -1023,7 +1121,7 @@ class LinkedInImporter:
 
     def __init__(self, linkedin_url: str):
         self.linkedin_url = linkedin_url
-        self.client = OllamaClient()
+        self.client = GoogleClient()
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }

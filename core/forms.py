@@ -77,6 +77,13 @@ def validate_date_range(
 class UserProfileForm(forms.ModelForm):
     # Add a non-model field for email that updates user.email
     email = forms.EmailField(required=False)
+    linkedin_url = forms.URLField(
+        assume_scheme="http", required=False, help_text="LinkedIn profile URL"
+    )
+    github_url = forms.URLField(
+        assume_scheme="http", required=False, help_text="GitHub profile URL"
+    )
+    website = forms.URLField(assume_scheme="http", required=False, help_text="Personal website URL")
 
     class Meta:
         model = UserProfile

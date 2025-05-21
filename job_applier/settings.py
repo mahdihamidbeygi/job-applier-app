@@ -201,7 +201,22 @@ AWS_S3_VERIFY = True
 AWS_S3_SIGNATURE_VERSION = "s3v4"
 
 # Use S3 for media files
-DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+# Django Storages configuration (replaces DEFAULT_FILE_STORAGE)
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "OPTIONS": {
+            # Options can be added here if needed, e.g.:
+            # "bucket_name": AWS_STORAGE_BUCKET_NAME,
+            # "region_name": AWS_S3_REGION_NAME,
+            # "access_key": AWS_ACCESS_KEY_ID, # If not using IAM roles
+            # "secret_key": AWS_SECRET_ACCESS_KEY, # If not using IAM roles
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 # OpenAI Settings
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
@@ -316,6 +331,10 @@ CELERY_TIMEZONE = TIME_ZONE
 GOOGLE_MODEL: str | None = os.environ.get("GOOGLE_MODEL")
 GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# URLField default scheme (to address RemovedInDjango60Warning)
+# Set to True to default to 'https', False to default to 'http' (current behavior)
+FORMS_URLFIELD_ASSUME_HTTPS = True  # Or False, depending on your preference
 
 LOGGING = {
     "version": 1,

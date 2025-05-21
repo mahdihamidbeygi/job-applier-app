@@ -12,14 +12,7 @@ from django.shortcuts import redirect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
-from core.models import (
-    Certification,
-    Education,
-    Project,
-    Publication,
-    Skill,
-    WorkExperience,
-)
+from core.models import Certification, Education, Project, Publication, Skill, WorkExperience
 from core.utils.profile_importers import GitHubProfileImporter, LinkedInImporter, ResumeImporter
 from core.views.utility_views import parse_pdf_resume
 
@@ -27,11 +20,14 @@ logger = logging.getLogger(__name__)
 
 
 @require_http_methods(["POST"])
-def import_github_profile(request):
+def import_github_profile(request) -> JsonResponse:
     """Import GitHub profile data"""
     try:
+        print("Request.method:", request.method)
         # Extract GitHub username from URL or direct input
-        github_input = request.POST.get("github_url", "")
+        data = json.loads(request.body)
+        github_input = data.get("github_url", "")
+        print("GitHub input:", github_input)
         if not github_input:
             return JsonResponse({"error": "No GitHub URL provided"}, status=400)
 
@@ -47,7 +43,7 @@ def import_github_profile(request):
 
         # Create importer and get data
         importer = GitHubProfileImporter(username)
-        github_data = importer.import_profile(username)
+        github_data = importer.import_profile()
 
         if not github_data:
             return JsonResponse({"error": "Failed to fetch GitHub profile"}, status=400)
@@ -270,7 +266,8 @@ def import_linkedin_profile(request):
         if "linkedin_data" not in request.POST:
             return JsonResponse({"error": "No LinkedIn data provided"}, status=400)
 
-        linkedin_data = request.POST.get("linkedin_data", "")
+        data = json.loads(request.body)
+        linkedin_data = data.get("linkedin_data", "")
 
         if not linkedin_data:
             return JsonResponse({"error": "Empty LinkedIn data"}, status=400)
