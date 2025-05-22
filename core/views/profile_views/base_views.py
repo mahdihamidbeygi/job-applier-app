@@ -75,7 +75,8 @@ def profile(request):
 
             # Import GitHub profile
             importer = GitHubProfileImporter(github_username)
-            github_data = json.loads(importer.import_profile(github_username))
+            github_data_json_str = importer.import_profile()
+            github_data = json.loads(github_data_json_str)
 
             # Transform repositories into projects
             projects = importer.transform_repos_to_projects(
