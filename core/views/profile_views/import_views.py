@@ -262,167 +262,410 @@ def import_resume(request):
 def import_linkedin_profile(request):
     """Import LinkedIn profile data"""
     try:
-        if "linkedin_data" not in request.POST:
-            return JsonResponse({"error": "No LinkedIn data provided"}, status=400)
-
         data = json.loads(request.body)
-        linkedin_data = data.get("linkedin_data", "")
+        linkedin_data = data.get("linkedin_data", {})
+        linkedin_url = data.get("linkedin_url", "")
 
+        # Validate input data
+        if not linkedin_url:
+            return JsonResponse({"error": "No URL provided"}, status=400)
+
+        # If we have a URL but no data, attempt to use the importer
+        if linkedin_url and not linkedin_data:
+            importer = LinkedInImporter(linkedin_url=linkedin_url)
+            result = importer.parse_linkedin_data()
+
+            if not result:
+                return JsonResponse({"error": "Failed to parse LinkedIn data from URL"}, status=400)
+
+            linkedin_data = result
+
+        # If we still don't have data, return error
         if not linkedin_data:
-            return JsonResponse({"error": "Empty LinkedIn data"}, status=400)
-
-        # Parse the data
-        try:
-            data = json.loads(linkedin_data)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid LinkedIn data format"}, status=400)
-
-        # Import the data
-        importer = LinkedInImporter(request.user.userprofile)
-        result = importer.parse_linkedin_data(data)
-
-        if not result:
-            return JsonResponse({"error": "Failed to parse LinkedIn data"}, status=400)
+            return JsonResponse({"error": "No valid LinkedIn data found"}, status=400)
 
         # Update user profile
         profile = request.user.userprofile
 
-        # Apply basic info
-        if data.get("name") and not profile.name:
-            profile.name = data.get("name")
+        # Apply basic info with better error handling
+        if linkedin_data.get("name") and not profile.name:
+            profile.name = linkedin_data.get("name").strip()
 
-        if data.get("headline") and not profile.headline:
-            profile.headline = data.get("headline")
+        if linkedin_data.get("headline") and not profile.headline:
+            profile.headline = linkedin_data.get("headline").strip()
 
-        if data.get("summary") and not profile.professional_summary:
-            profile.professional_summary = data.get("summary")
+        if linkedin_data.get("summary") and not profile.professional_summary:
+            profile.professional_summary = linkedin_data.get("summary").strip()
 
-        if data.get("location"):
-            location = data.get("location", {})
-            if not profile.city and location.get("city"):
-                profile.city = location.get("city")
-            if not profile.state and location.get("region"):
-                profile.state = location.get("region")
-            if not profile.country and location.get("country"):
-                profile.country = location.get("country")
+        # Handle location data more robustly
+        location_data = linkedin_data.get("location", {})
+        if isinstance(location_data, dict):
+            if location_data.get("city") and not profile.city:
+                profile.city = location_data.get("city").strip()
+            if location_data.get("region") and not profile.state:
+                profile.state = location_data.get("region").strip()
+            if location_data.get("country") and not profile.country:
+                profile.country = location_data.get("country").strip()
+        elif isinstance(location_data, str) and location_data.strip():
+            # If location is a string, try to parse it
+            if not profile.city:
+                profile.city = location_data.strip()
 
-        if data.get("phoneNumbers") and not profile.phone:
-            phone_numbers = data.get("phoneNumbers", [])
-            if phone_numbers and len(phone_numbers) > 0:
-                profile.phone = phone_numbers[0]
+        # Handle phone numbers
+        phone_numbers = linkedin_data.get("phoneNumbers", [])
+        if (
+            phone_numbers
+            and isinstance(phone_numbers, list)
+            and len(phone_numbers) > 0
+            and not profile.phone
+        ):
+            # Take the first phone number and clean it
+            phone = phone_numbers[0] if isinstance(phone_numbers[0], str) else str(phone_numbers[0])
+            profile.phone = phone.strip()
 
-        # Update LinkedIn URL
-        if data.get("url") and not profile.linkedin_url:
-            profile.linkedin_url = data.get("url")
+        # Update LinkedIn URL with validation
+        provided_url = linkedin_data.get("url") or linkedin_url
+        if provided_url and not profile.linkedin_url:
+            # Ensure the URL is properly formatted
+            if not provided_url.startswith("http"):
+                provided_url = f"https://linkedin.com/in/{provided_url.lstrip('/')}"
+            profile.linkedin_url = provided_url
 
-        # Current position
-        positions = data.get("positions", [])
-        if positions and len(positions) > 0:
+        # Handle current position from positions array
+        positions = linkedin_data.get("positions", [])
+        if positions and isinstance(positions, list) and len(positions) > 0:
             current_position = positions[0]
-            if current_position.get("title") and not profile.current_position:
-                profile.current_position = current_position.get("title")
-            if current_position.get("company") and not profile.company:
-                profile.company = current_position.get("company")
+            if isinstance(current_position, dict):
+                if current_position.get("title") and not profile.current_position:
+                    profile.current_position = current_position.get("title").strip()
+                if current_position.get("company") and not profile.company:
+                    profile.company = current_position.get("company").strip()
 
-        # Save profile
+        # Save profile changes
         profile.save()
 
-        # Import work experiences
+        # Import work experiences with better date handling
         experiences_added = 0
         for position in positions:
+            if not isinstance(position, dict):
+                continue
+
+            company = position.get("company", "").strip()
+            title = position.get("title", "").strip()
+
+            if not company or not title:
+                continue
+
             # Check if the experience already exists
             existing_exp = WorkExperience.objects.filter(
                 profile=profile,
-                company__iexact=position.get("company", ""),
-                position__iexact=position.get("title", ""),
+                company__iexact=company,
+                position__iexact=title,
             ).first()
 
             if not existing_exp:
-                # Convert date strings to date objects
-                start_date = datetime.strptime(
-                    position.get("startDate", "2000-01-01"), "%Y-%m-%d"
-                ).date()
-                end_date = None
-                if position.get("endDate"):
-                    end_date = datetime.strptime(position.get("endDate"), "%Y-%m-%d").date()
+                try:
+                    # Handle date parsing more robustly
+                    start_date = None
+                    end_date = None
 
-                # Create new experience
-                WorkExperience.objects.create(
-                    profile=profile,
-                    company=position.get("company", ""),
-                    position=position.get("title", ""),
-                    location=position.get("location", ""),
-                    start_date=start_date,
-                    end_date=end_date,
-                    current=position.get("current", False),
-                    description=position.get("description", ""),
-                )
-                experiences_added += 1
+                    start_date_str = position.get("startDate")
+                    if start_date_str:
+                        try:
+                            if isinstance(start_date_str, str):
+                                # Handle different date formats
+                                if len(start_date_str) == 4:  # Just year
+                                    start_date = datetime.strptime(
+                                        f"{start_date_str}-01-01", "%Y-%m-%d"
+                                    ).date()
+                                elif len(start_date_str) == 7:  # Year-month
+                                    start_date = datetime.strptime(
+                                        f"{start_date_str}-01", "%Y-%m-%d"
+                                    ).date()
+                                else:  # Full date
+                                    start_date = datetime.strptime(
+                                        start_date_str, "%Y-%m-%d"
+                                    ).date()
+                        except ValueError:
+                            logger.warning(f"Could not parse start date: {start_date_str}")
 
-        # Import education
+                    end_date_str = position.get("endDate")
+                    if end_date_str:
+                        try:
+                            if isinstance(end_date_str, str):
+                                # Handle different date formats
+                                if len(end_date_str) == 4:  # Just year
+                                    end_date = datetime.strptime(
+                                        f"{end_date_str}-12-31", "%Y-%m-%d"
+                                    ).date()
+                                elif len(end_date_str) == 7:  # Year-month
+                                    end_date = datetime.strptime(
+                                        f"{end_date_str}-01", "%Y-%m-%d"
+                                    ).date()
+                                else:  # Full date
+                                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
+                        except ValueError:
+                            logger.warning(f"Could not parse end date: {end_date_str}")
+
+                    # Create new work experience
+                    WorkExperience.objects.create(
+                        profile=profile,
+                        company=company,
+                        position=title,
+                        location=position.get("location", "").strip(),
+                        start_date=start_date,
+                        end_date=end_date,
+                        current=position.get("current", False),
+                        description=position.get("description", "").strip(),
+                    )
+                    experiences_added += 1
+
+                except Exception as e:
+                    logger.warning(
+                        f"Could not create work experience for {company} - {title}: {str(e)}"
+                    )
+                    continue
+
+        # Import education with better error handling
         education_added = 0
-        for edu in data.get("education", []):
-            # Check if education already exists
-            existing_edu = Education.objects.filter(
-                profile=profile,
-                institution__iexact=edu.get("school", ""),
-                degree__iexact=edu.get("degree", ""),
-            ).first()
+        education_data = linkedin_data.get("education", [])
+        if isinstance(education_data, list):
+            for edu in education_data:
+                if not isinstance(edu, dict):
+                    continue
 
-            if not existing_edu:
-                # Convert date strings to date objects
-                start_date = None
-                end_date = None
-                if edu.get("startDate"):
-                    start_date = datetime.strptime(edu.get("startDate"), "%Y-%m-%d").date()
-                if edu.get("endDate"):
-                    end_date = datetime.strptime(edu.get("endDate"), "%Y-%m-%d").date()
+                institution = edu.get("school", "").strip()
+                degree = edu.get("degree", "").strip()
 
-                # Create new education
-                Education.objects.create(
+                if not institution:
+                    continue
+
+                # Check if education already exists
+                existing_edu = Education.objects.filter(
                     profile=profile,
-                    institution=edu.get("school", ""),
-                    degree=edu.get("degree", ""),
-                    field_of_study=edu.get("fieldOfStudy", ""),
-                    start_date=start_date,
-                    end_date=end_date,
-                    current=edu.get("current", False),
-                )
-                education_added += 1
+                    institution__iexact=institution,
+                    degree__iexact=degree,
+                ).first()
 
-        # Import skills
+                if not existing_edu:
+                    try:
+                        # Handle education date parsing
+                        start_date = None
+                        end_date = None
+
+                        start_date_str = edu.get("startDate")
+                        if start_date_str:
+                            try:
+                                if isinstance(start_date_str, str):
+                                    if len(start_date_str) == 4:  # Just year
+                                        start_date = datetime.strptime(
+                                            f"{start_date_str}-09-01", "%Y-%m-%d"
+                                        ).date()
+                                    else:
+                                        start_date = datetime.strptime(
+                                            start_date_str, "%Y-%m-%d"
+                                        ).date()
+                            except ValueError:
+                                logger.warning(
+                                    f"Could not parse education start date: {start_date_str}"
+                                )
+
+                        end_date_str = edu.get("endDate")
+                        if end_date_str:
+                            try:
+                                if isinstance(end_date_str, str):
+                                    if len(end_date_str) == 4:  # Just year
+                                        end_date = datetime.strptime(
+                                            f"{end_date_str}-06-30", "%Y-%m-%d"
+                                        ).date()
+                                    else:
+                                        end_date = datetime.strptime(
+                                            end_date_str, "%Y-%m-%d"
+                                        ).date()
+                            except ValueError:
+                                logger.warning(
+                                    f"Could not parse education end date: {end_date_str}"
+                                )
+
+                        # Create new education entry
+                        Education.objects.create(
+                            profile=profile,
+                            institution=institution,
+                            degree=degree,
+                            field_of_study=edu.get("fieldOfStudy", "").strip(),
+                            start_date=start_date,
+                            end_date=end_date,
+                            current=edu.get("current", False),
+                            description=edu.get("description", "").strip(),
+                        )
+                        education_added += 1
+
+                    except Exception as e:
+                        logger.warning(
+                            f"Could not create education entry for {institution}: {str(e)}"
+                        )
+                        continue
+
+        # Import skills with categorization
         skills_added = 0
-        for skill in data.get("skills", []):
-            skill_name = skill.get("name", "")
-            if not skill_name:
-                continue
+        skills_data = linkedin_data.get("skills", [])
+        if isinstance(skills_data, list):
+            for skill in skills_data:
+                if isinstance(skill, dict):
+                    skill_name = skill.get("name", "").strip()
+                elif isinstance(skill, str):
+                    skill_name = skill.strip()
+                else:
+                    continue
 
-            # Check if skill already exists
-            existing_skill = Skill.objects.filter(
-                profile=profile,
-                name__iexact=skill_name,
-            ).first()
+                if not skill_name:
+                    continue
 
-            if not existing_skill:
-                # Create new skill
-                Skill.objects.create(
+                # Check if skill already exists
+                existing_skill = Skill.objects.filter(
                     profile=profile,
-                    name=skill_name,
-                    category="other",  # Default category
-                    proficiency=3,  # Default middle proficiency
-                )
-                skills_added += 1
+                    name__iexact=skill_name,
+                ).first()
+
+                if not existing_skill:
+                    try:
+                        # Try to categorize the skill
+                        category = "other"  # Default category
+
+                        # Simple skill categorization
+                        skill_lower = skill_name.lower()
+                        if any(
+                            tech in skill_lower
+                            for tech in [
+                                "python",
+                                "java",
+                                "javascript",
+                                "react",
+                                "node",
+                                "sql",
+                                "html",
+                                "css",
+                                "git",
+                            ]
+                        ):
+                            category = "technical"
+                        elif any(
+                            lang in skill_lower
+                            for lang in ["spanish", "french", "german", "chinese", "language"]
+                        ):
+                            category = "language"
+                        elif any(
+                            soft in skill_lower
+                            for tech in [
+                                "leadership",
+                                "communication",
+                                "management",
+                                "teamwork",
+                                "problem solving",
+                            ]
+                        ):
+                            category = "soft"
+
+                        # Create new skill
+                        Skill.objects.create(
+                            profile=profile,
+                            name=skill_name,
+                            category=category,
+                            proficiency=(
+                                skill.get("proficiency", 3) if isinstance(skill, dict) else 3
+                            ),
+                        )
+                        skills_added += 1
+
+                    except Exception as e:
+                        logger.warning(f"Could not create skill {skill_name}: {str(e)}")
+                        continue
+
+        # Import certifications if available
+        certifications_added = 0
+        certifications_data = linkedin_data.get("certifications", [])
+        if isinstance(certifications_data, list):
+            for cert in certifications_data:
+                if not isinstance(cert, dict):
+                    continue
+
+                name = cert.get("name", "").strip()
+                issuer = cert.get("issuer", "").strip()
+
+                if not name:
+                    continue
+
+                # Check if certification already exists
+                existing_cert = Certification.objects.filter(
+                    profile=profile,
+                    name__iexact=name,
+                    issuing_authority__iexact=issuer,
+                ).first()
+
+                if not existing_cert:
+                    try:
+                        # Handle certification date
+                        issue_date = None
+                        expiry_date = None
+
+                        issue_date_str = cert.get("issueDate")
+                        if issue_date_str:
+                            try:
+                                issue_date = datetime.strptime(issue_date_str, "%Y-%m-%d").date()
+                            except ValueError:
+                                logger.warning(
+                                    f"Could not parse certification issue date: {issue_date_str}"
+                                )
+
+                        expiry_date_str = cert.get("expiryDate")
+                        if expiry_date_str:
+                            try:
+                                expiry_date = datetime.strptime(expiry_date_str, "%Y-%m-%d").date()
+                            except ValueError:
+                                logger.warning(
+                                    f"Could not parse certification expiry date: {expiry_date_str}"
+                                )
+
+                        # Create new certification
+                        Certification.objects.create(
+                            profile=profile,
+                            name=name,
+                            issuing_authority=issuer,
+                            issue_date=issue_date,
+                            expiry_date=expiry_date,
+                            credential_id=cert.get("credentialId", "").strip(),
+                            credential_url=cert.get("credentialUrl", "").strip(),
+                        )
+                        certifications_added += 1
+
+                    except Exception as e:
+                        logger.warning(f"Could not create certification {name}: {str(e)}")
+                        continue
+
+        # Store the raw LinkedIn data for future reference
+        profile.linkedin_data = linkedin_data
+        profile.last_linkedin_refresh = timezone.now()
+        profile.save()
 
         return JsonResponse(
             {
                 "success": True,
                 "message": (
                     f"Successfully imported LinkedIn data. Added {experiences_added} work experiences, "
-                    f"{education_added} education entries, and {skills_added} skills."
+                    f"{education_added} education entries, {skills_added} skills, and {certifications_added} certifications."
                 ),
+                "stats": {
+                    "experiences_added": experiences_added,
+                    "education_added": education_added,
+                    "skills_added": skills_added,
+                    "certifications_added": certifications_added,
+                },
             }
         )
 
+    except json.JSONDecodeError:
+        logger.error("Invalid JSON data provided")
+        return JsonResponse({"error": "Invalid JSON data provided"}, status=400)
     except Exception as e:
         logger.error(f"Error importing LinkedIn profile: {str(e)}")
-        return JsonResponse({"error": str(e)}, status=500)
+        return JsonResponse({"error": f"Failed to import LinkedIn profile: {str(e)}"}, status=500)

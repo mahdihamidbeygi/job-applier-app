@@ -2,11 +2,14 @@ import ast
 import json
 import logging
 import os
+import random
 import shutil
 import tempfile
+import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
+from urllib.parse import urlparse
 
 import git
 import openai
@@ -1089,7 +1092,7 @@ Resume text:
 
             return result
         except Exception as e:
-            self.logger.error(f"Error parsing resume text: {str(e)}")
+            logger.error(f"Error parsing resume text: {str(e)}")
             return None
 
     def parse_resume_file(self, file_obj):
@@ -1112,7 +1115,7 @@ Resume text:
             # Parse the extracted text
             return self.parse_resume_text(text)
         except Exception as e:
-            self.logger.error(f"Error parsing resume file: {str(e)}")
+            logger.error(f"Error parsing resume file: {str(e)}")
             return None
 
 
@@ -1120,29 +1123,96 @@ class LinkedInImporter:
     """Class for handling LinkedIn profile imports."""
 
     def __init__(self, linkedin_url: str):
-        self.linkedin_url = linkedin_url
-        self.client = GoogleClient()
+        self.linkedin_url: str = self._normalize_linkedin_url(linkedin_url)
+        self.client = GoogleClient()  # Assuming this exists in your codebase
         self.headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
         }
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
+
+    def _normalize_linkedin_url(self, url: str) -> str:
+        """Normalize LinkedIn URL to ensure it's properly formatted."""
+        if not url:
+            raise ValueError("LinkedIn URL cannot be empty")
+
+        # Remove whitespace
+        url = url.strip()
+
+        # Add https:// if no protocol specified
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+
+        # Ensure it's a LinkedIn URL
+        parsed = urlparse(url)
+        if "linkedin.com" not in parsed.netloc.lower():
+            raise ValueError("URL must be a LinkedIn profile URL")
+
+        # Convert to standard format
+        if "/in/" not in url:
+            raise ValueError("URL must be a LinkedIn profile URL (should contain '/in/')")
+
+        # Remove query parameters and fragments for cleaner URLs
+        clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
+
+        # Ensure URL ends properly (remove trailing slash if not needed)
+        if clean_url.endswith("/") and clean_url.count("/") > 4:
+            clean_url = clean_url.rstrip("/")
+
+        return clean_url
+
+    def _validate_response(self, response: requests.Response) -> bool:
+        """Validate the response from LinkedIn."""
+        if response.status_code == 999:
+            raise Exception(
+                "LinkedIn blocked the request (Error 999). Consider using LinkedIn API instead."
+            )
+
+        if response.status_code == 404:
+            raise Exception("LinkedIn profile not found. Please check the URL.")
+
+        if response.status_code != 200:
+            raise Exception(f"Failed to fetch LinkedIn profile: HTTP {response.status_code}")
+
+        # Check if we got a CAPTCHA or login page
+        if "challenge" in response.url.lower() or "login" in response.url.lower():
+            raise Exception(
+                "LinkedIn requires authentication or CAPTCHA. Consider using LinkedIn API."
+            )
+
+        return True
 
     def scrape_profile(self) -> Dict:
-        """Scrape LinkedIn profile data."""
+        """
+        Scrape LinkedIn profile data.
+
+        WARNING: This method violates LinkedIn's Terms of Service.
+        Consider using LinkedIn's official API instead.
+        """
         try:
-            import random
-            import time
-
             # Add random delay to avoid rate limiting
-            time.sleep(random.uniform(2, 5))
+            delay = random.uniform(3, 8)
+            time.sleep(delay)
 
-            response = requests.get(self.linkedin_url, headers=self.headers)
-            if response.status_code != 200:
-                raise Exception(f"Failed to fetch LinkedIn profile: {response.status_code}")
+            logger.info(f"Attempting to scrape LinkedIn profile: {self.linkedin_url}")
+            # TODO it needs LinkedIn API to scrape user's profile
+            response: requests.Response = requests.get(self.linkedin_url, timeout=30)
+            self._validate_response(response)
 
             soup = BeautifulSoup(response.text, "html.parser")
 
+            # Check if we actually got profile content
+            if not soup.find("h1") and not soup.find("title"):
+                raise Exception("Unable to parse LinkedIn profile content")
+
             # Extract profile data
             profile_data = {
+                "url": self.linkedin_url,
                 "name": self._extract_name(soup),
                 "headline": self._extract_headline(soup),
                 "location": self._extract_location(soup),
@@ -1151,219 +1221,302 @@ class LinkedInImporter:
                 "education": self._extract_education(soup),
                 "skills": self._extract_skills(soup),
                 "certifications": self._extract_certifications(soup),
+                "publications": self._extract_publications(soup),
+                "scraped_at": time.strftime("%Y-%m-%d %H:%M:%S"),
             }
 
+            # Log what was successfully extracted
+            extracted_fields = [k for k, v in profile_data.items() if v]
+            logger.info(f"Successfully extracted fields: {extracted_fields}")
+
             return profile_data
+
         except Exception as e:
+            logger.error(f"Error scraping LinkedIn profile {self.linkedin_url}: {str(e)}")
             raise Exception(f"Error scraping LinkedIn profile: {str(e)}")
 
     def _extract_name(self, soup) -> str:
         """Extract name from LinkedIn profile."""
         try:
-            name_element = soup.find("h1", class_="text-heading-xlarge")
-            return name_element.text.strip() if name_element else ""
-        except:
+            # Try multiple selectors for name
+            selectors = [
+                "h1.text-heading-xlarge",
+                "h1[data-test-id='profile-name']",
+                "h1.break-words",
+                ".pv-text-details__left-panel h1",
+                "h1",
+            ]
+
+            for selector in selectors:
+                element = soup.select_one(selector)
+                if element and element.text.strip():
+                    return element.text.strip()
+            return ""
+        except Exception as e:
+            logger.debug(f"Error extracting name: {e}")
             return ""
 
     def _extract_headline(self, soup) -> str:
         """Extract headline from LinkedIn profile."""
         try:
-            headline_element = soup.find("div", class_="text-body-medium")
-            return headline_element.text.strip() if headline_element else ""
-        except:
+            selectors = [
+                ".text-body-medium.break-words",
+                ".pv-text-details__left-panel .text-body-medium",
+                "[data-test-id='profile-headline']",
+                ".pv-top-card--list-bullet .pv-entity__summary-info h2",
+            ]
+
+            for selector in selectors:
+                element = soup.select_one(selector)
+                if element and element.text.strip():
+                    return element.text.strip()
+            return ""
+        except Exception as e:
+            logger.debug(f"Error extracting headline: {e}")
             return ""
 
     def _extract_location(self, soup) -> str:
         """Extract location from LinkedIn profile."""
         try:
-            location_element = soup.find("span", class_="text-body-small")
-            return location_element.text.strip() if location_element else ""
-        except:
+            selectors = [
+                ".text-body-small.inline.t-black--light.break-words",
+                ".pv-text-details__left-panel .text-body-small",
+                "[data-test-id='profile-location']",
+            ]
+
+            for selector in selectors:
+                element = soup.select_one(selector)
+                if element and element.text.strip():
+                    return element.text.strip()
+            return ""
+        except Exception as e:
+            logger.debug(f"Error extracting location: {e}")
             return ""
 
     def _extract_about(self, soup) -> str:
         """Extract about section from LinkedIn profile."""
         try:
-            about_element = soup.find("div", {"id": "about"})
-            return about_element.text.strip() if about_element else ""
-        except:
+            selectors = [
+                "#about + * .pv-shared-text-with-see-more",
+                ".pv-about-section .pv-about__summary-text",
+                "[data-test-id='about-section'] .text-body-medium",
+            ]
+
+            for selector in selectors:
+                element = soup.select_one(selector)
+                if element and element.text.strip():
+                    return element.text.strip()
+            return ""
+        except Exception as e:
+            logger.debug(f"Error extracting about: {e}")
             return ""
 
     def _extract_experience(self, soup) -> List[Dict]:
         """Extract work experience from LinkedIn profile."""
         experiences = []
         try:
-            experience_section = soup.find("section", {"id": "experience-section"})
-            if experience_section:
-                for exp in experience_section.find_all("li", class_="experience-item"):
+            # Try multiple selectors for experience section
+            experience_sections = soup.select(
+                "#experience + *, .pv-profile-section.experience-section"
+            )
+
+            for section in experience_sections:
+                exp_items = section.select(".pv-entity__summary-info, .experience-item")
+
+                for exp in exp_items:
                     experience = {
-                        "title": exp.find("h3").text.strip() if exp.find("h3") else "",
-                        "company": (
-                            exp.find("p", class_="company-name").text.strip()
-                            if exp.find("p", class_="company-name")
-                            else ""
+                        "title": self._safe_extract_text(exp, "h3, .pv-entity__summary-info h3"),
+                        "company": self._safe_extract_text(
+                            exp, ".pv-entity__secondary-title, .company-name"
                         ),
-                        "date_range": (
-                            exp.find("p", class_="date-range").text.strip()
-                            if exp.find("p", class_="date-range")
-                            else ""
+                        "date_range": self._safe_extract_text(
+                            exp, ".pv-entity__date-range, .date-range"
                         ),
-                        "description": (
-                            exp.find("p", class_="description").text.strip()
-                            if exp.find("p", class_="description")
-                            else ""
+                        "description": self._safe_extract_text(
+                            exp, ".pv-entity__description, .description"
                         ),
+                        "location": self._safe_extract_text(exp, ".pv-entity__location, .location"),
                     }
-                    experiences.append(experience)
-        except:
-            pass
+
+                    if experience["title"] or experience["company"]:
+                        experiences.append(experience)
+
+        except Exception as e:
+            logger.debug(f"Error extracting experience: {e}")
+
         return experiences
 
     def _extract_education(self, soup) -> List[Dict]:
         """Extract education from LinkedIn profile."""
         education = []
         try:
-            education_section = soup.find("section", {"id": "education-section"})
-            if education_section:
-                for edu in education_section.find_all("li", class_="education-item"):
+            education_sections = soup.select(
+                "#education + *, .pv-profile-section.education-section"
+            )
+
+            for section in education_sections:
+                edu_items = section.select(".pv-entity__summary-info, .education-item")
+
+                for edu in edu_items:
                     education_item = {
-                        "institution": edu.find("h3").text.strip() if edu.find("h3") else "",
-                        "degree": (
-                            edu.find("p", class_="degree").text.strip()
-                            if edu.find("p", class_="degree")
-                            else ""
+                        "institution": self._safe_extract_text(edu, "h3, .pv-entity__school-name"),
+                        "degree": self._safe_extract_text(edu, ".pv-entity__degree-name, .degree"),
+                        "field": self._safe_extract_text(edu, ".pv-entity__fos, .field-of-study"),
+                        "date_range": self._safe_extract_text(
+                            edu, ".pv-entity__dates, .date-range"
                         ),
-                        "date_range": (
-                            edu.find("p", class_="date-range").text.strip()
-                            if edu.find("p", class_="date-range")
-                            else ""
-                        ),
-                        "description": (
-                            edu.find("p", class_="description").text.strip()
-                            if edu.find("p", class_="description")
-                            else ""
+                        "description": self._safe_extract_text(
+                            edu, ".pv-entity__description, .description"
                         ),
                     }
-                    education.append(education_item)
-        except:
-            pass
+
+                    if education_item["institution"]:
+                        education.append(education_item)
+
+        except Exception as e:
+            logger.debug(f"Error extracting education: {e}")
+
         return education
 
     def _extract_skills(self, soup) -> List[str]:
         """Extract skills from LinkedIn profile."""
         skills = []
         try:
-            skills_section = soup.find("section", {"id": "skills-section"})
-            if skills_section:
-                for skill in skills_section.find_all("span", class_="skill-name"):
-                    skills.append(skill.text.strip())
-        except:
-            pass
+            skill_sections = soup.select(
+                "#skills + *, .pv-profile-section.pv-skill-categories-section"
+            )
+
+            for section in skill_sections:
+                skill_elements = section.select(".pv-skill-category-entity__name, .skill-name")
+                for skill in skill_elements:
+                    skill_text = skill.text.strip()
+                    if skill_text and skill_text not in skills:
+                        skills.append(skill_text)
+
+        except Exception as e:
+            logger.debug(f"Error extracting skills: {e}")
+
         return skills
 
     def _extract_certifications(self, soup) -> List[Dict]:
         """Extract certifications from LinkedIn profile."""
         certifications = []
         try:
-            cert_section = soup.find("section", {"id": "certifications-section"})
-            if cert_section:
-                for cert in cert_section.find_all("li", class_="certification-item"):
+            cert_sections = soup.select(
+                "#certifications + *, .pv-profile-section.certifications-section"
+            )
+
+            for section in cert_sections:
+                cert_items = section.select(".pv-entity__summary-info, .certification-item")
+
+                for cert in cert_items:
                     certification = {
-                        "name": cert.find("h3").text.strip() if cert.find("h3") else "",
-                        "issuer": (
-                            cert.find("p", class_="issuer").text.strip()
-                            if cert.find("p", class_="issuer")
-                            else ""
+                        "name": self._safe_extract_text(cert, "h3, .pv-entity__summary-title"),
+                        "issuer": self._safe_extract_text(
+                            cert, ".pv-entity__secondary-title, .issuer"
                         ),
-                        "date": (
-                            cert.find("p", class_="date").text.strip()
-                            if cert.find("p", class_="date")
-                            else ""
+                        "date": self._safe_extract_text(cert, ".pv-entity__date-range, .date"),
+                        "credential_id": self._safe_extract_text(
+                            cert, ".pv-entity__credential-id, .credential-id"
                         ),
                     }
-                    certifications.append(certification)
-        except:
-            pass
+
+                    if certification["name"]:
+                        certifications.append(certification)
+
+        except Exception as e:
+            logger.debug(f"Error extracting certifications: {e}")
+
         return certifications
 
-    def parse_profile(self) -> Dict:
-        """Parse LinkedIn profile data into structured format."""
+    def _extract_publications(self, soup) -> List[Dict]:
+        """Extract publications from LinkedIn profile."""
+        publications = []
         try:
-            profile_data = self.scrape_profile()
+            pub_sections = soup.select(
+                "#publications + *, .pv-profile-section.publications-section"
+            )
 
-            prompt = f"""Based on the following LinkedIn profile data, create a structured profile:
+            for section in pub_sections:
+                pub_items = section.select(".pv-entity__summary-info, .publication-item")
 
-Profile Data:
-{profile_data}
+                for pub in pub_items:
+                    publication = {
+                        "title": self._safe_extract_text(pub, "h3, .pv-entity__summary-title"),
+                        "publisher": self._safe_extract_text(
+                            pub, ".pv-entity__secondary-title, .publisher"
+                        ),
+                        "date": self._safe_extract_text(pub, ".pv-entity__date-range, .date"),
+                        "description": self._safe_extract_text(
+                            pub, ".pv-entity__description, .description"
+                        ),
+                    }
 
-Please format the data as a JSON object with the following structure:
-{{
-    "work_experiences": [
-        {{
-            "company": "string",
-            "position": "string",
-            "start_date": "YYYY-MM",
-            "end_date": "YYYY-MM",
-            "description": "string",
-            "technologies": ["string"]
-        }}
-    ],
-    "education": [
-        {{
-            "institution": "string",
-            "degree": "string",
-            "field_of_study": "string",
-            "start_date": "YYYY-MM",
-            "end_date": "YYYY-MM",
-            "gpa": "string",
-            "achievements": ["string"]
-        }}
-    ],
-    "skills": [
-        {{
-            "name": "string",
-            "category": "string",
-            "proficiency": "string"
-        }}
-    ],
-    "certifications": [
-        {{
-            "name": "string",
-            "issuer": "string",
-            "issue_date": "YYYY-MM",
-            "expiry_date": "YYYY-MM",
-            "credential_id": "string"
-        }}
-    ]
-}}
-"""
+                    if publication["title"]:
+                        publications.append(publication)
 
-            response = self.client.generate(prompt)
-            return response
         except Exception as e:
-            raise Exception(f"Error parsing LinkedIn profile: {str(e)}")
+            logger.debug(f"Error extracting publications: {e}")
 
-    def parse_linkedin_data(self, data):
+        return publications
+
+    def _safe_extract_text(self, parent_element, selector: str) -> str:
+        """Safely extract text from an element using CSS selector."""
+        try:
+            element = parent_element.select_one(selector)
+            return element.text.strip() if element else ""
+        except:
+            return ""
+
+    def parse_linkedin_data(self) -> Optional[Dict]:
         """
         Parse LinkedIn profile data.
 
-        Args:
-            data (dict): LinkedIn profile data in JSON format
-
         Returns:
-            dict: Processed LinkedIn data
+            dict: Processed LinkedIn data with success flag, or None if failed
         """
         try:
-            if not data:
-                return None
+            logger.info(f"Starting LinkedIn data parsing for: {self.linkedin_url}")
+            data = self.scrape_profile()
 
-            result = {"raw_data": data, "success": True}
+            result = {
+                "raw_data": data,
+                "success": True,
+                "profile_url": self.linkedin_url,
+                "extraction_summary": {
+                    "has_name": bool(data.get("name")),
+                    "has_headline": bool(data.get("headline")),
+                    "has_about": bool(data.get("about")),
+                    "experience_count": len(data.get("experience", [])),
+                    "education_count": len(data.get("education", [])),
+                    "skills_count": len(data.get("skills", [])),
+                    "certifications_count": len(data.get("certifications", [])),
+                },
+            }
 
-            # Process the data
-            # This would involve extracting work experiences, education, skills, etc.
-            # from the LinkedIn data structure
-
+            logger.info(f"Successfully parsed LinkedIn data: {result['extraction_summary']}")
             return result
+
         except Exception as e:
-            self.logger.error(f"Error parsing LinkedIn data: {str(e)}")
-            return None
+            logger.error(f"Error parsing LinkedIn data for {self.linkedin_url}: {str(e)}")
+            return {
+                "raw_data": {},
+                "success": False,
+                "error": str(e),
+                "profile_url": self.linkedin_url,
+            }
+
+    @classmethod
+    def is_valid_linkedin_url(cls, url: str) -> bool:
+        """Check if a URL is a valid LinkedIn profile URL."""
+        try:
+            normalized = cls._normalize_linkedin_url(None, url)
+            return True
+        except ValueError:
+            return False
+
+    def __str__(self) -> str:
+        return f"LinkedInImporter(url='{self.linkedin_url}')"
+
+    def __repr__(self) -> str:
+        return self.__str__()
