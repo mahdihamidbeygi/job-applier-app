@@ -691,6 +691,17 @@ class Skill(TimestampMixin):
     def __str__(self):
         return f"{self.name} ({self.get_category_display()})"
 
+    @property
+    def proficiency_display_with_max(self):
+        """
+        Returns the proficiency display name along with the numeric value out of the maximum.
+        Example: "Intermediate (3/5)"
+        """
+        if not self.PROFICIENCY_CHOICES:
+            return f"{self.proficiency}"  # Fallback if choices are somehow empty
+        max_proficiency_value = max(choice[0] for choice in self.PROFICIENCY_CHOICES)
+        return f"({self.proficiency}/{max_proficiency_value})"
+
 
 @receiver(post_save, sender=User)
 def create_user_profile(sender, instance, created, **kwargs):

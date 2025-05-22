@@ -23,11 +23,10 @@ logger = logging.getLogger(__name__)
 def import_github_profile(request) -> JsonResponse:
     """Import GitHub profile data"""
     try:
-        print("Request.method:", request.method)
         # Extract GitHub username from URL or direct input
         data = json.loads(request.body)
         github_input = data.get("github_url", "")
-        print("GitHub input:", github_input)
+
         if not github_input:
             return JsonResponse({"error": "No GitHub URL provided"}, status=400)
 
