@@ -26,7 +26,7 @@ def register(request) -> HttpResponseRedirect | HttpResponsePermanentRedirect | 
         if form.is_valid():
             form.save()
             messages.success(request, "Account created successfully!")
-            return redirect("core:login")
+            return redirect("account_login")
     else:
         form = UserCreationForm()
     return render(request, "core/register.html", {"form": form})

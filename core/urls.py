@@ -6,12 +6,8 @@ from django.views.generic import TemplateView
 from drf_spectacular.views import SpectacularAPIView, SpectacularRedocView, SpectacularSwaggerView
 from rest_framework.routers import DefaultRouter
 
-from . import views
-from .views import schema_views
-from .views.api_views import *
-from .views.auth_views import *
-from .views.job_views import *
-from .views.utility_views import *
+from . import views  # This will now import from core/views/__init__.py
+from .views import schema_views  # This correctly imports the schema_views module
 
 app_name = "core"
 
@@ -27,10 +23,7 @@ router.register(r"skills", views.SkillViewSet, basename="skill")
 
 # Authentication URLs
 auth_urls = [
-    path("login/", auth_views.LoginView.as_view(template_name="core/login.html"), name="login"),
     path("logout/", auth_views.LogoutView.as_view(next_page="core:home"), name="logout"),
-    path("register/", views.register, name="register"),
-    path("api/token/", views.get_token, name="token"),
 ]
 
 # Profile Management URLs
@@ -68,7 +61,7 @@ job_urls = [
     path("api/search-jobs/", views.search_jobs, name="api_search_jobs"),
     path("api/apply-to-job/<int:job_id>/", views.apply_to_job, name="apply_to_job"),
     path("api/jobs/<int:job_id>/documents/", views.get_job_documents, name="get_job_documents"),
-    path(
+    path(  # generate_job_documents is available via views (core/views/__init__.py -> core/views/job_views.py)
         "api/jobs/<int:job_id>/generate-documents/",
         views.generate_job_documents,
         name="generate_job_documents",
@@ -90,7 +83,7 @@ document_urls = [
     path("api/generate-documents/", views.generate_documents, name="generate_documents"),
     path("api/generate-answers/", views.generate_answers, name="generate_answers"),
     path("api/fill-form/", views.fill_form, name="fill-form"),
-    path("chat-api/", chat_api, name="chat_api"),
+    path("chat-api/", views.chat_api, name="chat_api"),
 ]
 
 # API Documentation URLs

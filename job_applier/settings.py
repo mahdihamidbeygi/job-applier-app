@@ -34,9 +34,7 @@ DEBUG: bool = True
 
 ALLOWED_HOSTS: list[str] = []
 
-
 # Application definition
-
 INSTALLED_APPS: list[str] = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -46,6 +44,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.staticfiles",
     "django.contrib.sites",  # Required for allauth
     "core",
+    "widget_tweaks",
     "rest_framework",
     "storages",
     "django_filters",
@@ -55,6 +54,7 @@ INSTALLED_APPS: list[str] = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.github",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -171,6 +171,9 @@ ACCOUNT_LOGIN_METHODS: set[str] = {"email"}
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Job Applier] "
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 
 # Google OAuth2 settings
 SOCIALACCOUNT_PROVIDERS: dict[str, Any] = {
@@ -387,3 +390,35 @@ LOGGING = {
         # },
     },
 }
+
+
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "SCOPE": [
+            "profile",
+            "email",
+        ],
+        "AUTH_PARAMS": {
+            "access_type": "online",
+        },
+        "OAUTH_PKCE_ENABLED": True,
+    },
+    "github": {
+        "SCOPE": [
+            "user:email",  # To get user's email
+        ],
+    },
+}
+
+# Email settings
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+SERVER_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+
+# Optional: Add email subject prefix
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Job Applier] "
