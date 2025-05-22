@@ -1,12 +1,13 @@
 from rest_framework import serializers
+
 from .models import (
-    UserProfile,
-    WorkExperience,
-    Project,
-    Education,
     Certification,
+    Education,
+    Project,
     Publication,
     Skill,
+    UserProfile,
+    WorkExperience,
 )
 
 
@@ -22,14 +23,15 @@ class UserProfileSerializer(serializers.ModelSerializer):
             "country",
             "postal_code",
             "website",
-            "linkedin",
-            "github",
+            "linkedin_url",
+            "github_url",
             "headline",
             "professional_summary",
             "current_position",
             "company",
             "years_of_experience",
             "resume",
+            "github_data",
         ]
         read_only_fields = ["id"]
 
@@ -148,8 +150,8 @@ class ProfileSerializer(serializers.ModelSerializer):
             "country",
             "postal_code",
             "website",
-            "linkedin",
-            "github",
+            "linkedin_url",
+            "github_url",
             "headline",
             "professional_summary",
             "current_position",
@@ -162,5 +164,6 @@ class ProfileSerializer(serializers.ModelSerializer):
             "certifications",
             "publications",
             "skills",
+            "github_data",
         ]
         read_only_fields = ["id"]

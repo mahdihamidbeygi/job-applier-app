@@ -171,23 +171,8 @@ ACCOUNT_LOGIN_METHODS: set[str] = {"email"}
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Job Applier] "
 ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
-
-# Google OAuth2 settings
-SOCIALACCOUNT_PROVIDERS: dict[str, Any] = {
-    "google": {
-        "SCOPE": [
-            "profile",
-            "email",
-        ],
-        "AUTH_PARAMS": {
-            "access_type": "online",
-        },
-        "OAUTH_PKCE_ENABLED": True,
-    }
-}
 
 LOGIN_URL = "account_login"
 LOGIN_REDIRECT_URL = "core:profile"
@@ -419,6 +404,3 @@ EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
 SERVER_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
-
-# Optional: Add email subject prefix
-ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Job Applier] "
