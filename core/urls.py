@@ -55,6 +55,7 @@ profile_urls = [
     path("profile/import/linkedin/", views.import_linkedin_profile, name="import_linkedin_profile"),
     path("import-resume/", views.import_resume, name="import_resume_alt"),
     path("bulk-delete-records/", views.bulk_delete_records, name="bulk_delete_records"),
+    path("profile/generate-bio/", views.generate_profile_bio, name="generate_profile_bio"),
     path("profile/edit/<str:record_type>/<int:record_id>/", views.edit_record, name="edit_record"),
 ]
 

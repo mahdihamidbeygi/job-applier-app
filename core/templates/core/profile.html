@@ -428,6 +428,43 @@
     transform: translateY(-2px);
   }
 
+  /* Style for inline action buttons (not full-width, primary-styled) */
+  .inline-action-btn {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    border: none;
+    padding: 0.5rem 1rem; /* Consistent with .section-actions .retry-button */
+    border-radius: var(
+      --border-radius-md,
+      6px
+    ); /* Fallback if --border-radius-md is not defined */
+    cursor: pointer;
+    transition: all var(--transition-speed, 0.3s) var(--transition-timing, ease); /* Fallbacks for transition vars */
+    font-weight: 500; /* Consistent with retry-button */
+    font-size: 0.9rem; /* Consistent with .section-actions .retry-button */
+    width: auto; /* Not full-width */
+    min-width: 120px; /* Consistent with .section-actions .retry-button */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-decoration: none; /* For <a> tags styled as buttons */
+  }
+
+  .inline-action-btn:hover {
+    background: var(
+      --secondary-color,
+      var(--primary-color-dark)
+    ); /* Fallback for hover color */
+    transform: translateY(-2px);
+    color: var(--text-primary); /* Ensure text color consistency on hover */
+  }
+
+  .bio-actions-center {
+    text-align: center;
+    margin-top: 0.75rem; /* Spacing between textarea and this action block */
+  }
+
   .file-upload {
     border: 2px dashed var(--border-color);
     border-radius: var(--border-radius-md);
@@ -1371,10 +1408,26 @@
           {{ form.address }}
         </div>
         <div class="full-width">
-          <label for="id_bio">Bio</label>
+          <label for="id_professional_summary">Professional Summary</label>
           {{ form.professional_summary }}
+          <div class="bio-actions-center">
+            <button
+              type="button"
+              id="generate-bio-btn"
+              class="inline-action-btn"
+            >
+              <i class="fas fa-magic"></i> Generate Bio with AI
+            </button>
+            <small
+              id="bio-status"
+              class="form-text text-muted"
+              style="display: block; margin-top: 0.25rem"
+            ></small>
+          </div>
         </div>
-        <button type="submit" class="save-btn">Save Changes</button>
+        <button type="submit" class="save-btn" style="margin-top: 0.75rem">
+          Save Changes
+        </button>
       </form>
     </section>
 
@@ -2557,5 +2610,54 @@
             hideLoading();
         }
     }
+    document.addEventListener('DOMContentLoaded', function() {
+      const generateBioButton = document.getElementById('generate-bio-btn');
+      const professionalSummaryTextarea = document.getElementById('id_professional_summary');
+      const bioStatusElement = document.getElementById('bio-status');
+      // const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value; // Already have getCookie
+
+      if (generateBioButton && professionalSummaryTextarea && bioStatusElement) {
+          generateBioButton.addEventListener('click', function() {
+              generateBioButton.disabled = true;
+              generateBioButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+              bioStatusElement.textContent = 'Generating bio, please wait...';
+              bioStatusElement.className = 'form-text text-info';
+
+              fetch("{% url 'core:generate_profile_bio' %}", {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'X-CSRFToken': getCookie('csrftoken'),
+                  }
+              })
+              .then(response => {
+                  if (!response.ok) {
+                      return response.json().then(err => { throw new Error(err.error || `Server error: ${response.status}`); })
+                                       .catch(() => { throw new Error(`Server error: ${response.status}`); });
+                  }
+                  return response.json();
+              })
+              .then(data => {
+                  if (data.success && data.bio) {
+                      professionalSummaryTextarea.value = data.bio;
+                      bioStatusElement.textContent = 'Bio generated successfully! Review and save your profile.';
+                      bioStatusElement.className = 'form-text text-success';
+                  } else {
+                      bioStatusElement.textContent = 'Error: ' + (data.error || 'Failed to generate bio.');
+                      bioStatusElement.className = 'form-text text-danger';
+                  }
+              })
+              .catch(error => {
+                  console.error('Error generating bio:', error);
+                  bioStatusElement.textContent = 'Error: ' + error.message;
+                  bioStatusElement.className = 'form-text text-danger';
+              })
+              .finally(() => {
+                  generateBioButton.disabled = false;
+                  generateBioButton.innerHTML = '<i class="fas fa-magic"></i> Generate Bio with AI';
+              });
+          });
+      }
+  });
 </script>
 {% endblock %}

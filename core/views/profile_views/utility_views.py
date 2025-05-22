@@ -5,11 +5,12 @@ Utility views for profile management.
 import json
 import logging
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
-from django.views.decorators.http import require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 
 from core.forms import (
     CertificationForm,
@@ -25,8 +26,11 @@ from core.models import (
     Project,
     Publication,
     Skill,
+    UserProfile,
     WorkExperience,
 )
+from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.resume_composition import ResumeComposition
 
 logger = logging.getLogger(__name__)
 
@@ -142,3 +146,33 @@ def edit_record(request, record_type, record_id):
         messages.error(request, f"Error updating {record_type}")
 
     return redirect("core:profile")
+
+
+@require_POST
+@login_required
+def generate_profile_bio(request: HttpRequest) -> JsonResponse:
+    """
+    Generate a professional bio for the user based on their profile data using an LLM.
+    """
+    try:
+        user_id = request.user.id
+        user_profile: UserProfile = UserProfile.objects.get(user_id=user_id)
+        personal_agent = PersonalAgent(user_id=user_id)
+        resume_composition = ResumeComposition(personal_agent)
+        resume_composition.tailor_to_job()
+
+        # 4. Update and save profile
+        user_profile.professional_summary = resume_composition.professional_summary.strip()
+        user_profile.save(update_fields=["professional_summary"])
+
+        logger.info(f"Successfully generated and updated bio for user {request.user.username}")
+        # messages.success(request, "Professional summary generated and updated successfully!") # Good for non-AJAX
+
+        return JsonResponse({"success": True, "bio": user_profile.professional_summary})
+
+    except Exception as e:
+        logger.error(f"Error generating bio for user {request.user.username}: {e}", exc_info=True)
+        return JsonResponse(
+            {"success": False, "error": "An unexpected error occurred while generating the bio."},
+            status=500,
+        )

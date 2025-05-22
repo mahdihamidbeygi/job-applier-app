@@ -560,7 +560,7 @@ class ResumeComposition:
         self.elements.append(Paragraph(skills_text, self.styles["ResumeBullet"]))
         self.elements.append(Spacer(1, 2))
 
-    def tailor_to_job(self, job_info: str = "") -> None:
+    def tailor_to_job(self, job_info: str | None = None) -> None:
         """
         Tailors the resume content based on the job description using structured LLM output.
 
@@ -571,8 +571,7 @@ class ResumeComposition:
         prompt: str = f"""
         You are a professional resume writer. Create a tailored professional summary, identify relevant skills, and suggest relevant projects based on the candidate's background and the target job description.
 
-        Job Description:
-        {job_info}
+        {f"Job Description: {job_info}" if job_info else ""}
 
         Candidate Background Summary:
         {self.personal_agent.get_formatted_background()}
