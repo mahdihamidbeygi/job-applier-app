@@ -15,6 +15,7 @@ from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
+import dj_database_url
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -27,12 +28,13 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = "django-insecure-your-secret-key-here"
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-your-secret-key-here")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG: bool = True
+DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS: list[str] = []
+ALLOWED_HOSTS = ["*"]  # Configure this based on your domain
+
 
 # Application definition
 INSTALLED_APPS: list[str] = [
@@ -46,6 +48,7 @@ INSTALLED_APPS: list[str] = [
     "core",
     "widget_tweaks",
     "rest_framework",
+    "rest_framework_simplejwt",
     "storages",
     "django_filters",
     "drf_spectacular",
@@ -55,6 +58,7 @@ INSTALLED_APPS: list[str] = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
+    "sslserver",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -66,6 +70,7 @@ MIDDLEWARE: list[str] = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "allauth.account.middleware.AccountMiddleware",  # Required for django-allauth
 ]
 
@@ -96,15 +101,11 @@ WSGI_APPLICATION = "job_applier.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-DATABASES: dict[str, dict[str, str]] = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": "db_jobapplier",
-        "USER": "jobapplier",
-        "PASSWORD": "jobapplier",
-        "HOST": "127.0.0.1",
-        "PORT": "5432",
-    }
+DATABASES = {
+    "default": dj_database_url.config(
+        default=os.getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/jobapplier"),
+        conn_max_age=600,
+    )
 }
 
 
@@ -272,7 +273,7 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = True  # For development only
+CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development, restrict in production
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS: list[str] = [
     "https://jobs.lever.co",
@@ -308,13 +309,27 @@ LINKEDIN_EMAIL: str | None = os.getenv("LINKEDIN_EMAIL")
 LINKEDIN_PASSWORD: str | None = os.getenv("LINKEDIN_PASSWORD")
 
 # Celery Configuration
-CELERY_BROKER_URL = "redis://localhost:6379/0"
+CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 USE_CELERY_FOR_RESUMES = True
-CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
+CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_ACCEPT_CONTENT: list[str] = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
+
+# Security Settings
+SECURE_SSL_REDIRECT = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_BROWSER_XSS_FILTER = True
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+SECURE_HSTS_SECONDS = 31536000  # 1 year
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+SECURE_HSTS_PRELOAD = True
+
+# Whitenoise for static files
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Google API Settings
 GOOGLE_MODEL: str | None = os.environ.get("GOOGLE_MODEL")
