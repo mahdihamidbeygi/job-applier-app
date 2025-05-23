@@ -9,6 +9,9 @@ from typing import Any, Dict, List, Optional
 from django.apps import apps
 from django.db import models
 from django.utils import timezone
+import logging
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 
 class TimestampMixin(models.Model):
@@ -190,8 +193,7 @@ class TimestampMixin(models.Model):
                     schema = TimestampMixin._generate_basic_schema(model)
                     result[model_name] = schema
             except Exception as e:
-                # Log or handle any errors
-                print(f"Error generating schema for {model_name}: {str(e)}")
+                logger.error(f"Error generating schema for {model_name}: {str(e)}")
 
         return result
 

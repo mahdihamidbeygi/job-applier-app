@@ -3,7 +3,7 @@ import logging
 import operator
 import os
 import uuid
-from typing import Annotated, Any, Dict, List, Optional, TypedDict, cast
+from typing import Annotated, Any, Dict, List, Never, Optional, TypedDict, cast
 
 from django.conf import settings
 from django.db.models.manager import BaseManager
@@ -109,6 +109,16 @@ class HandleScreeningInput(BaseModel):
     job_id: int = Field(description="The integer ID of the job listing saved in the system.")
 
 
+class CalculateJobMatchScoreInput(BaseModel):
+    job_id: int = Field(description="The integer ID of the job listing saved in the system.")
+
+
+class GenerateApplicationEmailInput(BaseModel):
+    job_id: int = Field(
+        description="The integer ID of the job listing saved in the system for which to generate an application email."
+    )
+
+
 # --- LangGraph State Definition ---
 class AgentState(TypedDict):
     input: str
@@ -128,6 +138,11 @@ class AssistantAgent:
     def __init__(self, user_id: int, conversation_id: Optional[int] = None):
         """
         Initialize the Agentic RAG processor with LangGraph.
+
+        Args:
+            user_id: The ID of the user for whom this agent is operating.
+            conversation_id: The optional ID of the current chat conversation.
+
         """
         self.user_id: int = user_id
         self.conversation_id: int | None = conversation_id
@@ -172,8 +187,8 @@ class AssistantAgent:
 
             llm = ChatGoogleGenerativeAI(
                 # model="gemini-2.5-flash-preview-04-17",
-                model="gemini-1.5-pro",
-                # model="gemini-2.5-flash-preview-04-17",
+                # model="gemini-1.5-pro",
+                model="gemini-2.5-pro-preview-05-06",
                 api_key=settings.GOOGLE_API_KEY,
                 temperature=0.1,
                 # convert_system_message_to_human=True,
@@ -184,7 +199,12 @@ class AssistantAgent:
             raise
 
     def _initialize_vectorstore(self, exclude_conversations: bool = False):
-        """Initialize or load the vector store."""
+        """Initialize or load the vector store.
+
+        Args:
+            exclude_conversations: If True, conversation history will not be
+                loaded into the vector store during initial population. Defaults to False.
+        """
         try:
             user_persist_dir: str = os.path.join(self.persist_directory, f"user_{self.user_id}")
             os.makedirs(user_persist_dir, exist_ok=True)
@@ -211,10 +231,18 @@ class AssistantAgent:
             raise ValueError("Vectorstore not initialized")
         return self.vectorstore.as_retriever(
             search_kwargs={"k": 10, "filter": {"user_id": self.user_id}}
-        )
+        )  # type: ignore
 
-    def _populate_vectorstore(self, vectorstore, exclude_conversations: bool = False) -> None:
-        """Populate the vector store with user data."""
+    def _populate_vectorstore(
+        self, vectorstore: Chroma, exclude_conversations: bool = False
+    ) -> None:
+        """Populate the given vector store with user data.
+
+        Args:
+            vectorstore: The Chroma vectorstore instance to populate.
+            exclude_conversations: If True, conversation history will not be
+                loaded into the vector store. Defaults to False.
+        """
         try:
             documents: list[Document] = []
             try:
@@ -224,7 +252,7 @@ class AssistantAgent:
                 except AttributeError:
                     # Fallback if the method doesn't exist
                     profile_content = (
-                        f"User Profile: {profile.get_all_user_info_formatted()}\n\n"
+                        f"User Profile Summary: \n\n"
                         + f"Title: {profile.title}\n"
                         + f"Summary: {profile.professional_summary}\n"
                         + f"Years of Experience: {profile.years_of_experience}"
@@ -414,10 +442,11 @@ class AssistantAgent:
     def save_job_description(self, job_description_text: str) -> str:
         """
         Parses and saves a job description provided as text to the database.
+        It also calculates an initial match score between the user's profile and this new job.
         Use this tool when the user pastes or provides the full text of a job description
-        and wants to save it for later use (like generating documents).
+        and wants to save it.
         Input MUST be the full text of the job description.
-        Returns a confirmation message with the new Job ID if successful, or an error message.
+        Returns a confirmation message with the new Job ID, the calculated match score, and match details, or an error message.
         """
         if not job_description_text or len(job_description_text) < 50:  # Basic validation
             return "Please provide the full job description text for me to save."
@@ -430,8 +459,14 @@ class AssistantAgent:
                 new_job_id: int = job_agent.job_record.id
                 job_title: str = job_agent.job_record.title
                 company: str = job_agent.job_record.company
+
+                # Calculate matching score
+                match_score, match_details = self.calculate_job_match_score(new_job_id)
+
                 return (
-                    f"OK. I've saved the job description for '{job_title}' at '{company}' as Job ID: {new_job_id}. "
+                    f"OK. I've saved the job description for '{job_title}' at '{company}' as Job ID: {new_job_id}.\n\n"
+                    f"Match Score: {match_score}%\n\n"
+                    f"Match Details:\n{match_details}\n\n"
                     f"Would you like me to generate a resume or cover letter for this job now?"
                 )
             else:
@@ -461,7 +496,7 @@ class AssistantAgent:
         """
         try:
             # Verify the job exists and belongs to the user
-            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+            job_listing: JobListing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
 
             # Initialize necessary agents for ApplicationAgent
             personal_agent = PersonalAgent(user_id=self.user_id)
@@ -568,7 +603,14 @@ class AssistantAgent:
             return f"An unexpected error occurred while retrieving job details: {str(e)}"
 
     def analyze_text_with_background(self, context_text: str, user_query: str) -> str:
-        """Analyzes provided text in the context of the user's background."""
+        """
+        Analyzes a given text (e.g., interview questions, job description snippet)
+        in the context of the user's professional background to answer a specific user query.
+        Use this tool when the user provides some text and asks a question about it
+        that requires considering their own profile/experience.
+        Inputs are the context_text (the text to analyze) and the user_query (the question about the text).
+        Returns an analysis or answer based on the provided text and the user's background.
+        """
         try:
             personal_agent = PersonalAgent(user_id=self.user_id)
             background_summary: Dict[str, Any] = personal_agent.get_formatted_background()
@@ -650,9 +692,8 @@ class AssistantAgent:
 
             # Fill the form fields
             form_fields = form_data.get("fields", [])
-            job_description = job_listing.description
 
-            filled_form = writer_agent.fill_application_form(form_fields, job_description)
+            filled_form = writer_agent.fill_application_form(form_fields)
 
             if filled_form:
                 return {
@@ -688,7 +729,7 @@ class AssistantAgent:
         """
         try:
             # Verify the job exists and belongs to the user
-            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+            job_listing: JobListing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
 
             # Initialize necessary agents
             personal_agent = PersonalAgent(user_id=self.user_id)
@@ -702,10 +743,10 @@ class AssistantAgent:
             )
 
             # Generate interview responses
-            interview_prep = writer_agent.prepare_interview_responses()
+            interview_prep: List[Dict[str, Any]] = writer_agent.prepare_interview_responses()
 
             if interview_prep:
-                formatted_prep = self._format_interview_prep(interview_prep, job_listing)
+                formatted_prep: str | Any = self._format_interview_prep(interview_prep, job_listing)
                 return formatted_prep
             else:
                 logger.error(f"WriterAgent failed to generate interview prep for job {job_id}")
@@ -728,7 +769,7 @@ class AssistantAgent:
         """
         try:
             # Verify the job exists and belongs to the user
-            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+            job_listing: JobListing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
 
             # Initialize necessary agents
             personal_agent = PersonalAgent(user_id=self.user_id)
@@ -745,10 +786,17 @@ class AssistantAgent:
             answer = writer_agent.generate_answer(question)
 
             if answer:
+                if "Unable to generate an answer." in answer or "Error:" in answer:
+                    logger.warning(
+                        f"AssistantAgent: WriterAgent failed to generate a specific answer for question '{question}' for job {job_id}. Response: {answer}"
+                    )
+                    return f'I was still unable to generate an answer for the question "{question}" for this job. It seems there\'s an ongoing issue with that specific request.\n\nWould you like me to try generating an answer for a different question for this job, or perhaps try generating an answer for the "{question}" question for a different job?'
                 return f"Here's a suggested answer for your application to '{job_listing.title}' at '{job_listing.company}':\n\n{answer}"
             else:
-                logger.error(f"WriterAgent failed to generate answer for job {job_id}")
-                return "Sorry, I encountered an issue while generating your answer."
+                logger.error(
+                    f"AssistantAgent: WriterAgent returned None or empty for question '{question}' for job {job_id}"
+                )
+                return f'Sorry, I encountered an unexpected issue while trying to generate an answer for question "{question}" for job {job_id}.'
 
         except JobListing.DoesNotExist:
             return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
@@ -757,6 +805,71 @@ class AssistantAgent:
                 f"Error in generate_answer_to_question tool for job {job_id}: {str(e)}"
             )
             return f"An unexpected error occurred while generating your answer: {str(e)}"
+
+    def calculate_job_match_score(self, job_id: int) -> tuple[int, str]:
+        """
+        Calculates a matching score (0-100%) between the user's profile and the requirements of a specific job.
+        Use this tool when the user asks to evaluate how well they match a specific job (using its ID), or if a score needs to be recalculated.
+        Input MUST be the integer ID of the job listing saved in the system.
+        Returns a tuple containing the match score (integer percentage) and a string
+        with a detailed explanation of the match (strengths and gaps).
+
+        """
+        try:
+            # Initialize PersonalAgent to get user profile data
+            personal_agent = PersonalAgent(user_id=self.user_id)
+            user_background: Dict[str, Any] = personal_agent.get_formatted_background()
+
+            job_agent = JobAgent(user_id=self.user_id, job_id=job_id)
+
+            score, details = job_agent.calculate_match_score(user_background)
+            return (score, details)
+
+        except Exception as e:
+            logger.exception(f"Error calculating job match score: {str(e)}")
+            # Return a default score with error message
+            return (0, f"Could not calculate a matching score due to an error: {str(e)}")
+
+    def generate_application_email_tool(self, job_id: int) -> str:
+        """
+        Generates a draft for an application email for the user based on a specific job listing ID.
+        This email is intended to be sent by the user with their resume and cover letter attached.
+        Use this tool when the user asks to write an email to apply for a specific job ID.
+        Input MUST be the integer ID of the job listing saved in the system.
+        Returns the subject and body of the generated email, along with instructions for the user.
+        """
+        try:
+            # Verify the job exists and belongs to the user
+            job_listing = get_object_or_404(JobListing, id=job_id, user_id=self.user_id)
+
+            personal_agent = PersonalAgent(user_id=self.user_id)
+            job_agent = JobAgent(user_id=self.user_id, job_id=job_id)
+
+            writer_agent = WriterAgent(
+                user_id=self.user_id,
+                personal_agent=personal_agent,
+                job_agent=job_agent,
+            )
+
+            email_content = writer_agent.generate_application_email()
+
+            if email_content.get("subject") != "Error":
+                return (
+                    f"OK. I've drafted an application email for the '{job_listing.title}' position at '{job_listing.company}'.\n\n"
+                    f"Subject: {email_content['subject']}\n\n"
+                    f"Body:\n{email_content['body']}\n\n"
+                    f"**Important:** Please review this draft, fill in any placeholders like '[Source/Platform]' and '[mention...]', and remember to attach your resume and cover letter before sending!"
+                )
+            else:
+                logger.error(
+                    f"WriterAgent failed to generate application email for job {job_id}: {email_content.get('body')}"
+                )
+                return f"Sorry, I encountered an issue while drafting the application email: {email_content.get('body')}"
+        except JobListing.DoesNotExist:
+            return f"I couldn't find a job with ID {job_id} associated with your account. Please double-check the ID."
+        except Exception as e:
+            logger.exception(f"Error in generate_application_email_tool for job {job_id}: {str(e)}")
+            return f"An unexpected error occurred while trying to draft the application email: {str(e)}"
 
     def _initialize_tools(self) -> list[StructuredTool]:
         """Gather all defined tools for the agent using StructuredTool."""
@@ -834,6 +947,18 @@ class AssistantAgent:
                 description=self.generate_answer_to_question.__doc__,
                 args_schema=GenerateAnswerInput,
             ),
+            StructuredTool.from_function(
+                func=self.calculate_job_match_score,
+                name="calculate_job_match_score",
+                description=self.calculate_job_match_score.__doc__,
+                args_schema=CalculateJobMatchScoreInput,
+            ),
+            StructuredTool.from_function(
+                func=self.generate_application_email_tool,
+                name="generate_application_email",
+                description=self.generate_application_email_tool.__doc__,
+                args_schema=GenerateApplicationEmailInput,
+            ),
         ]
         return tools
 
@@ -854,8 +979,17 @@ class AssistantAgent:
         agent = create_tool_calling_agent(llm_with_tools, self.tools, prompt)
         return agent
 
-    def _agent_node(self, state: AgentState):
-        """Invokes the agent model to decide the next action or respond."""
+    def _agent_node(self, state: AgentState) -> Dict[str, Any]:
+        """Invokes the agent model to decide the next action or respond.
+
+        Args:
+            state: The current state of the agent graph.
+
+        Returns:
+            A dictionary updating the agent state, typically with
+            'intermediate_steps' if a tool is called, or 'chat_history'
+            if the agent is finishing.
+        """
 
         self._validate_state(state)
         # Prepare input for the agent runnable
@@ -909,15 +1043,19 @@ class AssistantAgent:
             error_message = AIMessage(content="Error: Unexpected agent response format.")
             return {"chat_history": state["chat_history"] + [error_message]}
 
-    def _execute_tool_node(self, state: AgentState) -> Dict[str, list]:
+    def _execute_tool_node(self, state: AgentState) -> Dict[str, List[ToolMessage]]:
         """
         Executes the tool calls requested by the agent.
 
-        Expects the last item in intermediate_steps to be an AIMessage
-        containing a list of tool_calls (dictionaries).
+        Args:
+            state: The current state of the agent graph. Expects the last item
+                   in `state["intermediate_steps"]` to be an `AgentAction`
+                   detailing the tool to be called and its arguments.
 
-        Returns a dictionary with 'intermediate_steps' containing a list
-        of ToolMessage objects corresponding to the results.
+        Returns:
+            A dictionary with the key 'intermediate_steps' containing a list
+            of `ToolMessage` objects, each representing the result of a
+            tool execution.
         """
         self._validate_state(state)
         last_step = state["intermediate_steps"][-1] if state["intermediate_steps"] else None
@@ -1024,8 +1162,8 @@ class AssistantAgent:
         return f"""
             **AGENT IDENTITY (User ID: {self.user_id}):**
 
-        You are an excellent job applicant assistant. But to increase the quality of responses, you act as You ARE the user with ID {self.user_id} when writing documents or answering application questions.
-        in that case You're not just assisting them - you ARE them in their job application process. 
+        YOU ARE an excellent job applicant ASSISTANT. But to increase the quality of responses, you act as you are the user with ID {self.user_id} when writing documents or answering application questions.
+        in that case You're not just assisting them - you are them in their job application process. 
         When writing resumes, cover letters, or answering screening questions, write from the FIRST PERSON perspective as if you are the actual job applicant.
 
             **CORE BEHAVIOR:**
@@ -1045,6 +1183,8 @@ class AssistantAgent:
             - When you encounter text appearing to be like job descriptions, use `save_job_description` to parse and save them and Job IDs
             - After saving, keep the Job IDs in the conversation, and return Job ID to screen
             - Reference the job details when discussing why YOU are interested or qualified
+            - If you need to estimate or re-estimate a match score for a specific job ID, use `calculate_job_match_score`.
+
             
             3. **Document Generation:**
             - Generate YOUR resume and cover letter using `generate_tailored_resume` and `generate_tailored_cover_letter`
@@ -1056,6 +1196,7 @@ class AssistantAgent:
             - For job application forms, use `fill_application_form` to complete multiple fields at once
             - Handle screening questions with `handle_screening_questions` tool
             - Prepare for interviews using `prepare_interview_responses` tool
+            - If the user needs to send an application via email, use `generate_application_email` to draft the email content.
             - All responses should be in YOUR voice as the applicant
             
             5. **Conversation Flow:**
@@ -1063,7 +1204,6 @@ class AssistantAgent:
             - Maintain the perspective of being the job applicant throughout all interactions
             - If asked for clarification about your background, experience, or motivations, always retrieve this information from your profile first
             - Be proactive about next steps in YOUR application process
-            - No need to mention Job ID in answering application questions.
             """
 
     def _build_graph(self) -> StateGraph:
@@ -1121,7 +1261,14 @@ class AssistantAgent:
 
     # --- Main Execution Method ---
     def run(self, user_input: str) -> str:
-        """Run the agentic RAG process using the LangGraph application."""
+        """Run the agentic RAG process using the LangGraph application.
+
+        Args:
+            user_input: The input string from the user.
+
+        Returns:
+            The agent's final response string to the user.
+        """
         try:
             logger.info(
                 f"Running Agentic RAG (LangGraph) for user {self.user_id}, conversation {self.conversation_id}"
@@ -1213,3 +1360,81 @@ class AssistantAgent:
         elif not isinstance(state, dict):
             raise ValueError(f"Invalid state format: {type(state)}. Expected dict")
         return state
+
+    def _format_interview_prep(
+        self, interview_prep: List[Dict[str, Any]], job_listing: JobListing
+    ) -> str | Any:
+        """
+        Format the interview preparation data into a readable structure.
+
+        Args:
+            interview_prep: The raw interview preparation data (likely a JSON string or dict)
+            job_listing: The job listing object
+
+        Returns:
+            A formatted string with the interview preparation materials
+        """
+        try:
+            # Try to parse the interview_prep if it's a string
+            if isinstance(interview_prep, str):
+                try:
+                    prep_data = json.loads(interview_prep)
+                except json.JSONDecodeError:
+                    # If it's not valid JSON, just return it as is
+                    return f"Interview Preparation for {job_listing.title} at {job_listing.company}:\n\n{interview_prep}"
+            else:
+                prep_data: Never = interview_prep
+
+            # Format the structured data
+            formatted_text = (
+                f"# Interview Preparation for {job_listing.title} at {job_listing.company}\n\n"
+            )
+
+            # Add common questions section
+            if "common_questions" in prep_data and prep_data["common_questions"]:
+                formatted_text += "## Likely Interview Questions\n\n"
+                for i, question in enumerate(prep_data["common_questions"], 1):
+                    formatted_text += f"{i}. {question}\n"
+                formatted_text += "\n"
+
+            # Add prepared responses section
+            if "responses" in prep_data and prep_data["responses"]:
+                formatted_text += "## Prepared Responses\n\n"
+                for response in prep_data["responses"]:
+                    if isinstance(response, dict):
+                        q = response.get("question", "")
+                        a = response.get("answer", "")
+                        if q and a:
+                            formatted_text += f"**Q: {q}**\n\nA: {a}\n\n"
+                    else:
+                        formatted_text += f"{response}\n\n"
+
+            # Add key points section
+            if "key_points" in prep_data and prep_data["key_points"]:
+                formatted_text += "## Key Points to Emphasize\n\n"
+                for point in prep_data["key_points"]:
+                    formatted_text += f"- {point}\n"
+                formatted_text += "\n"
+
+            # Add questions to ask section
+            if "questions_to_ask" in prep_data and prep_data["questions_to_ask"]:
+                formatted_text += "## Questions to Ask the Interviewer\n\n"
+                for i, question in enumerate(prep_data["questions_to_ask"], 1):
+                    formatted_text += f"{i}. {question}\n"
+                formatted_text += "\n"
+
+            # Add company-specific preparation
+            if "company_specific_prep" in prep_data and prep_data["company_specific_prep"]:
+                formatted_text += "## Company-Specific Preparation\n\n"
+                if isinstance(prep_data["company_specific_prep"], list):
+                    for item in prep_data["company_specific_prep"]:
+                        formatted_text += f"- {item}\n"
+                else:
+                    formatted_text += prep_data["company_specific_prep"]
+
+            return formatted_text
+
+        except Exception as e:
+            logger.exception(f"Error formatting interview preparation: {str(e)}")
+            # Fall back to returning the raw data
+            return f"Interview Preparation for {job_listing.title} at {job_listing.company}:\n\n{interview_prep}"

@@ -1,7 +1,8 @@
+import logging
 import os
 import sys
+
 import django
-import logging
 
 # --- Add Django Setup ---
 # Add the project root directory to Python path if running script directly
@@ -17,10 +18,15 @@ except Exception as e:
     sys.exit(1)
 # --- End Django Setup ---
 
+import logging
+from typing import Any, Dict
+
 # Now import Django models and other components
 from django.contrib.auth import get_user_model
-from core.utils.agents.job_agent import JobAgent
+
 from core.models import UserProfile  # Needed if creating profile
+from core.utils.agents.job_agent import JobAgent
+from core.utils.agents.personal_agent import PersonalAgent
 
 # Configure logging (optional but helpful)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -177,5 +183,17 @@ def run_test():
         )  # Use logger.exception
 
 
+def test_calculate_match_score():
+    # Initialize PersonalAgent to get user profile data
+    personal_agent = PersonalAgent(user_id=1)
+    user_background: Dict[str, Any] = personal_agent.get_formatted_background()
+
+    job_agent = JobAgent(user_id=1, job_id=346)
+
+    score, details = job_agent.calculate_match_score(user_background)
+    return (score, details)
+
+
 if __name__ == "__main__":
     run_test()
+    test_calculate_match_score()

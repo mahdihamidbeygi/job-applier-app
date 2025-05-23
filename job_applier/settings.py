@@ -34,9 +34,7 @@ DEBUG: bool = True
 
 ALLOWED_HOSTS: list[str] = []
 
-
 # Application definition
-
 INSTALLED_APPS: list[str] = [
     "django.contrib.admin",
     "django.contrib.auth",
@@ -46,6 +44,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.staticfiles",
     "django.contrib.sites",  # Required for allauth
     "core",
+    "widget_tweaks",
     "rest_framework",
     "storages",
     "django_filters",
@@ -55,6 +54,7 @@ INSTALLED_APPS: list[str] = [
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+    "allauth.socialaccount.providers.github",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -171,20 +171,8 @@ ACCOUNT_LOGIN_METHODS: set[str] = {"email"}
 ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
-
-# Google OAuth2 settings
-SOCIALACCOUNT_PROVIDERS: dict[str, Any] = {
-    "google": {
-        "SCOPE": [
-            "profile",
-            "email",
-        ],
-        "AUTH_PARAMS": {
-            "access_type": "online",
-        },
-        "OAUTH_PKCE_ENABLED": True,
-    }
-}
+ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Job Applier] "
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 
 LOGIN_URL = "account_login"
 LOGIN_REDIRECT_URL = "core:profile"
@@ -201,7 +189,22 @@ AWS_S3_VERIFY = True
 AWS_S3_SIGNATURE_VERSION = "s3v4"
 
 # Use S3 for media files
-DEFAULT_FILE_STORAGE = "storages.backends.s3boto3.S3Boto3Storage"
+# Django Storages configuration (replaces DEFAULT_FILE_STORAGE)
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        "OPTIONS": {
+            # Options can be added here if needed, e.g.:
+            # "bucket_name": AWS_STORAGE_BUCKET_NAME,
+            # "region_name": AWS_S3_REGION_NAME,
+            # "access_key": AWS_ACCESS_KEY_ID, # If not using IAM roles
+            # "secret_key": AWS_SECRET_ACCESS_KEY, # If not using IAM roles
+        },
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
 
 # OpenAI Settings
 OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
@@ -306,6 +309,7 @@ LINKEDIN_PASSWORD: str | None = os.getenv("LINKEDIN_PASSWORD")
 
 # Celery Configuration
 CELERY_BROKER_URL = "redis://localhost:6379/0"
+USE_CELERY_FOR_RESUMES = True
 CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
 CELERY_ACCEPT_CONTENT: list[str] = ["json"]
 CELERY_TASK_SERIALIZER = "json"
@@ -316,6 +320,10 @@ CELERY_TIMEZONE = TIME_ZONE
 GOOGLE_MODEL: str | None = os.environ.get("GOOGLE_MODEL")
 GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# URLField default scheme (to address RemovedInDjango60Warning)
+# Set to True to default to 'https', False to default to 'http' (current behavior)
+FORMS_URLFIELD_ASSUME_HTTPS = True  # Or False, depending on your preference
 
 LOGGING = {
     "version": 1,
@@ -368,3 +376,32 @@ LOGGING = {
         # },
     },
 }
+
+
+SOCIALACCOUNT_PROVIDERS = {
+    "google": {
+        "SCOPE": [
+            "profile",
+            "email",
+        ],
+        "AUTH_PARAMS": {
+            "access_type": "online",
+        },
+        "OAUTH_PKCE_ENABLED": True,
+    },
+    "github": {
+        "SCOPE": [
+            "user:email",  # To get user's email
+        ],
+    },
+}
+
+# Email settings
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
+SERVER_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")

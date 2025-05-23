@@ -5,15 +5,13 @@ API ViewSets for the core app.
 import json
 import logging
 from datetime import date
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
 from django.db.models import Count, QuerySet
-from django.db.models.manager import BaseManager
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_POST
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema

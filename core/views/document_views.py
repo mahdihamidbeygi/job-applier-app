@@ -8,13 +8,10 @@ from typing import Any, Dict
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
-from django.shortcuts import render
 from django.utils.decorators import method_decorator
-from django.views.decorators.http import require_http_methods
 from django.views.generic import TemplateView
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
 
 from core.utils.agents.job_agent import JobAgent
 from core.utils.agents.personal_agent import PersonalAgent
@@ -32,7 +29,6 @@ class ManualSubmissionView(TemplateView):
 
 
 @login_required
-@require_http_methods(["POST"])
 def generate_documents(request):
     """
     Generate resume and cover letter
@@ -81,8 +77,8 @@ def generate_documents(request):
         return JsonResponse({"error": str(e)}, status=500)
 
 
-@require_http_methods(["POST"])
 @login_required
+# @require_http_methods(["POST"])
 def generate_answers(request):
     """
     Generate answers to job application questions
@@ -137,7 +133,7 @@ def generate_answers(request):
 
 
 @login_required
-@require_http_methods(["POST"])
+# @require_http_methods(["POST"])
 def process_job_application(request):
     """
     Process a job application form
@@ -206,7 +202,9 @@ def fill_form(request):
         user_id = request.user.id if request.user.is_authenticated else None
 
         if not user_id:
-            return Response({"error": "Authentication required"}, status=401)
+            return JsonResponse(
+                {"error": "Authentication required"}, status=401
+            )  # Changed to JsonResponse for consistency
 
         personal_agent = PersonalAgent(user_id)
         job_agent = JobAgent(
@@ -227,7 +225,7 @@ def fill_form(request):
         # Process form fields using the utility function
         field_values: Dict[str, Any] = process_form_fields(form_fields, application_agent)
 
-        return Response(
+        return JsonResponse(  # Changed to JsonResponse for consistency
             {
                 "success": True,
                 "field_values": field_values,
@@ -235,4 +233,6 @@ def fill_form(request):
         )
     except Exception as e:
         logger.error(f"Error in fill_form: {str(e)}")
-        return Response({"error": str(e)}, status=500)
+        return JsonResponse(
+            {"error": str(e)}, status=500
+        )  # Changed to JsonResponse for consistency

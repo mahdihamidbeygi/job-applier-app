@@ -428,6 +428,43 @@
     transform: translateY(-2px);
   }
 
+  /* Style for inline action buttons (not full-width, primary-styled) */
+  .inline-action-btn {
+    background: var(--primary-color);
+    color: var(--text-primary);
+    border: none;
+    padding: 0.5rem 1rem; /* Consistent with .section-actions .retry-button */
+    border-radius: var(
+      --border-radius-md,
+      6px
+    ); /* Fallback if --border-radius-md is not defined */
+    cursor: pointer;
+    transition: all var(--transition-speed, 0.3s) var(--transition-timing, ease); /* Fallbacks for transition vars */
+    font-weight: 500; /* Consistent with retry-button */
+    font-size: 0.9rem; /* Consistent with .section-actions .retry-button */
+    width: auto; /* Not full-width */
+    min-width: 120px; /* Consistent with .section-actions .retry-button */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    text-decoration: none; /* For <a> tags styled as buttons */
+  }
+
+  .inline-action-btn:hover {
+    background: var(
+      --secondary-color,
+      var(--primary-color-dark)
+    ); /* Fallback for hover color */
+    transform: translateY(-2px);
+    color: var(--text-primary); /* Ensure text color consistency on hover */
+  }
+
+  .bio-actions-center {
+    text-align: center;
+    margin-top: 0.75rem; /* Spacing between textarea and this action block */
+  }
+
   .file-upload {
     border: 2px dashed var(--border-color);
     border-radius: var(--border-radius-md);
@@ -634,6 +671,111 @@
       grid-template-columns: 1fr;
       gap: 0.35rem;
     }
+  }
+
+  #skills .skills-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem; /* Spacing between skill cards */
+    margin-top: 1.5rem;
+  }
+
+  #skills .skill-item {
+    background: var(--darker-bg);
+    border-radius: var(--border-radius-lg, 12px);
+    padding: 1.5rem;
+    box-shadow: var(--shadow-md, 0 4px 6px rgba(0, 0, 0, 0.1));
+    position: relative;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    flex: 1 1 280px; /* Allows cards to grow and shrink, with a base width */
+    min-width: 250px; /* Minimum width for each skill card */
+    display: flex;
+    flex-direction: column; /* Ensures content and actions stack vertically if needed */
+  }
+
+  #skills .skill-item:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-lg, 0 8px 15px rgba(0, 0, 0, 0.15));
+  }
+
+  #skills .skill-item-content {
+    flex-grow: 1; /* Allows content to take up available space */
+  }
+
+  #skills .skill-item h3 {
+    /* Skill name */
+    color: var(--primary-color);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-top: 0; /* Remove default margin if any */
+    margin-bottom: 0.75rem;
+    line-height: 1.3;
+  }
+
+  #skills .skill-item-content p {
+    /* General paragraphs within skill content */
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+    line-height: 1.4;
+  }
+
+  #skills .skill-item-content p:last-child {
+    margin-bottom: 0; /* Remove margin from the last paragraph in content */
+  }
+
+  #skills .skill-category-label {
+    /* Specific styling for category if needed */
+  }
+
+  #skills .skill-proficiency-label {
+    font-weight: 500; /* Make proficiency stand out a bit */
+    color: var(--text-primary); /* Slightly more prominent color */
+  }
+
+  /* Record actions within skill items */
+  #skills .skill-item .record-actions {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    gap: 0.5rem;
+    opacity: 0.6; /* Slightly transparent by default, more subtle */
+    transition: opacity 0.3s ease;
+  }
+
+  #skills .skill-item:hover .record-actions {
+    opacity: 1; /* Fully visible on hover */
+  }
+
+  #skills .skill-item .record-actions button {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.3rem;
+    font-size: 1rem; /* Adjust icon size */
+    transition: color 0.3s ease;
+  }
+
+  #skills .skill-item .record-actions button:hover {
+    color: var(--primary-color);
+  }
+
+  #skills .skill-item .record-actions .delete-btn:hover {
+    color: var(--danger-color, #dc3545); /* Fallback danger color */
+  }
+
+  /* Empty state message for skills */
+  #skills .skills-grid .no-records-message {
+    width: 100%; /* Take full width of the grid container */
+    text-align: center;
+    padding: 2rem;
+    background-color: var(--darker-bg);
+    border-radius: var(--border-radius-md, 8px);
+    color: var(--text-secondary);
+    font-style: italic;
+    margin-top: 1rem; /* Add some space if it's the only item */
   }
 
   /* GitHub Section Styles */
@@ -1111,7 +1253,7 @@
           <input
             type="text"
             id="github-username"
-            placeholder="Enter your GitHub profile URL"
+            placeholder="Enter your GitHub profile Username or URL"
           />
           <button onclick="importFromGitHub()" class="retry-button">
             Import
@@ -1142,8 +1284,12 @@
       <div class="import-card">
         <i class="fab fa-linkedin"></i>
         <h3>Import from LinkedIn</h3>
-        <p>Import your professional information from LinkedIn</p>
-        <button onclick="showImportForm('linkedin')" class="retry-button">
+        <p>Import your professional information from LinkedIn (Coming Soon)</p>
+        <button
+          onclick="showImportForm('linkedin')"
+          class="retry-button"
+          disabled
+        >
           Import from LinkedIn
         </button>
         <div id="linkedin-form" class="import-form">
@@ -1266,10 +1412,26 @@
           {{ form.address }}
         </div>
         <div class="full-width">
-          <label for="id_bio">Bio</label>
+          <label for="id_professional_summary">Professional Summary</label>
           {{ form.professional_summary }}
+          <div class="bio-actions-center">
+            <button
+              type="button"
+              id="generate-bio-btn"
+              class="inline-action-btn"
+            >
+              <i class="fas fa-magic"></i> Generate Bio with AI
+            </button>
+            <small
+              id="bio-status"
+              class="form-text text-muted"
+              style="display: block; margin-top: 0.25rem"
+            ></small>
+          </div>
         </div>
-        <button type="submit" class="save-btn">Save Changes</button>
+        <button type="submit" class="save-btn" style="margin-top: 0.75rem">
+          Save Changes
+        </button>
       </form>
     </section>
 
@@ -1571,6 +1733,13 @@
       <div class="skills-grid">
         {% for skill in skills %}
         <div class="skill-item" data-record-id="{{ skill.id }}">
+          <div class="skill-item-content">
+            <h3>{{ skill.name }}</h3>
+            <p class="skill-category-label">Category: {{ skill.category }}</p>
+            <p class="skill-proficiency-label">
+              Proficiency: {{ skill.get_proficiency_display}}
+            </p>
+          </div>
           <div class="record-actions">
             <button onclick="editRecord('skill', {{ skill.id }})" title="Edit">
               <i class="fas fa-edit"></i>
@@ -1583,12 +1752,11 @@
               <i class="fas fa-trash"></i>
             </button>
           </div>
-          <h3>{{ skill.name }}</h3>
-          <p>{{ skill.category }}</p>
-          <p>Proficiency: {{ skill.proficiency }}</p>
         </div>
         {% empty %}
-        <p>No skills added yet.</p>
+        <p class="no-records-message">
+          No skills added yet. Add your skills using the form above!
+        </p>
         {% endfor %}
       </div>
     </section>
@@ -1811,491 +1979,491 @@
 </div>
 
 <script>
-  function showSection(sectionId) {
-      // Hide all sections
-      document.querySelectorAll('.section').forEach(section => {
-          section.classList.remove('active');
-      });
+    function showSection(sectionId) {
+        // Hide all sections
+        document.querySelectorAll('.section').forEach(section => {
+            section.classList.remove('active');
+        });
 
-      // Show selected section
-      document.getElementById(sectionId).classList.add('active');
+        // Show selected section
+        document.getElementById(sectionId).classList.add('active');
 
-      // Update navigation
-      document.querySelectorAll('.profile-nav-item').forEach(item => {
-          item.classList.remove('active');
-      });
-      event.target.classList.add('active');
-  }
+        // Update navigation
+        document.querySelectorAll('.profile-nav-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        event.target.classList.add('active');
+    }
 
-  function showImportForm(type) {
-      // Hide all forms
-      document.querySelectorAll('.import-form').forEach(form => {
-          form.classList.remove('active');
-      });
+    function showImportForm(type) {
+        // Hide all forms
+        document.querySelectorAll('.import-form').forEach(form => {
+            form.classList.remove('active');
+        });
 
-      // Show selected form
-      document.getElementById(`${type}-form`).classList.add('active');
-  }
+        // Show selected form
+        document.getElementById(`${type}-form`).classList.add('active');
+    }
 
-  function showLoading() {
-      document.getElementById('loading-overlay').style.display = 'flex';
-  }
+    function showLoading() {
+        document.getElementById('loading-overlay').style.display = 'flex';
+    }
 
-  function hideLoading() {
-      document.getElementById('loading-overlay').style.display = 'none';
-  }
+    function hideLoading() {
+        document.getElementById('loading-overlay').style.display = 'none';
+    }
 
-  async function importFromGitHub() {
-      const githubUrl = document.getElementById('github-username').value;
-      if (!githubUrl) {
-          alert('Please enter your GitHub profile URL');
-          return;
-      }
+    async function importFromGitHub() {
+        const githubUrl = document.getElementById('github-username').value;
+        if (!githubUrl) {
+            alert('Please enter your GitHub profile URL');
+            return;
+        }
 
-      // Extract username from GitHub URL
-      let username;
-      try {
-          const url = new URL(githubUrl);
-          const pathParts = url.pathname.split('/').filter(part => part);
-          username = pathParts[0]; // Get the first part of the path which should be the username
-      } catch (e) {
-          // If URL parsing fails, assume the input is a username
-          username = githubUrl;
-      }
+        // Extract username from GitHub URL
+        let username;
+        try {
+            const url = new URL(githubUrl);
+            const pathParts = url.pathname.split('/').filter(part => part);
+            username = pathParts[0]; // Get the first part of the path which should be the username
+        } catch (e) {
+            // If URL parsing fails, assume the input is a username
+            username = githubUrl;
+        }
 
-      if (!username) {
-          alert('Could not extract GitHub username from the URL');
-          return;
-      }
+        if (!username) {
+            alert('Could not extract GitHub username from the URL');
+            return;
+        }
 
-      showLoading();
-      try {
-          const response = await fetch('{% url "core:import_github_profile" %}', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'X-CSRFToken': getCookie('csrftoken')
-              },
-              body: JSON.stringify({ github_username: username })
-          });
+        showLoading();
+        try {
+            const response = await fetch('{% url "core:import_github_profile" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ github_url: username })
+            });
 
-          const data = await response.json();
-          if (data.success) {
-              location.reload();
-          } else {
-              alert('Error: ' + data.error);
-          }
-      } catch (error) {
-          alert('Error importing profile: ' + error.message);
-      } finally {
-          hideLoading();
-      }
-  }
+            const data = await response.json();
+            if (data.success) {
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Error importing profile: ' + error.message);
+        } finally {
+            hideLoading();
+        }
+    }
 
-  async function importFromResume() {
-      const fileInput = document.getElementById('resume-file');
-      const file = fileInput.files[0];
-      if (!file) {
-          alert('Please select a resume file');
-          return;
-      }
+    async function importFromResume() {
+        const fileInput = document.getElementById('resume-file');
+        const file = fileInput.files[0];
+        if (!file) {
+            alert('Please select a resume file');
+            return;
+        }
 
-      showLoading();
-      const formData = new FormData();
-      formData.append('resume', file);
+        showLoading();
+        const formData = new FormData();
+        formData.append('resume', file);
 
-      try {
-          const response = await fetch('{% url "core:import_resume" %}', {
-              method: 'POST',
-              headers: {
-                  'X-CSRFToken': getCookie('csrftoken')
-              },
-              body: formData
-          });
+        try {
+            const response = await fetch('{% url "core:import_resume" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: formData
+            });
 
-          const data = await response.json();
-          if (data.success) {
-              alert('Profile imported successfully!');
-              location.reload();
-          } else {
-              alert('Error: ' + data.error);
-          }
-      } catch (error) {
-          alert('Error importing profile: ' + error.message);
-      } finally {
-          hideLoading();
-      }
-  }
+            const data = await response.json();
+            if (data.success) {
+                alert('Profile imported successfully!');
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Error importing profile: ' + error.message);
+        } finally {
+            hideLoading();
+        }
+    }
 
-  async function importFromLinkedIn() {
-      const url = document.getElementById('linkedin-url').value;
-      if (!url) {
-          alert('Please enter your LinkedIn profile URL');
-          return;
-      }
+    async function importFromLinkedIn() {
+        const url = document.getElementById('linkedin-url').value;
+        if (!url) {
+            alert('Please enter your LinkedIn profile URL');
+            return;
+        }
 
-      showLoading();
-      try {
-          const response = await fetch('{% url "core:import_linkedin_profile" %}', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json',
-                  'X-CSRFToken': getCookie('csrftoken')
-              },
-              body: JSON.stringify({ linkedin_url: url })
-          });
+        showLoading();
+        try {
+            const response = await fetch('{% url "core:import_linkedin_profile" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken')
+                },
+                body: JSON.stringify({ linkedin_url: url })
+            });
 
-          const data = await response.json();
-          if (data.success) {
-              alert('Profile imported successfully!');
-              location.reload();
-          } else {
-              alert('Error: ' + data.error);
-          }
-      } catch (error) {
-          alert('Error importing profile: ' + error.message);
-      } finally {
-          hideLoading();
-      }
-  }
+            const data = await response.json();
+            if (data.success) {
+                alert('Profile imported successfully!');
+                location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        } catch (error) {
+            alert('Error importing profile: ' + error.message);
+        } finally {
+            hideLoading();
+        }
+    }
 
-  // Helper function to get CSRF token
-  function getCookie(name) {
-      let cookieValue = null;
-      if (document.cookie && document.cookie !== '') {
-          const cookies = document.cookie.split(';');
-          for (let i = 0; i < cookies.length; i++) {
-              const cookie = cookies[i].trim();
-              if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                  cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                  break;
-              }
-          }
-      }
-      return cookieValue;
-  }
+    // Helper function to get CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
 
-  function prefillWorkExperiences() {
-      const workExperiences = {{ parsed_resume_data.work_experiences|default:'[]'|safe }};
-      workExperiences.forEach(exp => {
-          const form = document.querySelector('#work-experience-form');
-          if (form) {
-              form.querySelector('[name="company"]').value = exp.company || '';
-              form.querySelector('[name="position"]').value = exp.position || '';
-              form.querySelector('[name="start_date"]').value = exp.start_date || '';
-              form.querySelector('[name="end_date"]').value = exp.end_date || '';
-              form.querySelector('[name="description"]').value = exp.description || '';
-              form.querySelector('[name="technologies"]').value = exp.technologies?.join(', ') || '';
-              form.submit();
-          }
-      });
-  }
+    function prefillWorkExperiences() {
+        const workExperiences = {{ parsed_resume_data.work_experiences|default:'[]'|safe }};
+        workExperiences.forEach(exp => {
+            const form = document.querySelector('#work-experience-form');
+            if (form) {
+                form.querySelector('[name="company"]').value = exp.company || '';
+                form.querySelector('[name="position"]').value = exp.position || '';
+                form.querySelector('[name="start_date"]').value = exp.start_date || '';
+                form.querySelector('[name="end_date"]').value = exp.end_date || '';
+                form.querySelector('[name="description"]').value = exp.description || '';
+                form.querySelector('[name="technologies"]').value = exp.technologies?.join(', ') || '';
+                form.submit();
+            }
+        });
+    }
 
-  function prefillEducation() {
-      const education = {{ parsed_resume_data.education|default:'[]'|safe }};
-      education.forEach(edu => {
-          const form = document.querySelector('#education-form');
-          if (form) {
-              form.querySelector('[name="institution"]').value = edu.institution || '';
-              form.querySelector('[name="degree"]').value = edu.degree || '';
-              form.querySelector('[name="field_of_study"]').value = edu.field_of_study || '';
-              form.querySelector('[name="start_date"]').value = edu.start_date || '';
-              form.querySelector('[name="end_date"]').value = edu.end_date || '';
-              form.querySelector('[name="gpa"]').value = edu.gpa || '';
-              form.querySelector('[name="achievements"]').value = edu.achievements?.join(', ') || '';
-              form.submit();
-          }
-      });
-  }
+    function prefillEducation() {
+        const education = {{ parsed_resume_data.education|default:'[]'|safe }};
+        education.forEach(edu => {
+            const form = document.querySelector('#education-form');
+            if (form) {
+                form.querySelector('[name="institution"]').value = edu.institution || '';
+                form.querySelector('[name="degree"]').value = edu.degree || '';
+                form.querySelector('[name="field_of_study"]').value = edu.field_of_study || '';
+                form.querySelector('[name="start_date"]').value = edu.start_date || '';
+                form.querySelector('[name="end_date"]').value = edu.end_date || '';
+                form.querySelector('[name="gpa"]').value = edu.gpa || '';
+                form.querySelector('[name="achievements"]').value = edu.achievements?.join(', ') || '';
+                form.submit();
+            }
+        });
+    }
 
-  function prefillSkills() {
-      const skills = {{ parsed_resume_data.skills|default:'[]'|safe }};
-      skills.forEach(skill => {
-          const form = document.querySelector('#skill-form');
-          if (form) {
-              form.querySelector('[name="name"]').value = skill.name || '';
-              form.querySelector('[name="category"]').value = skill.category || '';
-              form.querySelector('[name="proficiency"]').value = skill.proficiency || '';
-              form.submit();
-          }
-      });
-  }
+    function prefillSkills() {
+        const skills = {{ parsed_resume_data.skills|default:'[]'|safe }};
+        skills.forEach(skill => {
+            const form = document.querySelector('#skill-form');
+            if (form) {
+                form.querySelector('[name="name"]').value = skill.name || '';
+                form.querySelector('[name="category"]').value = skill.category || '';
+                form.querySelector('[name="proficiency"]').value = skill.proficiency || '';
+                form.submit();
+            }
+        });
+    }
 
-  function prefillProjects() {
-      const projects = {{ parsed_resume_data.projects|default:'[]'|safe }};
-      projects.forEach(proj => {
-          const form = document.querySelector('#project-form');
-          if (form) {
-              form.querySelector('[name="title"]').value = proj.title || '';
-              form.querySelector('[name="description"]').value = proj.description || '';
-              form.querySelector('[name="start_date"]').value = proj.start_date || '';
-              form.querySelector('[name="end_date"]').value = proj.end_date || '';
-              form.querySelector('[name="technologies"]').value = proj.technologies?.join(', ') || '';
-              form.submit();
-          }
-      });
-  }
+    function prefillProjects() {
+        const projects = {{ parsed_resume_data.projects|default:'[]'|safe }};
+        projects.forEach(proj => {
+            const form = document.querySelector('#project-form');
+            if (form) {
+                form.querySelector('[name="title"]').value = proj.title || '';
+                form.querySelector('[name="description"]').value = proj.description || '';
+                form.querySelector('[name="start_date"]').value = proj.start_date || '';
+                form.querySelector('[name="end_date"]').value = proj.end_date || '';
+                form.querySelector('[name="technologies"]').value = proj.technologies?.join(', ') || '';
+                form.submit();
+            }
+        });
+    }
 
-  function prefillCertifications() {
-      const certifications = {{ parsed_resume_data.certifications|default:'[]'|safe }};
-      certifications.forEach(cert => {
-          const form = document.querySelector('#certification-form');
-          if (form) {
-              form.querySelector('[name="name"]').value = cert.name || '';
-              form.querySelector('[name="issuer"]').value = cert.issuer || '';
-              form.querySelector('[name="issue_date"]').value = cert.issue_date || '';
-              form.querySelector('[name="expiry_date"]').value = cert.expiry_date || '';
-              form.querySelector('[name="credential_id"]').value = cert.credential_id || '';
-              form.submit();
-          }
-      });
-  }
+    function prefillCertifications() {
+        const certifications = {{ parsed_resume_data.certifications|default:'[]'|safe }};
+        certifications.forEach(cert => {
+            const form = document.querySelector('#certification-form');
+            if (form) {
+                form.querySelector('[name="name"]').value = cert.name || '';
+                form.querySelector('[name="issuer"]').value = cert.issuer || '';
+                form.querySelector('[name="issue_date"]').value = cert.issue_date || '';
+                form.querySelector('[name="expiry_date"]').value = cert.expiry_date || '';
+                form.querySelector('[name="credential_id"]').value = cert.credential_id || '';
+                form.submit();
+            }
+        });
+    }
 
-  async function deleteRecord(recordType, recordId) {
-      try {
-          const response = await fetch(`/profile/delete/${recordType}/${recordId}/`, {
-              method: 'POST',
-              headers: {
-                  'X-CSRFToken': getCookie('csrftoken')
-              }
-          });
+    async function deleteRecord(recordType, recordId) {
+        try {
+            const response = await fetch(`/profile/delete/${recordType}/${recordId}/`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCookie('csrftoken')
+                }
+            });
 
-          if (response.ok) {
-              const element = document.querySelector(`[data-record-id="${recordId}"]`);
-              if (element) element.remove();
-              showNotification('success', 'Record deleted successfully');
-          } else {
-              showNotification('error', 'Failed to delete record');
-          }
-      } catch (error) {
-          showNotification('error', 'An error occurred while deleting the record');
-      }
-  }
+            if (response.ok) {
+                const element = document.querySelector(`[data-record-id="${recordId}"]`);
+                if (element) element.remove();
+                showNotification('success', 'Record deleted successfully');
+            } else {
+                showNotification('error', 'Failed to delete record');
+            }
+        } catch (error) {
+            showNotification('error', 'An error occurred while deleting the record');
+        }
+    }
 
-  function editRecord(recordType, recordId) {
-      const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
-      const recordContent = recordElement.innerHTML;
+    function editRecord(recordType, recordId) {
+        const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
+        const recordContent = recordElement.innerHTML;
 
-      // Create edit form
-      const editForm = document.createElement('form');
-      editForm.className = 'edit-record-form';
-      editForm.id = `edit-${recordType}-${recordId}-form`;
-      editForm.setAttribute('onsubmit', 'event.preventDefault();');
+        // Create edit form
+        const editForm = document.createElement('form');
+        editForm.className = 'edit-record-form';
+        editForm.id = `edit-${recordType}-${recordId}-form`;
+        editForm.setAttribute('onsubmit', 'event.preventDefault();');
 
-      // Create form fields based on record type
-      let formHTML = '';
+        // Create form fields based on record type
+        let formHTML = '';
 
-      // Add CSRF token
-      formHTML += `<input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">`;
+        // Add CSRF token
+        formHTML += `<input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">`;
 
-      if (recordType === 'work_experience') {
-          formHTML += `
-              <input type="text" name="company" placeholder="Company" value="${getTextContent(recordElement, '.location')}">
-              <input type="text" name="position" placeholder="Position" value="${getTextContent(recordElement, 'h3')}">
-              <input type="date" name="start_date" value="${extractDate(recordElement, 'start')}">
-              <input type="date" name="end_date" value="${extractDate(recordElement, 'end')}">
-              <label><input type="checkbox" name="current" ${isCurrentPosition(recordElement) ? 'checked' : ''}> Current Position</label>
-              <textarea name="description" placeholder="Description">${getTextContent(recordElement, '.description')}</textarea>
-              <textarea name="technologies" placeholder="Technologies (comma separated)">${getTextContent(recordElement, '.technologies')}</textarea>
-          `;
-      } else if (recordType === 'project') {
-          formHTML += `
-              <input type="text" name="title" placeholder="Title" value="${getTextContent(recordElement, 'h3')}">
-              <textarea name="description" placeholder="Description">${getTextContent(recordElement, '.description')}</textarea>
-              <textarea name="technologies" placeholder="Technologies (comma separated)">${getTextContent(recordElement, '.technologies')}</textarea>
-              <input type="text" name="github_url" placeholder="GitHub URL" value="${getLinkHref(recordElement, 'GitHub')}">
-              <input type="text" name="live_url" placeholder="Live URL" value="${getLinkHref(recordElement, 'Live Demo')}">
-          `;
-      } else if (recordType === 'education') {
-          formHTML += `
-              <input type="text" name="institution" placeholder="Institution" value="${getTextContent(recordElement, '.institution')}">
-              <input type="text" name="degree" placeholder="Degree" value="${getTextContent(recordElement, '.degree')}">
-              <input type="text" name="field_of_study" placeholder="Field of Study" value="${getTextContent(recordElement, '.field-of-study')}">
-              <input type="date" name="start_date" value="${extractDate(recordElement, 'start')}">
-              <input type="date" name="end_date" value="${extractDate(recordElement, 'end')}">
-              <label><input type="checkbox" name="current" ${isCurrentPosition(recordElement) ? 'checked' : ''}> Current Education</label>
-              <input type="number" name="gpa" step="0.01" min="0" max="4.0" placeholder="GPA" value="${getTextContent(recordElement, '.gpa')}">
-              <textarea name="achievements" placeholder="Achievements">${getTextContent(recordElement, '.achievements')}</textarea>
-          `;
-      } else if (recordType === 'certification') {
-          formHTML += `
-              <input type="text" name="name" placeholder="Name" value="${getTextContent(recordElement, 'h3')}">
-              <input type="text" name="issuer" placeholder="Issuer" value="${getTextContent(recordElement, '.issuer')}">
-              <input type="date" name="issue_date" value="${extractDate(recordElement, 'issue')}">
-              <input type="date" name="expiry_date" value="${extractDate(recordElement, 'expiry')}">
-              <input type="text" name="credential_id" placeholder="Credential ID" value="${getTextContent(recordElement, '.credential-id')}">
-              <input type="text" name="credential_url" placeholder="Credential URL" value="${getTextContent(recordElement, '.credential-url')}">
-          `;
-      } else if (recordType === 'publication') {
-          formHTML += `
-              <input type="text" name="title" placeholder="Title" value="${getTextContent(recordElement, 'h3')}">
-              <input type="text" name="authors" placeholder="Authors" value="${getTextContent(recordElement, '.authors')}">
-              <input type="date" name="publication_date" value="${extractDate(recordElement, 'publication')}">
-              <input type="text" name="publisher" placeholder="Publisher" value="${getTextContent(recordElement, '.publisher')}">
-              <input type="text" name="journal" placeholder="Journal" value="${getTextContent(recordElement, '.journal')}">
-              <input type="text" name="doi" placeholder="DOI" value="${getTextContent(recordElement, '.doi')}">
-              <textarea name="abstract" placeholder="Abstract">${getTextContent(recordElement, '.abstract')}</textarea>
-              <input type="text" name="url" placeholder="URL" value="${getLinkHref(recordElement, 'View Publication')}">
-          `;
-      } else if (recordType === 'skill') {
-          formHTML += `
-              <input type="text" name="name" placeholder="Name" value="${getTextContent(recordElement, '.skill-name')}">
-              <select name="category">
-                  <option value="programming" ${getCategoryValue(recordElement) === 'programming' ? 'selected' : ''}>Programming</option>
-                  <option value="framework" ${getCategoryValue(recordElement) === 'framework' ? 'selected' : ''}>Framework</option>
-                  <option value="database" ${getCategoryValue(recordElement) === 'database' ? 'selected' : ''}>Database</option>
-                  <option value="tool" ${getCategoryValue(recordElement) === 'tool' ? 'selected' : ''}>Tool</option>
-                  <option value="soft_skill" ${getCategoryValue(recordElement) === 'soft_skill' ? 'selected' : ''}>Soft Skill</option>
-                  <option value="language" ${getCategoryValue(recordElement) === 'language' ? 'selected' : ''}>Language</option>
-                  <option value="other" ${getCategoryValue(recordElement) === 'other' ? 'selected' : ''}>Other</option>
-              </select>
-              <select name="proficiency">
-                  <option value="1" ${getProficiencyValue(recordElement) === '1' ? 'selected' : ''}>Beginner</option>
-                  <option value="2" ${getProficiencyValue(recordElement) === '2' ? 'selected' : ''}>Elementary</option>
-                  <option value="3" ${getProficiencyValue(recordElement) === '3' ? 'selected' : ''}>Intermediate</option>
-                  <option value="4" ${getProficiencyValue(recordElement) === '4' ? 'selected' : ''}>Advanced</option>
-                  <option value="5" ${getProficiencyValue(recordElement) === '5' ? 'selected' : ''}>Expert</option>
-              </select>
-          `;
-      }
+        if (recordType === 'work_experience') {
+            formHTML += `
+                <input type="text" name="company" placeholder="Company" value="${getTextContent(recordElement, '.location')}">
+                <input type="text" name="position" placeholder="Position" value="${getTextContent(recordElement, 'h3')}">
+                <input type="date" name="start_date" value="${extractDate(recordElement, 'start')}">
+                <input type="date" name="end_date" value="${extractDate(recordElement, 'end')}">
+                <label><input type="checkbox" name="current" ${isCurrentPosition(recordElement) ? 'checked' : ''}> Current Position</label>
+                <textarea name="description" placeholder="Description">${getTextContent(recordElement, '.description')}</textarea>
+                <textarea name="technologies" placeholder="Technologies (comma separated)">${getTextContent(recordElement, '.technologies')}</textarea>
+            `;
+        } else if (recordType === 'project') {
+            formHTML += `
+                <input type="text" name="title" placeholder="Title" value="${getTextContent(recordElement, 'h3')}">
+                <textarea name="description" placeholder="Description">${getTextContent(recordElement, '.description')}</textarea>
+                <textarea name="technologies" placeholder="Technologies (comma separated)">${getTextContent(recordElement, '.technologies')}</textarea>
+                <input type="text" name="github_url" placeholder="GitHub URL" value="${getLinkHref(recordElement, 'GitHub')}">
+                <input type="text" name="live_url" placeholder="Live URL" value="${getLinkHref(recordElement, 'Live Demo')}">
+            `;
+        } else if (recordType === 'education') {
+            formHTML += `
+                <input type="text" name="institution" placeholder="Institution" value="${getTextContent(recordElement, '.institution')}">
+                <input type="text" name="degree" placeholder="Degree" value="${getTextContent(recordElement, '.degree')}">
+                <input type="text" name="field_of_study" placeholder="Field of Study" value="${getTextContent(recordElement, '.field-of-study')}">
+                <input type="date" name="start_date" value="${extractDate(recordElement, 'start')}">
+                <input type="date" name="end_date" value="${extractDate(recordElement, 'end')}">
+                <label><input type="checkbox" name="current" ${isCurrentPosition(recordElement) ? 'checked' : ''}> Current Education</label>
+                <input type="number" name="gpa" step="0.01" min="0" max="4.0" placeholder="GPA" value="${getTextContent(recordElement, '.gpa')}">
+                <textarea name="achievements" placeholder="Achievements">${getTextContent(recordElement, '.achievements')}</textarea>
+            `;
+        } else if (recordType === 'certification') {
+            formHTML += `
+                <input type="text" name="name" placeholder="Name" value="${getTextContent(recordElement, 'h3')}">
+                <input type="text" name="issuer" placeholder="Issuer" value="${getTextContent(recordElement, '.issuer')}">
+                <input type="date" name="issue_date" value="${extractDate(recordElement, 'issue')}">
+                <input type="date" name="expiry_date" value="${extractDate(recordElement, 'expiry')}">
+                <input type="text" name="credential_id" placeholder="Credential ID" value="${getTextContent(recordElement, '.credential-id')}">
+                <input type="text" name="credential_url" placeholder="Credential URL" value="${getTextContent(recordElement, '.credential-url')}">
+            `;
+        } else if (recordType === 'publication') {
+            formHTML += `
+                <input type="text" name="title" placeholder="Title" value="${getTextContent(recordElement, 'h3')}">
+                <input type="text" name="authors" placeholder="Authors" value="${getTextContent(recordElement, '.authors')}">
+                <input type="date" name="publication_date" value="${extractDate(recordElement, 'publication')}">
+                <input type="text" name="publisher" placeholder="Publisher" value="${getTextContent(recordElement, '.publisher')}">
+                <input type="text" name="journal" placeholder="Journal" value="${getTextContent(recordElement, '.journal')}">
+                <input type="text" name="doi" placeholder="DOI" value="${getTextContent(recordElement, '.doi')}">
+                <textarea name="abstract" placeholder="Abstract">${getTextContent(recordElement, '.abstract')}</textarea>
+                <input type="text" name="url" placeholder="URL" value="${getLinkHref(recordElement, 'View Publication')}">
+            `;
+        } else if (recordType === 'skill') {
+            formHTML += `
+                <input type="text" name="name" placeholder="Name" value="${getTextContent(recordElement, '.skill-name')}">
+                <select name="category">
+                    <option value="programming" ${getCategoryValue(recordElement) === 'programming' ? 'selected' : ''}>Programming</option>
+                    <option value="framework" ${getCategoryValue(recordElement) === 'framework' ? 'selected' : ''}>Framework</option>
+                    <option value="database" ${getCategoryValue(recordElement) === 'database' ? 'selected' : ''}>Database</option>
+                    <option value="tool" ${getCategoryValue(recordElement) === 'tool' ? 'selected' : ''}>Tool</option>
+                    <option value="soft_skill" ${getCategoryValue(recordElement) === 'soft_skill' ? 'selected' : ''}>Soft Skill</option>
+                    <option value="language" ${getCategoryValue(recordElement) === 'language' ? 'selected' : ''}>Language</option>
+                    <option value="other" ${getCategoryValue(recordElement) === 'other' ? 'selected' : ''}>Other</option>
+                </select>
+                <select name="proficiency">
+                    <option value="1" ${getProficiencyValue(recordElement) === '1' ? 'selected' : ''}>Beginner</option>
+                    <option value="2" ${getProficiencyValue(recordElement) === '2' ? 'selected' : ''}>Elementary</option>
+                    <option value="3" ${getProficiencyValue(recordElement) === '3' ? 'selected' : ''}>Intermediate</option>
+                    <option value="4" ${getProficiencyValue(recordElement) === '4' ? 'selected' : ''}>Advanced</option>
+                    <option value="5" ${getProficiencyValue(recordElement) === '5' ? 'selected' : ''}>Expert</option>
+                </select>
+            `;
+        }
 
-      // Add submission buttons
-      formHTML += `
-          <div class="form-actions">
-              <button type="button" class="cancel-btn" onclick="cancelEdit('${recordType}', ${recordId})">Cancel</button>
-              <button type="button" class="save-btn" onclick="submitEdit('${recordType}', ${recordId})">Save Changes</button>
-          </div>
-      `;
+        // Add submission buttons
+        formHTML += `
+            <div class="form-actions">
+                <button type="button" class="cancel-btn" onclick="cancelEdit('${recordType}', ${recordId})">Cancel</button>
+                <button type="button" class="save-btn" onclick="submitEdit('${recordType}', ${recordId})">Save Changes</button>
+            </div>
+        `;
 
-      editForm.innerHTML = formHTML;
+        editForm.innerHTML = formHTML;
 
-      // Hide the content and show the form
-      const content = recordElement.innerHTML;
-      recordElement.setAttribute('data-original-content', content);
-      recordElement.innerHTML = '';
-      recordElement.appendChild(editForm);
-  }
+        // Hide the content and show the form
+        const content = recordElement.innerHTML;
+        recordElement.setAttribute('data-original-content', content);
+        recordElement.innerHTML = '';
+        recordElement.appendChild(editForm);
+    }
 
-  // Helper function to get text content from an element
-  function getTextContent(container, selector) {
-      const element = container.querySelector(selector);
-      return element ? element.textContent.trim() : '';
-  }
+    // Helper function to get text content from an element
+    function getTextContent(container, selector) {
+        const element = container.querySelector(selector);
+        return element ? element.textContent.trim() : '';
+    }
 
-  // Helper function to get href from a link
-  function getLinkHref(container, linkText) {
-      const links = container.querySelectorAll('a');
-      for (const link of links) {
-          if (link.textContent.trim().includes(linkText)) {
-              return link.getAttribute('href') || '';
-          }
-      }
-      return '';
-  }
+    // Helper function to get href from a link
+    function getLinkHref(container, linkText) {
+        const links = container.querySelectorAll('a');
+        for (const link of links) {
+            if (link.textContent.trim().includes(linkText)) {
+                return link.getAttribute('href') || '';
+            }
+        }
+        return '';
+    }
 
-  // Helper function to extract date from date range
-  function extractDate(container, type) {
-      const dateRangeElement = container.querySelector('.date-range');
-      if (!dateRangeElement) return '';
+    // Helper function to extract date from date range
+    function extractDate(container, type) {
+        const dateRangeElement = container.querySelector('.date-range');
+        if (!dateRangeElement) return '';
 
-      const dateRange = dateRangeElement.textContent.trim();
-      const dates = dateRange.split('-').map(d => d.trim());
+        const dateRange = dateRangeElement.textContent.trim();
+        const dates = dateRange.split('-').map(d => d.trim());
 
-      if (type === 'start') {
-          // Try to parse the start date
-          if (dates[0]) {
-              try {
-                  const date = new Date(dates[0]);
-                  return date.toISOString().substring(0, 10);
-              } catch (e) {
-                  return '';
-              }
-          }
-      } else if (type === 'end' && dates[1] && dates[1] !== 'Present') {
-          try {
-              const date = new Date(dates[1]);
-              return date.toISOString().substring(0, 10);
-          } catch (e) {
-              return '';
-          }
-      }
+        if (type === 'start') {
+            // Try to parse the start date
+            if (dates[0]) {
+                try {
+                    const date = new Date(dates[0]);
+                    return date.toISOString().substring(0, 10);
+                } catch (e) {
+                    return '';
+                }
+            }
+        } else if (type === 'end' && dates[1] && dates[1] !== 'Present') {
+            try {
+                const date = new Date(dates[1]);
+                return date.toISOString().substring(0, 10);
+            } catch (e) {
+                return '';
+            }
+        }
 
-      return '';
-  }
+        return '';
+    }
 
-  // Helper function to check if position is current
-  function isCurrentPosition(container) {
-      const dateRangeElement = container.querySelector('.date-range');
-      return dateRangeElement && dateRangeElement.textContent.includes('Present');
-  }
+    // Helper function to check if position is current
+    function isCurrentPosition(container) {
+        const dateRangeElement = container.querySelector('.date-range');
+        return dateRangeElement && dateRangeElement.textContent.includes('Present');
+    }
 
-  // Helper functions for skill category and proficiency
-  function getCategoryValue(container) {
-      const categoryElement = container.querySelector('.skill-category');
-      return categoryElement ? categoryElement.getAttribute('data-category') : 'other';
-  }
+    // Helper functions for skill category and proficiency
+    function getCategoryValue(container) {
+        const categoryElement = container.querySelector('.skill-category');
+        return categoryElement ? categoryElement.getAttribute('data-category') : 'other';
+    }
 
-  function getProficiencyValue(container) {
-      const proficiencyElement = container.querySelector('.skill-level');
-      return proficiencyElement ? proficiencyElement.getAttribute('data-proficiency') : '3';
-  }
+    function getProficiencyValue(container) {
+        const proficiencyElement = container.querySelector('.skill-level');
+        return proficiencyElement ? proficiencyElement.getAttribute('data-proficiency') : '3';
+    }
 
-  // Function to cancel editing
-  function cancelEdit(recordType, recordId) {
-      const itemContainer = document.querySelector(`[data-record-id="${recordId}"]`);
-      if (!itemContainer) return;
+    // Function to cancel editing
+    function cancelEdit(recordType, recordId) {
+        const itemContainer = document.querySelector(`[data-record-id="${recordId}"]`);
+        if (!itemContainer) return;
 
-      const originalContent = itemContainer.getAttribute('data-original-content');
-      if (originalContent) {
-          itemContainer.innerHTML = originalContent;
-      }
-  }
+        const originalContent = itemContainer.getAttribute('data-original-content');
+        if (originalContent) {
+            itemContainer.innerHTML = originalContent;
+        }
+    }
 
-  // Function to submit edits
-  function submitEdit(recordType, recordId) {
-      const form = document.getElementById(`edit-${recordType}-${recordId}-form`);
-      console.log("Form found:", form);
-      if (!form) return;
+    // Function to submit edits
+    function submitEdit(recordType, recordId) {
+        const form = document.getElementById(`edit-${recordType}-${recordId}-form`);
+        console.log("Form found:", form);
+        if (!form) return;
 
-      const formData = new FormData(form);
-      console.log("FormData entries:", [...formData.entries()]);
-      saveChanges(recordType, recordId, formData);
-  }
+        const formData = new FormData(form);
+        console.log("FormData entries:", [...formData.entries()]);
+        saveChanges(recordType, recordId, formData);
+    }
 
-  // Add function to handle editing records
-  async function saveChanges(recordType, id, formData) {
-      showLoading();
-      try {
-          // Add CSRF token to form data
-          formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
+    // Add function to handle editing records
+    async function saveChanges(recordType, id, formData) {
+        showLoading();
+        try {
+            // Add CSRF token to form data
+            formData.append('csrfmiddlewaretoken', getCookie('csrftoken'));
 
-          const csrftoken = getCookie('csrftoken');
+            const csrftoken = getCookie('csrftoken');
 
-          const response = await fetch(`/profile/edit/${recordType}/${id}/`, {
-              method: 'POST',
-              body: formData,
-              headers: {
-                  'X-Requested-With': 'XMLHttpRequest',
-                  'X-CSRFToken': csrftoken
-              }
-          });
+            const response = await fetch(`/profile/edit/${recordType}/${id}/`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrftoken
+                }
+            });
 
-          const data = await response.json();
+            const data = await response.json();
 
-          if (data.success) {
-              // Reload the page to show updated data
-              location.reload();
-          } else {
-              alert('Error: ' + (data.error || 'Failed to save changes'));
-          }
-      } catch (error) {
-          alert('Error saving changes: ' + error.message);
-      } finally {
-          hideLoading();
-      }
-  }
+            if (data.success) {
+                // Reload the page to show updated data
+                location.reload();
+            } else {
+                alert('Error: ' + (data.error || 'Failed to save changes'));
+            }
+        } catch (error) {
+            alert('Error saving changes: ' + error.message);
+        } finally {
+            hideLoading();
+        }
+    }
 
-  // Function to update profile statistics
+    // Function to update profile statistics
   function updateProfileStats() {
       fetch('/profile/stats/')
           .then(response => {
@@ -2305,12 +2473,32 @@
               return response.json();
           })
           .then(data => {
-              console.log('Profile stats data:', data); // Add logging to debug
-              document.getElementById('work-experience-count').textContent = data.work_experience_count;
-              document.getElementById('projects-count').textContent = data.projects_count;
-              document.getElementById('skills-count').textContent = data.skills_count;
-              document.getElementById('certifications-count').textContent = data.certifications_count;
-              document.getElementById('years-of-experience').textContent = data.years_of_experience;
+              console.log('Profile stats data:', data);
+
+              const workExperienceCount = document.getElementById('work-experience-count');
+              if (workExperienceCount) {
+                  workExperienceCount.textContent = data.experience_count;
+              }
+
+              const projectsCount = document.getElementById('projects-count');
+              if (projectsCount) {
+                  projectsCount.textContent = data.projects_count;
+              }
+
+              const skillsCount = document.getElementById('skills-count');
+              if (skillsCount) {
+                  skillsCount.textContent = data.skills_count;
+              }
+
+              const certificationsCount = document.getElementById('certifications-count');
+              if (certificationsCount) {
+                  certificationsCount.textContent = data.certifications_count;
+              }
+
+              const yearsOfExperience = document.getElementById('years-of-experience');
+              if (yearsOfExperience) {
+                  yearsOfExperience.textContent = data.years_experience;
+              }
           })
           .catch(error => {
               console.error('Error fetching profile stats:', error);
@@ -2318,113 +2506,162 @@
           });
   }
 
-  // Update stats when any form is submitted
-  document.addEventListener('DOMContentLoaded', function() {
-      const forms = document.querySelectorAll('form');
-      forms.forEach(form => {
-          form.addEventListener('submit', function() {
-              // Wait a bit for the server to process the form
-              setTimeout(updateProfileStats, 500);
+    // Update stats when any form is submitted
+    document.addEventListener('DOMContentLoaded', function() {
+        const forms = document.querySelectorAll('form');
+        forms.forEach(form => {
+            form.addEventListener('submit', function() {
+                // Wait a bit for the server to process the form
+                setTimeout(updateProfileStats, 500);
+            });
+        });
+    });
+
+    // Update stats when any delete button is clicked
+    document.addEventListener('click', function(e) {
+        if (e.target.classList.contains('delete-btn')) {
+            // Wait a bit for the server to process the deletion
+            setTimeout(updateProfileStats, 500);
+        }
+    });
+
+    // Initial stats update
+    updateProfileStats();
+
+    function validateWorkExperienceForm(form) {
+        const startDate = form.querySelector('input[name="start_date"]');
+        if (!startDate.value) {
+            alert('Start date is required');
+            startDate.focus();
+            return false;
+        }
+
+        const endDate = form.querySelector('input[name="end_date"]');
+        const current = form.querySelector('input[name="current"]');
+
+        if (!current.checked && !endDate.value) {
+            alert('Please either provide an end date or mark as current position');
+            return false;
+        }
+
+        if (endDate.value && new Date(endDate.value) < new Date(startDate.value)) {
+            alert('End date cannot be earlier than start date');
+            return false;
+        }
+
+        return true;
+    }
+
+    // Function to show notifications to the user
+    function showNotification(type, message) {
+        // Create the notification element
+        const notification = document.createElement('div');
+        notification.className = `notification ${type}`;
+        notification.textContent = message;
+
+        // Add notification to the body
+        document.body.appendChild(notification);
+
+        // Make it visible
+        setTimeout(() => {
+            notification.classList.add('show');
+        }, 10);
+
+        // Remove it after 5 seconds
+        setTimeout(() => {
+            notification.classList.remove('show');
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 300);
+        }, 5000);
+    }
+
+    // Function to save profile basic information changes
+    async function saveProfileChanges() {
+        showLoading();
+        try {
+            const form = document.getElementById('profile-basic-form');
+            const formData = new FormData(form);
+
+            const csrftoken = getCookie('csrftoken');
+
+            const response = await fetch("{% url 'core:edit_profile' %}", {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrftoken
+                }
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+                showNotification('success', 'Profile updated successfully!');
+                // No need to reload the page as we're just updating the profile
+            } else {
+                let errorMsg = 'Failed to update profile';
+                if (data.errors) {
+                    errorMsg = Object.entries(data.errors)
+                        .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
+                        .join('\n');
+                }
+                showNotification('error', errorMsg);
+            }
+        } catch (error) {
+            showNotification('error', 'Error updating profile: ' + error.message);
+        } finally {
+            hideLoading();
+        }
+    }
+    document.addEventListener('DOMContentLoaded', function() {
+      const generateBioButton = document.getElementById('generate-bio-btn');
+      const professionalSummaryTextarea = document.getElementById('id_professional_summary');
+      const bioStatusElement = document.getElementById('bio-status');
+      // const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value; // Already have getCookie
+
+      if (generateBioButton && professionalSummaryTextarea && bioStatusElement) {
+          generateBioButton.addEventListener('click', function() {
+              generateBioButton.disabled = true;
+              generateBioButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating...';
+              bioStatusElement.textContent = 'Generating bio, please wait...';
+              bioStatusElement.className = 'form-text text-info';
+
+              fetch("{% url 'core:generate_profile_bio' %}", {
+                  method: 'POST',
+                  headers: {
+                      'Content-Type': 'application/json',
+                      'X-CSRFToken': getCookie('csrftoken'),
+                  }
+              })
+              .then(response => {
+                  if (!response.ok) {
+                      return response.json().then(err => { throw new Error(err.error || `Server error: ${response.status}`); })
+                                       .catch(() => { throw new Error(`Server error: ${response.status}`); });
+                  }
+                  return response.json();
+              })
+              .then(data => {
+                  if (data.success && data.bio) {
+                      professionalSummaryTextarea.value = data.bio;
+                      bioStatusElement.textContent = 'Bio generated successfully! Review and save your profile.';
+                      bioStatusElement.className = 'form-text text-success';
+                  } else {
+                      bioStatusElement.textContent = 'Error: ' + (data.error || 'Failed to generate bio.');
+                      bioStatusElement.className = 'form-text text-danger';
+                  }
+              })
+              .catch(error => {
+                  console.error('Error generating bio:', error);
+                  bioStatusElement.textContent = 'Error: ' + error.message;
+                  bioStatusElement.className = 'form-text text-danger';
+              })
+              .finally(() => {
+                  generateBioButton.disabled = false;
+                  generateBioButton.innerHTML = '<i class="fas fa-magic"></i> Generate Bio with AI';
+              });
           });
-      });
-  });
-
-  // Update stats when any delete button is clicked
-  document.addEventListener('click', function(e) {
-      if (e.target.classList.contains('delete-btn')) {
-          // Wait a bit for the server to process the deletion
-          setTimeout(updateProfileStats, 500);
       }
   });
-
-  // Initial stats update
-  updateProfileStats();
-
-  function validateWorkExperienceForm(form) {
-      const startDate = form.querySelector('input[name="start_date"]');
-      if (!startDate.value) {
-          alert('Start date is required');
-          startDate.focus();
-          return false;
-      }
-
-      const endDate = form.querySelector('input[name="end_date"]');
-      const current = form.querySelector('input[name="current"]');
-
-      if (!current.checked && !endDate.value) {
-          alert('Please either provide an end date or mark as current position');
-          return false;
-      }
-
-      if (endDate.value && new Date(endDate.value) < new Date(startDate.value)) {
-          alert('End date cannot be earlier than start date');
-          return false;
-      }
-
-      return true;
-  }
-
-  // Function to show notifications to the user
-  function showNotification(type, message) {
-      // Create the notification element
-      const notification = document.createElement('div');
-      notification.className = `notification ${type}`;
-      notification.textContent = message;
-
-      // Add notification to the body
-      document.body.appendChild(notification);
-
-      // Make it visible
-      setTimeout(() => {
-          notification.classList.add('show');
-      }, 10);
-
-      // Remove it after 5 seconds
-      setTimeout(() => {
-          notification.classList.remove('show');
-          setTimeout(() => {
-              document.body.removeChild(notification);
-          }, 300);
-      }, 5000);
-  }
-
-  // Function to save profile basic information changes
-  async function saveProfileChanges() {
-      showLoading();
-      try {
-          const form = document.getElementById('profile-basic-form');
-          const formData = new FormData(form);
-
-          const csrftoken = getCookie('csrftoken');
-
-          const response = await fetch("{% url 'core:edit_profile' %}", {
-              method: 'POST',
-              body: formData,
-              headers: {
-                  'X-Requested-With': 'XMLHttpRequest',
-                  'X-CSRFToken': csrftoken
-              }
-          });
-
-          const data = await response.json();
-
-          if (data.success) {
-              showNotification('success', 'Profile updated successfully!');
-              // No need to reload the page as we're just updating the profile
-          } else {
-              let errorMsg = 'Failed to update profile';
-              if (data.errors) {
-                  errorMsg = Object.entries(data.errors)
-                      .map(([field, errors]) => `${field}: ${errors.join(', ')}`)
-                      .join('\n');
-              }
-              showNotification('error', errorMsg);
-          }
-      } catch (error) {
-          showNotification('error', 'Error updating profile: ' + error.message);
-      } finally {
-          hideLoading();
-      }
-  }
 </script>
 {% endblock %}

@@ -19,6 +19,7 @@ from core.utils.cover_letter_composition import CoverLetterComposition
 from core.utils.logging_utils import log_exceptions
 from core.utils.rag.job_knowledge import JobKnowledgeBase
 from core.utils.resume_composition import ResumeComposition
+from core.utils.utilities import clean_string
 
 logger = logging.getLogger(__name__)
 
@@ -64,15 +65,27 @@ class WriterAgent(BaseAgent):
 
         # Prepare prompt for the model
         prompt = self._prepare_answer_prompt(question)
+        # logger.debug(f"WriterAgent: Prepared prompt for question '{question}':\n{prompt}")
 
         # Generate the answer
-        response = self.llm.generate_text(
-            prompt=prompt,
-            max_tokens=500,
-            temperature=0.2,
-        )
-
-        return response or "Unable to generate an answer."
+        try:
+            response = self.llm.generate_text(
+                prompt=prompt,
+                temperature=0.1,
+            )
+            # logger.debug(f"WriterAgent: LLM raw response for question '{question}':\n{response}")
+            if not response or not response.strip():
+                logger.warning(
+                    f"WriterAgent: LLM returned an empty or whitespace-only response for question: {question}"
+                )
+                return "Unable to generate an answer."
+            return response
+        except Exception as e:
+            logger.error(
+                f"WriterAgent: Exception during LLM call for question '{question}': {e}",
+                exc_info=True,
+            )
+            return "Error: Could not generate answer due to an internal LLM error."
 
     @log_exceptions(level=logging.ERROR)
     def fill_text_field(self, field_label: str) -> str:
@@ -147,7 +160,7 @@ class WriterAgent(BaseAgent):
         response = self.llm.generate_text(
             prompt=prompt,
             max_tokens=100,
-            temperature=0.3,
+            temperature=0.1,
         )
 
         return response or ""
@@ -189,7 +202,7 @@ class WriterAgent(BaseAgent):
         response: str = self.llm.generate_text(
             prompt=prompt,
             max_tokens=100,
-            temperature=0.3,
+            temperature=0.1,
         )
 
         return response
@@ -477,7 +490,7 @@ class WriterAgent(BaseAgent):
         Your response should list each selected option, each on a separate line, exactly as written in the options above.
         """
 
-    def _format_background_for_prompt(self) -> str:
+    def _format_background_for_prompt(self) -> Dict[str, Any]:
         """
         Format background information for inclusion in prompts.
 
@@ -485,37 +498,89 @@ class WriterAgent(BaseAgent):
             Formatted background information
         """
         # Get background info as dictionary, then format it as string
-        background_info = self.personal_agent.get_formatted_background()
+        background_info: Dict[str, Any] = self.personal_agent.get_formatted_background()
 
-        return "\n".join([f"{k}: {v}" for k, v in background_info.items() if v])
+        return background_info
 
     def fill_application_form(self, form_fields: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Fills out job application forms"""
+        """Fills out job application forms by sending all fields in a single LLM request"""
 
+        # Prepare all fields information for a single prompt
+        fields_info: str = "\n\n".join(
+            [
+                f"Field {i+1}:\nLabel: {field['label']}\nType: {field['type']}\nID: {field['id']}"
+                for i, field in enumerate(form_fields)
+            ]
+        )
+
+        # Create a single comprehensive prompt
+        prompt: str = f"""
+        Please fill out the following job application fields. For each field, provide an appropriate response that:
+        1. Directly answers the field
+        2. Demonstrates relevant experience
+        3. Aligns with job requirements
+        4. Maintains professional tone
+        5. Reflects company culture
+        
+        JOB CONTEXT:
+        {self.job_agent.job_record.get_formatted_info()}
+        
+        COMPANY CONTEXT:
+        {self.job_agent.job_record.company}
+        
+        CANDIDATE EXPERIENCE:
+        {self.personal_agent.get_formatted_background()}
+        
+        FIELDS TO COMPLETE:
+        {fields_info}
+        
+        For each field, format your response as:
+        <field_id>: Your response here
+        
+        Ensure each response is tailored to the specific field, job requirements, and company culture.
+        """
+
+        # Generate all responses at once
+        full_response: str = self.llm.generate_text(prompt)
+
+        # Parse the responses
         responses = {}
-        for field in form_fields:
-            prompt = f"""
-            Field: {field['label']}
-            Type: {field['type']}
-            Job Context: {self.job_agent.job_record.get_formatted_info()}...
-            
-            Company Context:
-            {self.job_agent.job_record.company}
-            
-            Relevant Experience:
-            {self.personal_agent.get_relevant_experience(field['label'])}
-            
-            Generate appropriate response that:
-            1. Directly answers the field
-            2. Demonstrates relevant experience
-            3. Aligns with job requirements
-            4. Maintains professional tone
-            5. Reflects company culture
-            """
+        current_field_id = None
+        current_response = []
 
-            response: str = self.llm.generate_text(prompt)
-            responses[field["id"]] = response
-            self.save_context(f"Fill field: {field['label']}", response)
+        # Simple parsing of the LLM output
+        for line in full_response.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+
+            # Check if this line starts a new field response
+            field_match = False
+            for field in form_fields:
+                field_id = field["id"]
+                if line.startswith(f"{field_id}:"):
+                    # Save previous field if exists
+                    if current_field_id and current_response:
+                        responses[current_field_id] = "\n".join(current_response).strip()
+
+                    # Start new field
+                    current_field_id = field_id
+                    current_response = [line[len(field_id) + 1 :].strip()]
+                    field_match = True
+                    break
+
+            if not field_match and current_field_id:
+                current_response.append(line)
+
+        # Add the last field
+        if current_field_id and current_response:
+            responses[current_field_id] = "\n".join(current_response).strip()
+
+        # Save all responses to context
+        for field in form_fields:
+            field_id = field["id"]
+            if field_id in responses:
+                self.save_context(f"Fill field: {field['label']}", responses[field_id])
 
         return responses
 
@@ -544,7 +609,7 @@ class WriterAgent(BaseAgent):
             {similar_questions}
             
             Relevant Experience:
-            {relevant_background}
+            {relevant_background if relevant_background else self.personal_agent.get_formatted_background()}
             
             Provide a concise, focused response (2-3 sentences maximum) that:
             1. Directly answers the question
@@ -575,11 +640,16 @@ class WriterAgent(BaseAgent):
             " ", "_"
         )
         today: str = date.today().strftime("%Y%m%d")
-        company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
+
+        if self.job_agent.job_record.company is None:
+            company_slug = ""
+        else:
+            company_slug = self.job_agent.job_record.company.lower().replace(" ", "_")
+
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")
 
         # Define the file paths
-        cover_letter_filename: str = (
+        cover_letter_filename: str = clean_string(
             f"cover_letter_{username}_{company_slug}_{job_title_slug}_{today}.pdf"
         )
 
@@ -610,11 +680,15 @@ class WriterAgent(BaseAgent):
         )
 
         prompt = f"""
-        Job Description:
+        Job Information:
         {self.job_agent.job_record.get_formatted_info()}
         
         Candidate Background:
-        {self.personal_agent.get_background_str()}
+        {self.personal_agent.get_formatted_background()}
+        
+        Matching information:
+        Match score: {self.job_agent.job_record.match_score}
+        Match details: {self.job_agent.job_record.match_details}
         
         Relevant Interview Questions:
         {relevant_questions}
@@ -644,11 +718,17 @@ class WriterAgent(BaseAgent):
             " ", "_"
         )
         today: str = date.today().strftime("%Y%m%d")
-        company_slug: str = self.job_agent.job_record.company.lower().replace(" ", "_")
+        if self.job_agent.job_record.company is None:
+            company_slug = ""
+        else:
+            company_slug = self.job_agent.job_record.company.lower().replace(" ", "_")
+
         job_title_slug = self.job_agent.job_record.title.lower().replace(" ", "_")
 
         # Define the file paths
-        resume_filename: str = f"resume_{username}_{company_slug}_{job_title_slug}_{today}.pdf"
+        resume_filename: str = clean_string(
+            f"resume_{username}_{company_slug}_{job_title_slug}_{today}.pdf"
+        )
 
         resume_path: str = f"documents/{username}/{resume_filename}"
 
@@ -666,3 +746,125 @@ class WriterAgent(BaseAgent):
             self.job_agent.job_record.save(update_fields=["tailored_resume"])
 
         return default_storage.url(resume_url)
+
+    @log_exceptions(level=logging.ERROR)
+    def generate_application_email(self) -> Dict[str, str]:
+        """
+        Generates a professional email draft for a job application.
+
+        Returns:
+            A dictionary containing the "subject" and "body" of the email.
+        """
+        if not self.personal_agent or not self.personal_agent.user_profile:
+            logger.error("Personal agent or user profile not loaded for email generation.")
+            return {
+                "subject": "Error",
+                "body": "Could not generate email: User profile not available.",
+            }
+        if not self.job_agent or not self.job_agent.job_record:
+            logger.error("Job agent or job record not loaded for email generation.")
+            return {
+                "subject": "Error",
+                "body": "Could not generate email: Job details not available.",
+            }
+
+        user_profile = self.personal_agent.user_profile
+        job_record = self.job_agent.job_record
+
+        prompt = f"""
+        You are an expert at crafting professional job application emails.
+        Generate an email for a job application based on the following information:
+
+        Applicant Information:
+        - Full Name: {user_profile.user.get_full_name()}
+        - Email: {user_profile.email}
+        - Phone: {user_profile.phone or 'Not provided'}
+        - LinkedIn: {user_profile.linkedin_url or 'Not provided'}
+        - Professional Summary: {user_profile.professional_summary or 'Not provided'}
+        - Key Skills/Experience (select 2-3 most relevant for the job): {self.personal_agent.get_relevant_experience(job_record.title + " " + (job_record.description or ""))}
+
+        Job Information:
+        - Job Title: {job_record.title}
+        - Company Name: {job_record.company}
+        - Where the job was found (placeholder): [Source/Platform - e.g., company website, LinkedIn]
+
+        Instructions for the email:
+        1.  The email should be addressed to "Dear Hiring Manager,".
+        2.  Start by expressing keen interest in the specific job title and company. Mention the placeholder for where the job was found.
+        3.  Briefly highlight 1-2 key areas from the applicant's background/summary and a key experience that makes them a strong candidate.
+        4.  Mention that the resume and cover letter (which will be attached) provide further details.
+        5.  Express gratitude for time and consideration, and look forward to discussing the opportunity.
+        6.  End with "Sincerely," followed by the applicant's full name, email, phone (if available), and LinkedIn URL (if available).
+        7.  The tone should be professional, enthusiastic, and concise.
+        8.  The output should be a JSON object with two keys: "subject" and "body".
+            - The "subject" should be: "Application for [Job Title] at [Company Name] - [Applicant Full Name]"
+            - The "body" should be the full email text as a single string with newline characters (\\n) for line breaks.
+
+        Example of desired output format:
+        {{
+            "subject": "Application for Software Engineer at Tech Solutions - John Doe",
+            "body": "Dear Hiring Manager,\\n\\nI am writing to express my keen interest...\\n\\nSincerely,\\nJohn Doe\\n..."
+        }}
+        """
+
+        try:
+            response_str = self.llm.generate_text(
+                prompt=prompt,
+                max_tokens=700,  # Adjusted for potentially longer email content
+                temperature=0.1,
+            )
+
+            if (
+                response_str and response_str.strip()
+            ):  # Check if not None, not empty, and not just whitespace
+                import json  # Make sure json is imported
+
+                try:
+                    # Attempt to strip leading/trailing whitespace that might break JSON parsing
+                    # and look for JSON object if it's embedded
+                    clean_response = response_str.strip()
+                    if not clean_response.startswith("{") or not clean_response.endswith("}"):
+                        # Try to find JSON object within the string
+                        import re
+
+                        match = re.search(r"\{.*\}", clean_response, re.DOTALL)
+                        if match:
+                            clean_response = match.group(0)
+                        else:
+                            logger.error(
+                                f"LLM response for email generation for job {job_record.id} is not a valid JSON object: {clean_response}"
+                            )
+                            return {
+                                "subject": "Error",
+                                "body": "Could not generate email: LLM returned invalid format.",
+                            }
+
+                    email_data = json.loads(clean_response)
+                    return {
+                        "subject": email_data.get("subject", ""),
+                        "body": email_data.get("body", ""),
+                    }
+                except json.JSONDecodeError as je:
+                    logger.error(
+                        f"Failed to decode LLM JSON response for email generation for job {job_record.id}: {je}. Response was: '{response_str}'"
+                    )
+                    return {
+                        "subject": "Error",
+                        "body": "Could not generate email: LLM returned malformed JSON.",
+                    }
+            else:
+                # This is where the original error was logged
+                logger.error(
+                    f"LLM returned an empty or whitespace-only response for email generation for job {job_record.id}. Raw response: '{response_str}'"
+                )
+                return {
+                    "subject": "Error",
+                    "body": "Could not generate email: LLM failed to provide content.",
+                }
+        except Exception as e:
+            # Log with exception info for full traceback
+            logger.exception(f"Error generating email with LLM for job {job_record.id}: {e}")
+            return {
+                "subject": "Error",
+                "body": f"Could not generate email due to an unexpected error: {e}",
+            }
