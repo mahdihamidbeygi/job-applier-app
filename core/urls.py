@@ -55,6 +55,7 @@ job_urls = [
     path("jobs/", views.jobs_page, name="jobs_page"),
     path("jobs/<int:job_id>/", views.job_detail, name="job_detail"),
     path("jobs/<int:job_id>/apply/", views.job_apply, name="job_apply"),
+    path("jobs/online_search/", views.online_jobsearch, name="online_jobsearch"),
     path("jobs/search/", views.search_jobs, name="search_jobs"),
     path("api/search-jobs/", views.search_jobs, name="api_search_jobs"),
     path("api/apply-to-job/<int:job_id>/", views.apply_to_job, name="apply_to_job"),

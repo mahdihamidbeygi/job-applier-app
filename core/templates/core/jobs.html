@@ -98,10 +98,41 @@ Applier{% endblock %} {% block content %}
     transform: translateY(0);
   }
 
-  #loadingSpinner {
+  .search-btn:disabled {
+    opacity: 0.6;
+    transform: none;
+  }
+
+  #buttonSpinner {
     width: 1.5rem;
     height: 1.5rem;
     color: var(--text-primary);
+  }
+
+  .job-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    transition: all var(--transition-speed) var(--transition-timing);
+  }
+
+  .job-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+    border-color: var(--primary-color);
+  }
+
+  .match-score .badge {
+    font-size: 0.8rem;
+  }
+
+  .remove-job {
+    opacity: 0.7;
+    transition: opacity var(--transition-speed);
+  }
+
+  .remove-job:hover {
+    opacity: 1;
   }
 
   @media (max-width: 768px) {
@@ -112,6 +143,10 @@ Applier{% endblock %} {% block content %}
 
     .search-form {
       padding: var(--spacing-md);
+    }
+
+    .search-title {
+      font-size: 2rem;
     }
   }
 </style>
@@ -179,14 +214,14 @@ Applier{% endblock %} {% block content %}
           </select>
         </div>
         <div class="col-12">
-          <button type="submit" class="search-btn">
+          <button type="submit" class="search-btn" id="searchButton">
             <span
               class="d-flex align-items-center justify-content-center gap-2"
             >
               <i class="fas fa-search"></i>
-              Search Jobs
+              <span id="buttonText">Search Jobs</span>
               <div
-                id="loadingSpinner"
+                id="buttonSpinner"
                 class="spinner-border spinner-border-sm d-none"
                 role="status"
               >
@@ -200,97 +235,213 @@ Applier{% endblock %} {% block content %}
   </div>
 </div>
 
-<!-- Job Listings -->
-<div id="jobListings">
-  {% if job_listings %} {% for job in job_listings %}
-  <div class="card mb-3">
-    <div class="card-body">
-      <div class="d-flex justify-content-between align-items-start">
-        <div>
-          <h5 class="card-title">{{ job.title }}</h5>
-          <h6 class="card-subtitle mb-2 text-muted">{{ job.company }}</h6>
-          <p class="card-text">
-            <i class="fas fa-map-marker-alt"></i> {{ job.location }}
-          </p>
-          <div class="match-score">
-            <span
-              class="badge bg-{% if job.match_score >= 80 %}success{% elif job.match_score >= 60 %}warning{% else %}danger{% endif %}"
-            >
-              Match Score: {{ job.match_score }}%
-            </span>
-          </div>
-        </div>
-        <div class="text-end">
-          <a
-            href="{% url 'core:job_detail' job.id %}"
-            class="btn btn-outline-primary"
-            >View Details</a
-          >
-          {% if job.applied %}
-          <span class="badge bg-success ms-2">Applied</span>
-          {% endif %} {% if job.has_tailored_documents %}
-          <span
-            class="badge bg-info ms-2"
-            title="Resume and cover letter are ready"
-          >
-            <i class="fas fa-file-alt"></i> Documents Ready
-          </span>
-          {% endif %}
-          <button
-            class="btn btn-outline-danger ms-2 remove-job"
-            data-job-id="{{ job.id }}"
-            title="Remove from results"
-          >
-            <i class="fas fa-times"></i>
-          </button>
-        </div>
-      </div>
+<!-- Job Listings Section -->
+<div class="container">
+  <!-- Section Title -->
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h3 class="text-primary">
+      <i class="fas fa-briefcase"></i> Your Job Opportunities
+    </h3>
+    <span class="badge bg-secondary" id="jobCount">
+      {% if job_listings %}
+      <!---->
+      {{ job_listings|length }} job{{ job_listings|length|pluralize }}
+      <!---->
+      {% else %}0 jobs{% endif %}
+    </span>
+  </div>
 
-      <!-- Job Preview -->
-      <div class="mt-3">
-        <p class="card-text">{{ job.description|truncatewords:50 }}</p>
-        <div class="d-flex justify-content-between align-items-center">
+  <!-- Job Listings Container -->
+  <div id="jobListings">
+    {% if job_listings %} {% for job in job_listings %}
+    <div class="card mb-3 job-card" data-job-id="{{ job.id }}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
           <div>
-            <small class="text-muted">
-              Posted: {{ job.posted_date|date:"M d, Y" }}
-            </small>
-            <span class="badge bg-secondary ms-2">{{ job.source|title }}</span>
+            <h5 class="card-title">{{ job.title }}</h5>
+            <h6 class="card-subtitle mb-2 text-muted">{{ job.company }}</h6>
+            <p class="card-text">
+              <i class="fas fa-map-marker-alt"></i>
+              {{ job.location|default:"Location not specified" }}
+            </p>
+            <div class="match-score">
+              <span
+                class="badge bg-{% if job.match_score >= 80 %}success{% elif job.match_score >= 60 %}warning{% else %}danger{% endif %}"
+              >
+                Match Score: {{ job.match_score|default:0 }}%
+              </span>
+            </div>
           </div>
-          <a
-            href="{{ job.source_url }}"
-            target="_blank"
-            class="btn btn-sm btn-outline-secondary"
-          >
-            <i class="fab fa-{{ job.source|lower }}"></i> View on
-            <!---->
-            {{ job.source|title }}
-          </a>
+          <div class="text-end">
+            <a
+              href="{% url 'core:job_detail' job.id %}"
+              class="btn btn-outline-primary btn-sm"
+              >View Details</a
+            >
+            {% if job.applied %}
+            <span class="badge bg-success ms-2">Applied</span>
+            {% endif %} {% if job.has_tailored_documents %}
+            <span
+              class="badge bg-info ms-2"
+              title="Resume and cover letter are ready"
+            >
+              <i class="fas fa-file-alt"></i> Documents Ready
+            </span>
+            {% endif %}
+            <button
+              class="btn btn-outline-danger btn-sm ms-2 remove-job"
+              data-job-id="{{ job.id }}"
+              title="Remove from results"
+            >
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Job Preview -->
+        <div class="mt-3">
+          <p class="card-text">{{ job.description|truncatewords:50 }}</p>
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <small class="text-muted">
+                Posted: {{ job.posted_date|date:"M d, Y"|default:"N/A" }}
+              </small>
+              <span class="badge bg-secondary ms-2"
+                >{{ job.source|title|default:"N/A" }}</span
+              >
+            </div>
+            {% if job.source_url %}
+            <a
+              href="{{ job.source_url }}"
+              target="_blank"
+              class="btn btn-sm btn-outline-secondary"
+            >
+              <i
+                class="fab fa-{{ job.source|lower|default:'external-link' }}"
+              ></i>
+              View on {{ job.source|title|default:"Site" }}
+            </a>
+            {% endif %}
+          </div>
         </div>
       </div>
     </div>
-  </div>
-  {% endfor %} {% else %}
-  <div class="alert alert-info">
-    No jobs found. Try adjusting your search criteria.
-  </div>
-  {% endif %}
-</div>
-
-<!-- Loading Spinner -->
-<div
-  id="loadingSpinner"
-  class="position-fixed top-50 start-50 translate-middle d-none"
->
-  <div class="spinner-border text-primary" role="status">
-    <span class="visually-hidden">Loading...</span>
+    {% endfor %} {% else %}
+    <div class="alert alert-info" id="emptyState">
+      <i class="fas fa-info-circle"></i>
+      <strong>No jobs found in your database.</strong>
+      <p class="mb-0 mt-2">
+        Use the search form above to find new job opportunities from various
+        platforms like LinkedIn, Indeed, and Glassdoor.
+      </p>
+    </div>
+    {% endif %}
   </div>
 </div>
 
 <!-- Custom Scripts -->
 <script>
+  // Helper function to escape HTML to prevent XSS
+  function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#039;'
+    };
+    return text.toString().replace(/[&<>"']/g, function(m) { return map[m]; });
+  }
+
+  // Function to render job cards dynamically
+  function renderJobCards(jobListings) {
+    return jobListings.map(job => {
+      // Determine match score badge class
+      let matchScoreClass = 'danger';
+      if (job.match_score >= 80) {
+        matchScoreClass = 'success';
+      } else if (job.match_score >= 60) {
+        matchScoreClass = 'warning';
+      }
+
+      // Format posted date
+      const postedDate = job.posted_date ? new Date(job.posted_date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric'
+      }) : 'N/A';
+
+      // Get source icon class
+      const sourceIcon = job.source ? `fab fa-${job.source.toLowerCase()}` : 'fas fa-external-link-alt';
+      const sourceTitle = job.source ? job.source.charAt(0).toUpperCase() + job.source.slice(1) : 'Site';
+
+      return `
+        <div class="card mb-3 job-card">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h5 class="card-title">${escapeHtml(job.title)}</h5>
+                <h6 class="card-subtitle mb-2 text-muted">${escapeHtml(job.company)}</h6>
+                <p class="card-text">
+                  <i class="fas fa-map-marker-alt"></i> ${escapeHtml(job.location || 'N/A')}
+                </p>
+                <div class="match-score">
+                  <span class="badge bg-${matchScoreClass}">
+                    Match Score: ${job.match_score || 0}%
+                  </span>
+                </div>
+              </div>
+              <div class="text-end">
+                <a href="/jobs/${job.id}/" class="btn btn-outline-primary btn-sm">View Details</a>
+                ${job.applied ? '<span class="badge bg-success ms-2">Applied</span>' : ''}
+                ${job.has_documents ? '<span class="badge bg-info ms-2" title="Resume and cover letter are ready"><i class="fas fa-file-alt"></i> Documents Ready</span>' : ''}
+                <button class="btn btn-outline-danger btn-sm ms-2 remove-job" data-job-id="${job.id}" title="Remove from results">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Job Preview -->
+            <div class="mt-3">
+              <p class="card-text">${escapeHtml(job.description)}</p>
+              <div class="d-flex justify-content-between align-items-center">
+                <div>
+                  <small class="text-muted">Posted: ${postedDate}</small>
+                  <span class="badge bg-secondary ms-2">${escapeHtml(sourceTitle)}</span>
+                </div>
+                ${job.url ? `
+                  <a href="${escapeHtml(job.url)}" target="_blank" class="btn btn-sm btn-outline-secondary">
+                    <i class="${sourceIcon}"></i> View on ${escapeHtml(sourceTitle)}
+                  </a>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
   // Function to get the authentication token
   function getAuthToken() {
     return localStorage.getItem("authToken");
+  }
+
+  // Helper function to get CSRF token
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
   }
 
   // Function to remove a job from results
@@ -323,20 +474,33 @@ Applier{% endblock %} {% block content %}
         return response.json();
       })
       .then((data) => {
-        // Find and remove the job card from the DOM
-        const jobCard = document
-          .querySelector(`[data-job-id="${jobId}"]`)
-          .closest(".card");
-        jobCard.remove();
+        if (data.success) {
+          // Find and remove the job card from the DOM
+          const jobCard = document
+            .querySelector(`[data-job-id="${jobId}"]`)
+            .closest(".job-card");
+          if (jobCard) {
+            jobCard.remove();
+          }
 
-        // If no jobs left, show empty state
-        const jobListings = document.getElementById("jobListings");
-        if (jobListings.children.length === 0) {
-          jobListings.innerHTML = `
-            <div class="alert alert-info">
-              No jobs found. Try adjusting your search criteria.
-            </div>
-          `;
+          // Update job count
+          const jobListings = document.getElementById("jobListings");
+          const jobCount = document.getElementById('jobCount');
+          const remainingJobs = jobListings.querySelectorAll('.job-card').length;
+          jobCount.textContent = `${remainingJobs} job${remainingJobs !== 1 ? 's' : ''}`;
+
+          // If no jobs left, show empty state
+          if (remainingJobs === 0) {
+            jobListings.innerHTML = `
+              <div class="alert alert-info" id="emptyState">
+                <i class="fas fa-info-circle"></i>
+                <strong>No jobs found in your database.</strong>
+                <p class="mb-0 mt-2">Use the search form above to find new job opportunities from various platforms like LinkedIn, Indeed, and Glassdoor.</p>
+              </div>
+            `;
+          }
+        } else {
+          alert(data.error || "Failed to remove job");
         }
       })
       .catch((error) => {
@@ -347,21 +511,64 @@ Applier{% endblock %} {% block content %}
       });
   }
 
-  // Add click event listeners to all remove buttons
-  document.addEventListener("DOMContentLoaded", function () {
-    document.querySelectorAll(".remove-job").forEach((button) => {
-      button.addEventListener("click", function () {
-        const jobId = this.getAttribute("data-job-id");
-        removeJob(jobId);
-      });
-    });
-  });
+  // Extract the remove job handler to a separate function for reuse
+  function handleRemoveJob(event) {
+    const jobId = event.currentTarget.getAttribute("data-job-id");
+    removeJob(jobId);
+  }
 
+  // Function to attach event listeners to newly created remove buttons
+  function attachRemoveJobListeners() {
+    document.querySelectorAll(".remove-job").forEach((button) => {
+      // Remove existing listeners to avoid duplicates
+      button.removeEventListener("click", handleRemoveJob);
+      button.addEventListener("click", handleRemoveJob);
+    });
+  }
+
+  // Function to show loading state
+  function showLoadingState() {
+    const searchButton = document.getElementById("searchButton");
+    const buttonText = document.getElementById("buttonText");
+    const buttonSpinner = document.getElementById("buttonSpinner");
+
+    searchButton.disabled = true;
+    buttonText.textContent = "Searching...";
+    buttonSpinner.classList.remove("d-none");
+  }
+
+  // Function to hide loading state
+  function hideLoadingState() {
+    const searchButton = document.getElementById("searchButton");
+    const buttonText = document.getElementById("buttonText");
+    const buttonSpinner = document.getElementById("buttonSpinner");
+
+    searchButton.disabled = false;
+    buttonText.textContent = "Search Jobs";
+    buttonSpinner.classList.add("d-none");
+  }
+
+  // Initialize page functionality
   document.addEventListener("DOMContentLoaded", function () {
-    // Platform selector functionality
+    // Initialize platform selector
     const platformChips = document.querySelectorAll(".platform-chip");
     const platformsSelect = document.getElementById("platforms");
 
+    // Set default platform selection based on user preferences
+    {% if user_preferences.preferred_platforms %}
+    const preferredPlatforms = {{ user_preferences.preferred_platforms|safe }};
+    preferredPlatforms.forEach(platform => {
+      const chip = document.querySelector(`[data-platform="${platform}"]`);
+      const option = platformsSelect.querySelector(`option[value="${platform}"]`);
+
+      if (chip && option) {
+        chip.classList.add("selected");
+        option.selected = true;
+      }
+    });
+    {% endif %}
+
+    // Platform selector functionality
     platformChips.forEach((chip) => {
       chip.addEventListener("click", function () {
         const platform = this.dataset.platform;
@@ -374,18 +581,27 @@ Applier{% endblock %} {% block content %}
       });
     });
 
+    // Attach remove job listeners for existing jobs
+    attachRemoveJobListeners();
+
     // Form submission handler
     document
       .getElementById("jobSearchForm")
-      .addEventListener("submit", function (e) {
+      .addEventListener("submit", async function (e) {
         e.preventDefault();
 
-        const role = document.getElementById("role").value;
-        const location = document.getElementById("location").value;
+        const role = document.getElementById("role").value.trim();
+        const location = document.getElementById("location").value.trim();
         const selectedPlatforms = Array.from(
           platformsSelect.selectedOptions
         ).map((option) => option.value);
         const authToken = getAuthToken();
+
+        // Validate input
+        if (!role) {
+          alert("Please enter a job role to search for.");
+          return;
+        }
 
         if (!authToken) {
           alert("Please log in to search for jobs.");
@@ -393,27 +609,123 @@ Applier{% endblock %} {% block content %}
           return;
         }
 
-        // Show loading spinner
-        document.getElementById("loadingSpinner").classList.remove("d-none");
+        if (selectedPlatforms.length === 0) {
+          alert("Please select at least one platform to search.");
+          return;
+        }
 
-        // Your existing search logic here
+        // Show loading state
+        showLoadingState();
+
+        try {
+          const response = await fetch("{% url 'core:online_jobsearch' %}", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": getCookie("csrftoken"),
+              Authorization: `Bearer ${authToken}`,
+            },
+            credentials: "include",
+            body: JSON.stringify({
+              role: role,
+              location: location,
+              platform: selectedPlatforms,
+            }),
+          });
+
+          if (!response.ok) {
+            if (response.status === 401) {
+              localStorage.removeItem("authToken");
+              alert("Session expired. Please log in again.");
+              window.location.href = "{% url 'account_login' %}";
+              return;
+            } else {
+              const errorData = await response
+                .json()
+                .catch(() => ({ error: response.statusText }));
+              throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+            }
+          }
+
+          const data = await response.json();
+          console.log("Search results:", data);
+
+          // Clear previous search results but keep database jobs
+          const jobListingsDiv = document.getElementById("jobListings");
+
+          // Remove any existing search result messages
+          const existingMessages = jobListingsDiv.querySelectorAll('.alert');
+          existingMessages.forEach(msg => {
+            if (msg.textContent.includes('Found') || msg.textContent.includes('Search') || msg.textContent.includes('warnings')) {
+              msg.remove();
+            }
+          });
+
+          if (data.job_listings && Array.isArray(data.job_listings) && data.job_listings.length > 0) {
+            // If we have no existing jobs, replace the empty state
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) {
+              emptyState.remove();
+            }
+
+            // Add new job cards to the existing ones
+            const newJobsHtml = renderJobCards(data.job_listings);
+            jobListingsDiv.insertAdjacentHTML('beforeend', newJobsHtml);
+
+            // Attach event listeners to the new remove buttons
+            attachRemoveJobListeners();
+
+            // Update job count
+            const jobCount = document.getElementById('jobCount');
+            const currentJobs = jobListingsDiv.querySelectorAll('.job-card').length;
+            jobCount.textContent = `${currentJobs} job${currentJobs !== 1 ? 's' : ''}`;
+
+            // Show success message with warnings if any
+            let messageHtml = '';
+            if (data.warnings && data.warnings.length > 0) {
+              messageHtml = `
+                <div class="alert alert-warning mt-3">
+                  <strong><i class="fas fa-exclamation-triangle"></i> Search completed with warnings:</strong>
+                  <ul class="mb-0 mt-2">
+                    ${data.warnings.map(warning => `<li>${escapeHtml(warning)}</li>`).join('')}
+                  </ul>
+                </div>
+              `;
+            } else {
+              messageHtml = `
+                <div class="alert alert-success mt-3">
+                  <i class="fas fa-check-circle"></i> ${escapeHtml(data.message || `Found ${data.job_listings.length} new job(s) and added them to your list`)}
+                </div>
+              `;
+            }
+            jobListingsDiv.insertAdjacentHTML('afterbegin', messageHtml);
+
+          } else {
+            // No new jobs found
+            const noResultsHtml = `
+              <div class="alert alert-info mt-3">
+                <i class="fas fa-info-circle"></i> ${escapeHtml(data.message || "No new jobs found matching your criteria. Try adjusting your search terms or selecting different platforms.")}
+              </div>
+            `;
+            jobListingsDiv.insertAdjacentHTML('afterbegin', noResultsHtml);
+          }
+
+          // Scroll to results
+          jobListingsDiv.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+        } catch (error) {
+          console.error("Search error:", error);
+
+          const jobListingsDiv = document.getElementById("jobListings");
+          jobListingsDiv.innerHTML = `
+            <div class="alert alert-danger mt-3">
+              <i class="fas fa-exclamation-circle"></i> <strong>Search Failed:</strong> ${escapeHtml(error.message)}
+            </div>
+          `;
+        } finally {
+          hideLoadingState();
+        }
       });
   });
-
-  // Helper function to get CSRF token
-  function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== "") {
-      const cookies = document.cookie.split(";");
-      for (let i = 0; i < cookies.length; i++) {
-        const cookie = cookies[i].trim();
-        if (cookie.substring(0, name.length + 1) === name + "=") {
-          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-          break;
-        }
-      }
-    }
-    return cookieValue;
-  }
 </script>
 {% endblock %}

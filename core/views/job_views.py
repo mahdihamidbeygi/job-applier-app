@@ -5,20 +5,22 @@ Job-related views for the core app.
 import json
 import logging
 from datetime import date
+from typing import List
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db.models import Q
+from django.db.models.manager import BaseManager
 from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.views.decorators.http import require_POST, require_http_methods
+from django.views.decorators.http import require_http_methods, require_POST
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from core.forms import JobPlatformPreferenceForm
-from core.models import JobListing, JobPlatformPreference, UserProfile
-from core.utils.agents.personal_agent import PersonalAgent, PersonalBackground
+from core.models import JobListing, JobPlatformPreference
+from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.agents.search_agent import SearchAgent
 from core.views.utility_views import load_user_background
 
@@ -39,10 +41,9 @@ def jobs_page(request):
         )
 
     # Get jobs filtered by preferred platforms
-    preferred_platforms = user_preferences.preferred_platforms
-    jobs = JobListing.objects.filter(
-        user=request.user, source__in=preferred_platforms, is_active=True
-    ).order_by("-match_score", "-posted_date")[:20]
+    jobs: BaseManager[JobListing] = JobListing.objects.filter(user=request.user).order_by(
+        "match_score", "posted_date"
+    )
 
     # Prepare jobs for display
     for job in jobs:
@@ -53,14 +54,14 @@ def jobs_page(request):
 
     # Get applied jobs
     applied_jobs = JobListing.objects.filter(user=request.user, applied=True).order_by(
-        "-application_date"
-    )[:5]
+        "application_date"
+    )
 
     return render(
         request,
         "core/jobs.html",
         {
-            "jobs": jobs,
+            "job_listings": jobs,
             "applied_jobs": applied_jobs,
             "user_preferences": user_preferences,
         },
@@ -74,9 +75,6 @@ def search_jobs(request):
     location = request.GET.get("location", "")
     sources = request.GET.getlist("sources", [])
 
-    # Initialize search agent
-    search_agent = SearchAgent()
-
     # Get user preferences for job platforms if no sources specified
     if not sources:
         try:
@@ -89,7 +87,7 @@ def search_jobs(request):
             sources = ["linkedin", "indeed", "glassdoor", "monster", "jobbank", "ziprecruiter"]
 
     # Build filter query
-    filter_query = Q(user=request.user)
+    filter_query = Q(user=request.user, is_active=True)
 
     if query:
         filter_query &= (
@@ -124,26 +122,171 @@ def search_jobs(request):
                         else job.description
                     ),
                     "source": job.source,
-                    "posted_date": job.posted_date.strftime("%Y-%m-%d"),
-                    "match_score": job.match_score,
+                    "posted_date": job.posted_date.strftime("%Y-%m-%d") if job.posted_date else "",
+                    "match_score": job.match_score or 0,
                     "applied": job.applied,
                     "url": job.source_url,
                     "has_documents": job.has_tailored_documents,
                 }
             )
-        return JsonResponse({"jobs": job_list})
+        return JsonResponse({"jobs": job_list, "count": len(job_list)})
 
     # For regular request, render template
     return render(
         request,
         "core/search_jobs.html",
         {
-            "jobs": jobs,
+            "job_listings": jobs,
             "query": query,
             "location": location,
             "selected_sources": sources,
         },
     )
+
+
+@login_required
+def online_jobsearch(request):
+    """
+    Online job search endpoint - Scrapes jobs from external platforms using SearchAgent
+    """
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            role = data.get("role", "")
+            location = data.get("location", "")
+            platforms = data.get("platform", [])
+
+            if not role:
+                return JsonResponse({"error": "Job role is required"}, status=400)
+
+            # Default platforms if none specified
+            if not platforms:
+                try:
+                    user_preferences = JobPlatformPreference.objects.get(
+                        user_profile=request.user.userprofile
+                    )
+                    platforms = user_preferences.preferred_platforms
+                except JobPlatformPreference.DoesNotExist:
+                    platforms = ["linkedin", "indeed", "glassdoor"]
+
+            # Initialize search agent
+            search_agent = SearchAgent(request.user.id)
+
+            all_jobs = []
+            scraping_results = {
+                "successful_platforms": [],
+                "failed_platforms": [],
+                "total_jobs_found": 0,
+            }
+
+            # Search each platform
+            for platform in platforms:
+                try:
+                    logger.info(f"Searching {platform} for role: {role}, location: {location}")
+
+                    # Scrape jobs from the platform
+                    platform_jobs = search_agent.search_jobs(
+                        role=role,
+                        location=location,
+                        platform=platform,
+                        request=request,
+                    )
+
+                    if platform_jobs:
+                        # Process and save jobs to database
+                        processed_jobs: List[JobListing] = search_agent.process_jobs(platform_jobs)
+
+                        # Analyze job fit for each job
+                        for job_listing in processed_jobs:
+
+                            # Analyze job fit
+                            job_data = {
+                                "title": job_listing.title,
+                                "company": job_listing.company,
+                                "location": job_listing.location,
+                                "description": job_listing.description,
+                                "required_skills": job_listing.required_skills,
+                            }
+
+                            try:
+                                analysis = search_agent.analyze_job_fit(job_data)
+                                job_listing.match_score = analysis.get("match_score", 0)
+                                job_listing.match_details = json.dumps(analysis)
+                            except Exception as e:
+                                logger.warning(
+                                    f"Failed to analyze job fit for {job_listing.title}: {str(e)}"
+                                )
+                                job_listing.match_score = 50  # Default score
+
+                            job_listing.save()
+                            all_jobs.append(job_listing)
+
+                        scraping_results["successful_platforms"].append(platform)
+                        scraping_results["total_jobs_found"] += len(processed_jobs)
+
+                        logger.info(
+                            f"Successfully scraped {len(processed_jobs)} jobs from {platform}"
+                        )
+                    else:
+                        scraping_results["failed_platforms"].append(f"{platform} (no jobs found)")
+                        logger.warning(f"No jobs found on {platform}")
+
+                except Exception as e:
+                    logger.error(f"Error scraping {platform}: {str(e)}")
+                    scraping_results["failed_platforms"].append(f"{platform} (error: {str(e)})")
+
+            # Sort jobs by match score
+            all_jobs.sort(key=lambda x: x.match_score or 0, reverse=True)
+
+            # Prepare response data
+            job_list = []
+            for job in all_jobs:  # Limit to top 50 jobs
+                job_list.append(
+                    {
+                        "id": job.id,
+                        "title": job.title,
+                        "company": job.company,
+                        "location": job.location,
+                        "description": (
+                            job.description[:300] + "..."
+                            if len(job.description) > 300
+                            else job.description
+                        ),
+                        "source": job.source,
+                        "posted_date": (
+                            job.posted_date.strftime("%Y-%m-%d") if job.posted_date else ""
+                        ),
+                        "match_score": job.match_score or 0,
+                        "applied": job.applied,
+                        "url": job.source_url,
+                        "has_documents": job.has_tailored_documents,
+                    }
+                )
+
+            response_data = {
+                "success": True,
+                "job_listings": job_list,
+                "count": len(job_list),
+                "scraping_summary": scraping_results,
+                "message": f"Found {scraping_results['total_jobs_found']} new jobs from {len(scraping_results['successful_platforms'])} platforms",
+            }
+
+            # Add warnings if some platforms failed
+            if scraping_results["failed_platforms"]:
+                response_data["warnings"] = [
+                    f"Some platforms had issues: {', '.join(scraping_results['failed_platforms'])}"
+                ]
+
+            return JsonResponse(response_data)
+
+        except json.JSONDecodeError:
+            return JsonResponse({"error": "Invalid JSON data"}, status=400)
+        except Exception as e:
+            logger.error(f"Error in online job search: {str(e)}")
+            return JsonResponse({"error": f"Search failed: {str(e)}"}, status=500)
+
+    # For GET requests, redirect to search_jobs
+    return redirect("core:search_jobs")
 
 
 @api_view(["POST"])

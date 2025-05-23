@@ -33,16 +33,15 @@ class JobListing(TimestampMixin):
     source = models.CharField(max_length=100, choices=JOB_SOURCES, null=True, blank=True)
     source_url = models.URLField(max_length=500, blank=True, null=True)
     posted_date = models.DateField(blank=True, null=True)
+
     salary_range = models.CharField(max_length=100, blank=True, null=True)
-    job_type = models.CharField(
-        max_length=200, blank=True, null=True
-    )  # Full-time, Part-time, Contract, etc.
+    job_type = models.CharField(max_length=200, blank=True, null=True)
     benefits = models.TextField(blank=True, null=True)
     experience_level = models.CharField(max_length=200, blank=True, null=True)
+
     required_skills = models.JSONField(default=list, blank=True, null=True)
     preferred_skills = models.JSONField(default=list, blank=True, null=True)
-    is_active = models.BooleanField(default=True, null=True, blank=True)
-    match_score = models.FloatField(null=True, blank=True)
+
     tailored_resume = models.FileField(
         upload_to="tailored_resumes/", blank=True, max_length=500, null=True
     )
@@ -54,6 +53,8 @@ class JobListing(TimestampMixin):
     application_status = models.CharField(max_length=200, blank=True, null=True)
     how_to_apply = models.TextField(blank=True, null=True)
     match_details = models.JSONField(default=list, blank=True, null=True)
+    is_active = models.BooleanField(default=True, null=True, blank=True)
+    match_score = models.FloatField(null=True, blank=True)
 
     class Meta:
         ordering = ["-posted_date", "-match_score"]

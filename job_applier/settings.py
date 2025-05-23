@@ -309,6 +309,7 @@ LINKEDIN_PASSWORD: str | None = os.getenv("LINKEDIN_PASSWORD")
 
 # Celery Configuration
 CELERY_BROKER_URL = "redis://localhost:6379/0"
+USE_CELERY_FOR_RESUMES = True
 CELERY_RESULT_BACKEND = "redis://localhost:6379/0"
 CELERY_ACCEPT_CONTENT: list[str] = ["json"]
 CELERY_TASK_SERIALIZER = "json"

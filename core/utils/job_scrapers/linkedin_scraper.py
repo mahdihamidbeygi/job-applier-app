@@ -187,6 +187,7 @@ class LinkedInJobScraper:
                             company=job_details["company"],
                             location=job_details["location"],
                             source_url=job_details["source_url"],
+                            description=job_details["description"],
                         ).first()
 
                         if existing_job:
