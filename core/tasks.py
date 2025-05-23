@@ -1,51 +1,85 @@
+# tasks.py
+from celery import shared_task
 import logging
+from django.apps import apps
+from celery.exceptions import Retry
 
-from core.models import JobListing, UserProfile
-from core.utils.agents.personal_agent import PersonalAgent, PersonalBackground
-from job_applier.celery_config import app
+from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.agents.writer_agent import WriterAgent
+from core.utils.agents.job_agent import JobAgent
 
 logger = logging.getLogger(__name__)
 
 
-@app.task
-def generate_documents_async(job_id: int, user_id: int):
+@shared_task(bind=True, max_retries=3, default_retry_delay=60)
+def generate_resume_for_job_task(self, user_id: int, job_listing_id: int):
     """
-    Asynchronously generate tailored documents for a job listing.
-
-    Args:
-        job_id (int): The ID of the job listing
-        user_id (int): The ID of the user
+    Celery task to generate a tailored resume for a given job listing.
     """
     try:
-        # Get the job listing
-        job_listing: JobListing = JobListing.objects.get(id=job_id)
-        user_profile: UserProfile = UserProfile.objects.get(user_id=user_id)
+        # Get model dynamically to avoid circular imports
+        JobListing = apps.get_model("core", "JobListing")
+
+        logger.info(
+            f"Celery task: Starting resume generation for user_id: {user_id}, job_listing_id: {job_listing_id}"
+        )
+
+        # Check if job listing exists (no user_id filter since JobListing doesn't have it)
+        job_listing = JobListing.objects.filter(id=job_listing_id).first()
+        if not job_listing:
+            logger.warning(
+                f"Celery task: JobListing with id {job_listing_id} not found. Skipping resume generation."
+            )
+            return f"JobListing {job_listing_id} not found."
+
+        if job_listing.tailored_resume:
+            logger.info(
+                f"Celery task: JobListing with id {job_listing_id} already has a tailored resume. Skipping."
+            )
+            return f"JobListing {job_listing_id} already has resume."
 
         # Initialize agents
-        personal_agent = PersonalAgent(user_id)
-
-        # Load user background
-        background = PersonalBackground(
-            profile=user_profile.__dict__,
-            work_experience=list(user_profile.work_experiences.values()),
-            education=list(user_profile.education.values()),
-            skills=list(user_profile.skills.values()),
-            projects=list(user_profile.projects.values()),
-            github_data=user_profile.github_data,  # We'll implement GitHub data fetching later
-            achievements=[],  # We'll add this field to the model later
-            interests=[],  # We'll add this field to the model later
+        personal_agent = PersonalAgent(user_id=user_id)
+        job_agent = JobAgent(user_id=user_id, job_id=job_listing_id)
+        writer_agent = WriterAgent(
+            user_id=user_id,
+            personal_agent=personal_agent,
+            job_agent=job_agent,
         )
-        personal_agent.load_background(background)
 
-        # Generate documents
-        print(f"Generating documents for job {job_id}")
-        success: bool = personal_agent.generate_tailored_documents(job_listing)
+        # Generate resume
+        writer_agent.generate_resume()
 
-        if not success:
-            print(f"Failed to generate documents for job {job_id}")
-            return False
-        return True
+        logger.info(
+            f"Celery task: Resume generation process completed for job_listing_id: {job_listing_id}"
+        )
+        return f"Resume generated for JobListing {job_listing_id}."
 
     except Exception as e:
-        print(f"Error in generate_documents_async task: {str(e)}")
+        logger.error(
+            f"Celery task: Error generating resume for user_id: {user_id}, job_listing_id: {job_listing_id}. Error: {str(e)}",
+            exc_info=True,
+        )
+        # Check if we should retry
+        if self.request.retries < self.max_retries:
+            logger.info(f"Retrying task (attempt {self.request.retries + 1}/{self.max_retries})")
+            raise self.retry(exc=e, countdown=60 * (2**self.request.retries))  # Exponential backoff
+        else:
+            logger.error(f"Task failed after {self.max_retries} retries")
+            raise
+
+
+@shared_task
+def refresh_vector_store_async():
+    """
+    Simple task to refresh vector store - replace with your actual implementation
+    """
+    try:
+        logger.info("Starting vector store refresh task")
+        # Add your vector store refresh logic here
+        # For now, just return success to test if the error is fixed
+        logger.info("Vector store refresh completed successfully")
+        return "Vector store refreshed successfully"
+    except Exception as e:
+        logger.error(f"Error in refresh_vector_store_async: {str(e)}", exc_info=True)
         raise

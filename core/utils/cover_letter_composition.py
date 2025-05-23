@@ -1,6 +1,5 @@
 import json
 import logging
-import re
 from io import BytesIO
 from typing import Any, Dict, List
 
@@ -9,14 +8,15 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 
-from core.models import UserProfile
-from core.utils.local_llms import GrokClient, OllamaClient
+from core.utils.agents.job_agent import JobAgent
+from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.llm_clients import GoogleClient, GrokClient
 
 logger = logging.getLogger(__name__)
 
 
 class CoverLetterComposition:
-    def __init__(self, user_info: UserProfile, job_desc: str):
+    def __init__(self, personal_agent: PersonalAgent, job_agent: JobAgent):
         """
         Initialize the CoverLetterComposition class.
 
@@ -24,12 +24,12 @@ class CoverLetterComposition:
             user_info (Dict[str, Any]): Dictionary containing user information
             company_info (Dict[str, Any]): Dictionary containing company and job information
         """
-        self.user_info: UserProfile = user_info
-        self.job_description: str = job_desc
+        self.personal_agent: PersonalAgent = personal_agent
+        self.job_agent: JobAgent = job_agent
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
         self.grok_client = GrokClient(model="grok-2-1212", temperature=0.0)
-        self.llm = OllamaClient(model="phi4:latest", temperature=0.0)
+        self.llm = GoogleClient()
 
     def _setup_styles(self) -> Dict[str, ParagraphStyle]:
         """Set up custom styles for the cover letter."""
@@ -86,35 +86,6 @@ class CoverLetterComposition:
 
         return styles
 
-    def _create_salutation(self) -> List[Any]:
-        """Create the letter salutation."""
-        elements = []
-
-        # TODO: add hiring manager name, once I have a fast model
-        # try:
-        #     # Generate hiring manager name
-        #     response = self.llm.generate(
-        #         f"""
-        #         here's the job description: {self.job_description}
-        #         return a JSON object with a single field 'hiring_manager_name' containing either the hiring manager's name from the job description 
-        #         or 'Hiring Manager' if no name is found. Do not include any explanatory text.
-        #         """
-        #     )
-        #     # Clean the response to ensure it's valid JSON
-        #     response = response.strip()
-        #     if response.startswith("{") and response.endswith("}"):
-        #         hiring_manager = json.loads(response)
-        #         salutation = f"Dear {hiring_manager.get('hiring_manager_name', 'Hiring Manager')},"
-        #     else:
-        #         salutation = "Dear Hiring Manager,"
-        # except Exception as e:
-        #     logger.info(f"Error generating hiring manager: {str(e)}")
-        #     salutation = "Dear Hiring Manager,"
-        salutation = "Dear Hiring Manager,"
-
-        elements.append(Paragraph(salutation, self.styles["Salutation"]))
-        return elements
-
     def _create_body(self, content: Dict[str, str]) -> List[Any]:
         """Create the body of the cover letter."""
         elements = []
@@ -143,30 +114,9 @@ class CoverLetterComposition:
 
         return elements
 
-    def _create_closing(self) -> List[Any]:
-        """Create the letter closing."""
-        elements = []
-
-        elements.append(Paragraph("Sincerely,", self.styles["Closing"]))
-        # Use name from UserProfile if available, otherwise fall back to User's full name
-        user_name = (
-            self.user_info.name
-            or self.user_info.user.get_full_name()
-            or self.user_info.user.username
-        )
-        elements.append(Paragraph(user_name, self.styles["Signature"]))
-
-        return elements
-
     def build(self) -> BytesIO:
         """
         Build the cover letter with the specified content.
-
-        Args:
-            content (Dict[str, str]): Dictionary containing the letter content sections
-                - opening: Opening paragraph
-                - main_content: Main body paragraphs
-                - closing: Closing paragraph
         """
         doc = SimpleDocTemplate(
             self.buffer,
@@ -178,149 +128,97 @@ class CoverLetterComposition:
         )
 
         story = []
+        content: Dict[str, str] = {}  # Initialize content dictionary
 
-        # Add salutation
-        story.extend(self._create_salutation())
-        # Get user's profile information
-        user_profile = self.user_info
+        # Generate cover letter content using LLM
+        prompt: str = f"""Generate a professional cover letter based on the following information.
 
-        if user_profile.work_experiences.exists():
-            # Format work experiences
-            work_experiences = []
-            for exp in user_profile.work_experiences.all():
-                work_experiences.append(
-                    {
-                        "company": exp.company,
-                        "position": exp.position,
-                        "start_date": (
-                            exp.start_date.strftime("%Y-%m-%d") if exp.start_date else None
-                        ),
-                        "end_date": exp.end_date.strftime("%Y-%m-%d") if exp.end_date else None,
-                        "current": exp.current,
-                        "description": exp.description,
-                        "technologies": exp.technologies,
-                    }
-                )
-        else:
-            work_experiences = []
-
-        if user_profile.skills.exists():
-            # Format skills
-            skills = []
-            for skill in user_profile.skills.all():
-                skills.append(
-                    {
-                        "name": skill.name,
-                        "category": skill.category,
-                        "proficiency": skill.proficiency,
-                    }
-                )
-        else:
-            skills = []
-
-        if user_profile.projects.exists():
-            # Format projects
-            projects = []
-            for proj in user_profile.projects.all():
-                projects.append(
-                    {
-                        "title": proj.title,
-                        "description": proj.description,
-                        "technologies": proj.technologies,
-                        "start_date": (
-                            proj.start_date.strftime("%Y-%m-%d") if proj.start_date else None
-                        ),
-                        "end_date": proj.end_date.strftime("%Y-%m-%d") if proj.end_date else None,
-                    }
-                )
-        else:
-            projects = []
-
-        # Generate cover letter content using Grok
-        prompt = f"""Generate a professional cover letter based on the following information.
-
-                Job Description: {self.job_description}
+                Job Info: {self.job_agent.job_record.get_formatted_info()}
 
                 Candidate Information:
-                - Name: {user_profile.user.get_full_name() or user_profile.user.username}
-                - Professional Summary: {user_profile.professional_summary or 'Not provided'}
-                - Current Position: {user_profile.current_position or 'Not specified'}
-                - Years of Experience: {user_profile.years_of_experience or 'Not specified'}
+                {self.personal_agent.get_background_str()}
 
-                Work Experience:
-                {json.dumps(work_experiences, indent=2)}
+                Instructions:
+                Provide the content as a JSON object with five string fields:
+                1. "greeting": A professional salutation (e.g., "Dear Hiring Manager," or "Dear [Company Name] Team,"). Use a generic greeting if a specific contact is unknown.
+                2. "opening": A compelling opening paragraph introducing the candidate and expressing interest.
+                3. "main_content": One or two paragraphs for the main body, highlighting relevant experience, skills, and achievements aligned with the job, demonstrating company/role understanding.
+                4. "closing": A strong closing paragraph expressing enthusiasm and call to action.
+                5. "closing_phrase": A standard professional closing phrase (e.g., "Sincerely," or "Best regards,").
 
-                Skills:
-                {json.dumps(skills, indent=2)}
+                Ensure the body content ("opening", "main_content", "closing") is specific, professional, engaging, and matches the candidate's background to the job requirements.
+                Strictly adhere to the JSON format with only the specified keys.
+                """
+        try:
+            # --- FIX 1: Define schema as a dictionary with string descriptions ---
+            output_schema: Dict[str, str] = {
+                "greeting": "string",
+                "opening": "string",
+                "main_content": "string",
+                "closing": "string",
+                "closing_phrase": "string",
+            }
+            logger.debug("Calling LLM generate_structured_output for cover letter...")
+            # --- FIX 2: Assign directly to 'content' (it should return a dict) ---
+            content: Dict[str, Any] = self.llm.generate_structured_output(
+                prompt, output_schema=output_schema
+            )
+            logger.debug(f"Received structured output for cover letter: {content}")
 
-                Projects:
-                {json.dumps(projects, indent=2)}
+            if not isinstance(content, dict) or not all(k in content for k in output_schema.keys()):
+                logger.error(
+                    f"LLM structured output is not a valid dictionary or missing keys. Output: {content}"
+                )
+                raise ValueError("LLM failed to return the expected cover letter structure.")
 
-                Please provide the content in JSON format with three sections:
-                1. opening : A compelling opening paragraph that introduces the candidate and expresses interest in the position
-                2. main_content : one-paragraph main body of the letter that:
-                - Highlights relevant work experience and projects that align with the job requirements
-                - Emphasizes specific skills and achievements that match the position
-                - Demonstrates understanding of the company and role
-                3. closing : A strong closing paragraph that expresses enthusiasm for the opportunity
+            # --- ADD GREETING TO STORY ---
+            greeting_text = content.get("greeting", "Dear Hiring Manager,")  # Default fallback
+            story.append(Paragraph(greeting_text, self.styles["Salutation"]))
+            story.append(Spacer(1, 12))  # Space after greeting
 
-                Make the content specific to the job and company, and ensure it's professional and engaging. 
-                Focus on matching the candidate's experience and skills with the job requirements.
-                No Dear hiring manager, or any other salutation. No content field name in the JSON object."""
-        # try:
-        generated_content = self.llm.generate(prompt, resp_in_json=True)
+            # Add body using the dictionary directly
+            story.extend(
+                self._create_body(content)
+            )  # _create_body handles opening, main_content, closing
 
-        # Parse the generated content as JSON
-        content = json.loads(generated_content)
+            # --- ADD CLOSING PHRASE TO STORY ---
+            closing_phrase_text = content.get("closing_phrase", "Sincerely,")  # Default fallback
+            story.append(Paragraph(closing_phrase_text, self.styles["Closing"]))
+            # No extra spacer needed here as _create_closing adds the signature right after
 
-        # Add body
-        story.extend(self._create_body(content))
+            # Add signature (using the modified _create_closing)
+            story.extend(self._create_closing())
 
-        # Add closing
-        story.extend(self._create_closing())
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.exception(f"Failed to generate or parse cover letter content: {e}")
+            error_message = "Error: Could not generate cover letter content."
+            # Optionally add greeting/signature even on error? Or just the error.
+            story.append(Paragraph(error_message, self.styles["Body"]))
+        except Exception as e:
+            logger.exception(f"An unexpected error occurred during cover letter generation: {e}")
+            error_message = "Error: An unexpected issue occurred while generating the cover letter."
+            story.append(Paragraph(error_message, self.styles["Body"]))
 
         # Build the PDF
-        doc.build(story)
+        try:
+            doc.build(story)
+        except Exception as e:
+            logger.exception(f"Failed to build cover letter PDF: {e}")
+            self.buffer.seek(0)
+            self.buffer.truncate()
+            self.buffer.write(f"Failed to build PDF: {e}".encode("utf-8"))
 
         # Reset buffer position
         self.buffer.seek(0)
         return self.buffer
 
-    def generate_tailored_cover_letter(
-        self,
-        job_title: str,
-        company: str,
-        job_description: str,
-        required_skills: List[str],
-        background: str,
-    ) -> BytesIO:
-        """
-        Generate a tailored cover letter for a specific job.
+    def _create_closing(self) -> List[Any]:
+        """Create the letter signature."""
+        elements = []
 
-        Args:
-            job_title (str): The job title
-            company (str): The company name
-            job_description (str): The job description
-            required_skills (List[str]): List of required skills
-            background (str): User's background summary
-
-        Returns:
-            BytesIO: The generated cover letter PDF
-        """
-        try:
-            # Update job description for better tailoring
-            self.job_description = f"""
-            Position: {job_title}
-            Company: {company}
-            Required Skills: {', '.join(required_skills)}
-            
-            Job Description:
-            {job_description}
-            """
-
-            # Generate and return the cover letter
-            return self.build()
-
-        except Exception as e:
-            print(f"Error generating tailored cover letter: {str(e)}")
-            return None
+        # Use name from UserProfile if available
+        user_name = (
+            self.personal_agent.user_profile.user.get_full_name() or "Applicant Name"
+        )  # Default fallback
+        elements.append(Paragraph(user_name, self.styles["Signature"]))
+        return elements

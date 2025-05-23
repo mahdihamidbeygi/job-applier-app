@@ -1,7 +1,7 @@
 {% extends 'core/base.html' %} {% load static %} {% block content %}
 <div class="container mt-4">
   <div class="row">
-    <div class="col-md-8">
+    <div class="col-md-12">
       <!-- Job Details -->
       <div class="card mb-4">
         <div class="card-body">
@@ -136,7 +136,7 @@
 
       const authToken = localStorage.getItem("authToken");
       if (!authToken) {
-        window.location.href = "{% url 'core:login' %}";
+        window.location.href = "{% url 'account_login' %}";
         return;
       }
 
@@ -154,7 +154,7 @@
       if (!response.ok) {
         if (response.status === 401) {
           localStorage.removeItem("authToken");
-          window.location.href = "{% url 'core:login' %}";
+          window.location.href = "{% url 'account_login' %}";
           return;
         }
         throw new Error(data.message || "Failed to generate documents");
@@ -217,7 +217,7 @@
     try {
       const authToken = localStorage.getItem("authToken");
       if (!authToken) {
-        window.location.href = "{% url 'core:login' %}";
+        window.location.href = "{% url 'account_login' %}";
         return;
       }
 
@@ -233,7 +233,7 @@
       if (!response.ok) {
         if (response.status === 401) {
           localStorage.removeItem("authToken");
-          window.location.href = "{% url 'core:login' %}";
+          window.location.href = "{% url 'account_login' %}";
           return;
         }
         throw new Error("Failed to apply to job");

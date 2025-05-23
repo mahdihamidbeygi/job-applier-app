@@ -1,0 +1,99 @@
+{% extends "core/base.html" %}
+<!-- Load i18n -->
+{% load i18n %}
+<!-- Load socialaccount -->
+{% load socialaccount %}
+<!-- Start of Block -->
+{% block head_title %}
+<!-- loading sign up title -->
+{% trans "Sign Up" %}
+<!-- End of Block -->
+{% endblock %}
+<!-- Start of Block -->
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6">
+      <div class="card">
+        <div class="card-body">
+          <h1 class="text-center mb-4">{% trans "Sign Up" %}</h1>
+
+          <div class="text-center mb-4">
+            <a
+              href="{% provider_login_url 'google' %}"
+              class="btn btn-outline-dark btn-lg btn-block"
+            >
+              <img
+                src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg"
+                alt="Google Logo"
+                style="height: 24px; margin-right: 8px"
+              />
+              Sign up with Google
+            </a>
+          </div>
+
+          <div class="text-center mb-4">
+            <span class="text-muted">or</span>
+          </div>
+
+          <form
+            class="signup"
+            id="signup_form"
+            method="post"
+            action="{% url 'account_signup' %}"
+          >
+            {% csrf_token %} {% if form.errors %}
+            <div class="alert alert-danger">
+              {% for field in form %} {% for error in field.errors %}
+              <p class="mb-0">{{ error }}</p>
+              {% endfor %} {% endfor %} {% for error in form.non_field_errors %}
+              <p class="mb-0">{{ error }}</p>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="form-group mb-3">
+              <label for="{{ form.email.id_for_label }}">Email address</label>
+              {{ form.email }}
+            </div>
+
+            <div class="form-group mb-3">
+              <label for="{{ form.password1.id_for_label }}">Password</label>
+              {{ form.password1 }}
+            </div>
+
+            <div class="form-group mb-3">
+              <label for="{{ form.password2.id_for_label }}"
+                >Confirm Password</label
+              >
+              {{ form.password2 }}
+            </div>
+
+            {% if redirect_field_value %}
+            <input
+              type="hidden"
+              name="{{ redirect_field_name }}"
+              value="{{ redirect_field_value }}"
+            />
+            {% endif %}
+
+            <button
+              class="btn btn-primary btn-lg btn-block w-100"
+              type="submit"
+            >
+              {% trans "Sign Up" %}
+            </button>
+          </form>
+
+          <div class="text-center mt-3">
+            <p>
+              Already have an account?
+              <a href="{% url 'account_login' %}">Sign In</a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

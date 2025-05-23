@@ -1,0 +1,128 @@
+{% extends "core/base.html" %}
+<!-- Load i18n -->
+{% load i18n %}
+<!-- Load socialaccount -->
+{% load socialaccount %}
+<!-- Load widget_tweaks -->
+{% load widget_tweaks %}
+<!-- Start of Block -->
+{% block head_title %}
+<!-- loading sign in title -->
+{% trans "Sign In" %}
+<!-- End of Block -->
+{% endblock %}
+<!-- Start of Block -->
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-body p-4 p-md-5">
+          <div class="text-center mb-4">
+            <i class="fas fa-user-circle fa-3x text-primary mb-3"></i>
+            <h2 class="card-title mb-3">{% trans "Welcome Back" %}</h2>
+            <p>{% trans "Please sign in to continue" %}</p>
+          </div>
+
+          <div class="text-center mb-4">
+            <p class="small">{% trans "Sign in with" %}:</p>
+            <!-- Google Sign-in Button -->
+            <a
+              href="{% provider_login_url 'google' %}"
+              class="btn btn-outline-light btn-lg w-100 mt-2"
+            >
+              <i class="fab fa-google me-2"></i>
+              Sign in with Google
+            </a>
+            <!-- GitHub Sign-in Button (Add margin if needed) -->
+            <a
+              href="{% provider_login_url 'github' %}"
+              class="btn btn-outline-light btn-lg w-100 mt-2"
+            >
+              <i class="fab fa-github me-2"></i>
+              Sign in with GitHub
+            </a>
+          </div>
+
+          <div class="text-center mb-4">
+            <p>{% trans "or sign in with credentials" %}</p>
+          </div>
+
+          <form class="login" method="POST" action="{% url 'account_login' %}">
+            {% csrf_token %} {% if form.errors %}
+            <div class="alert alert-danger">
+              {% for field in form %} {% for error in field.errors %}
+              <p class="mb-0">{{ error }}</p>
+              {% endfor %} {% endfor %} {% for error in form.non_field_errors %}
+              <p class="mb-0">{{ error }}</p>
+              {% endfor %}
+            </div>
+            {% endif %}
+
+            <div class="form-group mb-3">
+              <label for="{{ form.login.id_for_label }}" class="form-label"
+                >{% trans "Email or Username" %}</label
+              >
+              {{ form.login|add_class:"form-control form-control-lg" }}
+            </div>
+
+            <div class="form-group mb-3">
+              <label for="{{ form.password.id_for_label }}" class="form-label"
+                >{% trans "Password" %}</label
+              >
+              {{ form.password|add_class:"form-control form-control-lg" }}
+            </div>
+
+            <div class="form-group mb-3">
+              <div class="form-check">
+                <input
+                  type="checkbox"
+                  name="{{ form.remember.name }}"
+                  class="form-check-input"
+                  id="{{ form.remember.id_for_label }}"
+                />
+                <label
+                  class="form-check-label text-bg-dark"
+                  for="{{ form.remember.id_for_label }}"
+                  >{% trans "Remember me" %}</label
+                >
+              </div>
+            </div>
+
+            {% if redirect_field_value %}
+            <input
+              type="hidden"
+              name="{{ redirect_field_name }}"
+              value="{{ redirect_field_value }}"
+            />
+            {% endif %}
+
+            <button
+              class="btn btn-primary btn-lg btn-block w-100"
+              type="submit"
+            >
+              {% trans "Sign In" %}
+            </button>
+
+            <div class="text-center mt-3">
+              <p>
+                <a
+                  href="{% url 'account_reset_password' %}"
+                  class="text-primary"
+                  >{% trans "Forgot Password?" %}</a
+                >
+              </p>
+              <p>
+                {% trans "Don't have an account?" %}
+                <a href="{% url 'account_signup' %}" class="text-primary"
+                  >{% trans "Sign Up" %}</a
+                >
+              </p>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,430 @@
+{% extends 'core/base.html' %}
+<!-- load static -->
+{% load static %}
+<!--start of content-->
+{% block content %}
+<div class="container mt-5">
+  <div class="row justify-content-center">
+    <div class="col-md-14">
+      <div class="card">
+        <div class="card-header">
+          <h2 class="text-center">Job Application Assistant</h2>
+        </div>
+        <div class="card-body">
+          <!-- Chat container -->
+          <div id="chatContainer" class="mb-4">
+            <div
+              id="chatMessages"
+              class="border rounded p-3 mb-3"
+              style="height: 400px; overflow-y: auto"
+            >
+              <!-- Welcome message -->
+              <div class="message assistant mb-3">
+                <div class="d-flex">
+                  <div class="avatar me-2">
+                    <i class="fas fa-robot text-primary"></i>
+                  </div>
+                  <div class="message-content p-3 rounded bg-light">
+                    <p>
+                      Hello! I'm your AI Job Application Assistant, powered by
+                      the latest agent technology.
+                    </p>
+                    <p>How can I assist you with your job search today?</p>
+                    <p>I can help you with tasks like:</p>
+                    <ul>
+                      <li>
+                        <strong>Searching</strong> for job openings based on
+                        your criteria.
+                      </li>
+                      <li>
+                        <strong>Analyzing</strong> a job description against
+                        your profile for suitability, including a detailed
+                        <strong>match score</strong>.
+                      </li>
+                      <li>
+                        <strong>Generating</strong> tailored resumes and cover
+                        letters for specific roles.
+                      </li>
+                      <li>
+                        <strong>Answering</strong> your questions about job
+                        applications or career paths.
+                      </li>
+                      <li>
+                        <strong>Leveraging</strong> your stored profile
+                        information for personalized assistance.
+                      </li>
+                      <!-- Add any other specific new features here -->
+                    </ul>
+                    <p>
+                      What would you like to do first? For example, you could
+                      ask me to "find remote Python developer jobs", "analyze
+                      this job description for me", or "help me update my
+                      resume".
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chat input -->
+            <div class="input-group">
+              <textarea
+                id="userInput"
+                class="form-control"
+                placeholder="Type your message here..."
+                rows="3"
+              ></textarea>
+              <button id="sendButton" class="btn btn-primary" type="button">
+                <i class="fas fa-paper-plane"></i> Send
+              </button>
+            </div>
+            <small id="errorMessage" class="text-danger mt-1"></small>
+          </div>
+
+          <!-- Save conversation button -->
+          <div class="d-grid gap-2 mb-3">
+            <button
+              type="button"
+              class="btn btn-outline-secondary"
+              id="saveConversationBtn"
+            >
+              <i class="fas fa-save"></i> Save Conversation
+            </button>
+          </div>
+
+          <!-- Loading spinner -->
+          <div id="loadingSpinner" class="text-center mt-3 d-none">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <p class="mt-2">Assistant is thinking...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% block extra_js %}
+<script>
+  // Conversation state
+  let conversationContext = {
+    conversationId: null, // Store the conversation ID from the backend
+  };
+
+  // DOM elements (using the IDs defined in the HTML above)
+  const chatMessages = document.getElementById("chatMessages");
+  const userInput = document.getElementById("userInput");
+  const sendButton = document.getElementById("sendButton");
+  const saveConversationBtn = document.getElementById("saveConversationBtn");
+  const loadingSpinner = document.getElementById("loadingSpinner");
+  const errorMessage = document.getElementById("errorMessage");
+
+  // --- Event listeners ---
+  sendButton.addEventListener("click", handleUserMessage);
+  userInput.addEventListener("keydown", function (e) {
+    // Use keydown for Enter key to allow Shift+Enter for new lines if needed later
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault(); // Prevent default newline in textarea
+      handleUserMessage();
+    }
+  });
+  saveConversationBtn.addEventListener("click", saveConversation);
+
+  // --- Main function to handle user messages and interact with the Agent API ---
+  async function handleUserMessage() {
+    const userMessage = userInput.value.trim();
+    if (!userMessage) return;
+
+    // Add user message to chat UI
+    addMessageToChat("user", userMessage);
+    userInput.value = ""; // Clear input field
+    errorMessage.textContent = ""; // Clear previous errors
+
+    // Show loading indicator
+    loadingSpinner.classList.remove("d-none");
+    sendButton.disabled = true; // Disable send button while processing
+
+    try {
+      // Send message to the backend Agent API
+      const response = await fetch("{% url 'core:chat_api' %}", {
+        // Ensure this URL name is correct
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": getCookie("csrftoken"), // Use standard CSRF token getter
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          conversation_id: conversationContext.conversationId, // Send current conversation ID
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Update conversation ID if it's new or returned
+        if (data.conversation_id) {
+          conversationContext.conversationId = data.conversation_id;
+        }
+
+        // Add AI response to chat UI
+        // Replace newlines in the response with <br> for HTML display
+        addMessageToChat("assistant", data.response.replace(/\n/g, "<br>"));
+      } else {
+        // Handle backend errors (e.g., 4xx, 5xx)
+        let errorMsg = "An unknown error occurred.";
+        try {
+          const errorData = await response.json();
+          errorMsg =
+            errorData.error ||
+            `Server responded with status ${response.status}`;
+        } catch (e) {
+          errorMsg = `Server responded with status ${response.status}. Could not parse error details.`;
+        }
+        console.error("Backend Error:", errorMsg);
+        errorMessage.textContent = `Error: ${errorMsg}`; // Display error to user
+        addMessageToChat(
+          "assistant",
+          `Sorry, I encountered an error processing your request. Please try again.`
+        ); // Add generic error to chat
+      }
+    } catch (error) {
+      // Handle network errors or other fetch issues
+      console.error("Fetch Error:", error);
+      errorMessage.textContent = `Error: ${
+        error.message || "Could not connect to the server."
+      }`; // Display error
+      addMessageToChat(
+        "assistant",
+        `Sorry, I couldn't connect to the assistant. Please check your connection and try again.`
+      ); // Add connection error to chat
+    } finally {
+      // Hide loading indicator and re-enable button regardless of success/failure
+      loadingSpinner.classList.add("d-none");
+      sendButton.disabled = false;
+      userInput.focus(); // Focus back on input
+    }
+  }
+
+  // --- Function to add messages to the chat UI ---
+  function addMessageToChat(sender, content) {
+    const messageDiv = document.createElement("div");
+    // Use the more detailed structure for consistency
+    messageDiv.className = `message ${sender} mb-3`;
+    messageDiv.dataset.timestamp = new Date().toISOString();
+    messageDiv.dataset.sender = sender;
+    // Store plain text version for potential export, stripping HTML
+    messageDiv.dataset.content = content
+      .replace(/<[^>]*>/g, "")
+      .replace(/<br>/gi, "\n");
+
+    const iconClass = sender === "user" ? "fa-user" : "fa-robot";
+    const bgClass = sender === "user" ? "bg-primary text-white" : "bg-light";
+    const justifyClass = sender === "user" ? "justify-content-end" : "";
+    const avatarHTML = `<div class="avatar me-2"><i class="fas ${iconClass} ${
+      sender === "user" ? "text-white" : "text-primary"
+    }"></i></div>`;
+    const avatarHTMLUserEnd = `<div class="avatar ms-2"><i class="fas ${iconClass} ${
+      sender === "user" ? "text-white" : "text-primary"
+    }"></i></div>`;
+
+    messageDiv.innerHTML = `
+      <div class="d-flex ${justifyClass}">
+        ${sender === "assistant" ? avatarHTML : ""}
+        <div class="message-content p-3 rounded ${bgClass}">
+          ${content} {# Display content which might contain <br> tags #}
+        </div>
+        ${sender === "user" ? avatarHTMLUserEnd : ""}
+      </div>
+    `;
+
+    chatMessages.appendChild(messageDiv);
+    // Scroll to the bottom of the chat messages
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  // --- Add typing indicator (Optional but nice UX) ---
+  function addTypingIndicator() {
+    const typingDiv = document.createElement("div");
+    typingDiv.className = "message assistant typing mb-3";
+    typingDiv.id = "typingIndicator"; // Give it an ID for easy removal
+    typingDiv.innerHTML = `
+      <div class="d-flex">
+        <div class="avatar me-2"><i class="fas fa-robot text-primary"></i></div>
+        <div class="message-content p-3 rounded bg-light">
+          <span class="typing-dots">
+            <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+          </span>
+        </div>
+      </div>
+    `;
+    chatMessages.appendChild(typingDiv);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return typingDiv; // Return the element so it can be removed
+  }
+
+  // --- Remove typing indicator ---
+  function removeTypingIndicator() {
+    const indicator = document.getElementById("typingIndicator");
+    if (indicator) {
+      indicator.remove();
+    }
+  }
+
+  // --- Standard function to get CSRF token from cookies ---
+  function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+      const cookies = document.cookie.split(";");
+      for (let i = 0; i < cookies.length; i++) {
+        const cookie = cookies[i].trim();
+        // Does this cookie string begin with the name we want?
+        if (cookie.substring(0, name.length + 1) === name + "=") {
+          cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+          break;
+        }
+      }
+    }
+    return cookieValue;
+  }
+
+  // --- Save conversation to text file (Client-side) ---
+  function saveConversation() {
+    const messages = document.querySelectorAll("#chatMessages .message");
+    if (messages.length <= 1) {
+      // Only welcome message exists
+      alert("No conversation to save yet!");
+      return;
+    }
+    let conversationText = `Job Application Conversation - ${new Date().toLocaleString()}\n\n`;
+
+    messages.forEach((msg) => {
+      // Skip typing indicator if present
+      if (msg.classList.contains("typing")) return;
+
+      const sender = msg.dataset.sender === "user" ? "You" : "Assistant";
+      const timestamp = new Date(msg.dataset.timestamp).toLocaleTimeString();
+      // Use the stored plain text content
+      const content =
+        msg.dataset.content || "Error retrieving message content.";
+
+      conversationText += `[${timestamp}] ${sender}:\n${content.trim()}\n\n`;
+    });
+
+    // Create and download the file
+    try {
+      const blob = new Blob([conversationText], {
+        type: "text/plain;charset=utf-8",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.style.display = "none"; // Hide the link
+      a.href = url;
+      a.download = `job_app_conversation_${new Date()
+        .toISOString()
+        .slice(0, 10)}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      URL.revokeObjectURL(url); // Clean up
+      document.body.removeChild(a); // Clean up
+
+      // Notify user (optional, could use a less intrusive notification)
+      // alert("Conversation saved!");
+    } catch (e) {
+      console.error("Error saving conversation:", e);
+      alert("Failed to save conversation.");
+    }
+  }
+</script>
+{% endblock%}
+<!-- Chat styling -->
+{% block extra_css %}
+<style>
+  /* Chat styling */
+  .message {
+    margin-bottom: 15px; /* Spacing between messages */
+  }
+
+  .message .avatar {
+    width: 30px; /* Size of avatar icon container */
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%; /* Make it circular */
+    flex-shrink: 0; /* Prevent avatar from shrinking */
+  }
+
+  .message .message-content {
+    max-width: 80%; /* Limit message width */
+    word-wrap: break-word; /* Allow long words to break */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1); /* Subtle shadow */
+  }
+
+  /* User message specific styles */
+  .message.user .message-content {
+    background-color: #007bff; /* Bootstrap primary blue */
+    color: white;
+  }
+  .message.user .avatar i {
+    color: #007bff; /* Match user color if needed, or keep white */
+    /* If avatar background is needed: background-color: white; */
+  }
+
+  /* Assistant message specific styles */
+  .message.assistant .message-content {
+    background-color: #f8f9fa; /* Light grey background */
+    color: #212529; /* Default text color */
+  }
+  .message.assistant .avatar i {
+    color: #007bff; /* Primary color for assistant icon */
+  }
+
+  /* Typing indicator styles */
+  .message.typing .message-content {
+    background-color: #f8f9fa;
+    display: inline-block; /* Make it only as wide as the dots */
+    padding: 10px 12px !important; /* Adjust padding for dots */
+  }
+  .typing-dots {
+    display: flex;
+    align-items: center; /* Vertically center dots */
+    height: 1em; /* Match typical text height */
+  }
+  .typing-dots .dot {
+    background-color: #adb5bd; /* Grey color for dots */
+    border-radius: 50%;
+    width: 6px; /* Smaller dots */
+    height: 6px;
+    margin: 0 2px;
+    animation: bounce 1.4s infinite ease-in-out both;
+  }
+  .typing-dots .dot:nth-child(1) {
+    animation-delay: -0.32s;
+  }
+  .typing-dots .dot:nth-child(2) {
+    animation-delay: -0.16s;
+  }
+  .typing-dots .dot:nth-child(3) {
+    animation-delay: 0s;
+  }
+
+  @keyframes bounce {
+    0%,
+    80%,
+    100% {
+      transform: scale(0);
+    }
+    40% {
+      transform: scale(1);
+    }
+  }
+
+  /* Ensure textarea resizes reasonably */
+  #userInput {
+    resize: vertical; /* Allow vertical resize only */
+    min-height: 60px; /* Minimum height */
+  }
+</style>
+{% endblock %} {% endblock %}

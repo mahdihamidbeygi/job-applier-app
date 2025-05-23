@@ -1,47 +1,59 @@
 {% extends 'core/base.html' %}
-
+<!-- base -->
 {% block title %}Welcome to Job Applier{% endblock %}
-
+<!-- title -->
 {% block content %}
 <div class="container">
-    <div class="row align-items-center min-vh-75">
-        <div class="col-lg-6">
-            <h1 class="display-4 fw-bold mb-4">Manage Your Career Journey</h1>
-            <p class="lead mb-4">
-                Welcome to Job Applier, your personal career management platform. Upload your resume, track your applications, and take control of your professional journey.
-            </p>
-            {% if not user.is_authenticated %}
-                <div class="d-grid gap-2 d-md-flex justify-content-md-start">
-                    <a href="{% url 'core:login' %}" class="btn btn-primary btn-lg px-4 me-md-2">Get Started</a>
-                    <a href="{% url 'core:register' %}" class="btn btn-outline-secondary btn-lg px-4">Sign Up</a>
-                </div>
-            {% else %}
-                <div class="d-grid gap-2 d-md-flex justify-content-md-start">
-                    <a href="{% url 'core:profile' %}" class="btn btn-primary btn-lg px-4">Go to Profile</a>
-                </div>
-            {% endif %}
-        </div>
-        <div class="col-lg-6">
-            <div class="p-4 text-center">
-                <i class="fas fa-briefcase fa-6x text-primary mb-4"></i>
-                <div class="row mt-4">
-                    <div class="col-6">
-                        <div class="feature-box p-3">
-                            <i class="fas fa-file-alt fa-2x text-primary mb-3"></i>
-                            <h5>Resume Management</h5>
-                            <p class="small">Upload and parse your resume automatically</p>
-                        </div>
-                    </div>
-                    <div class="col-6">
-                        <div class="feature-box p-3">
-                            <i class="fas fa-user-tie fa-2x text-primary mb-3"></i>
-                            <h5>Professional Profile</h5>
-                            <p class="small">Showcase your skills and experience</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+  <div class="row align-items-center min-vh-75">
+    <div class="col-lg-6">
+      <h1 class="display-4 fw-bold mb-4">Manage Your Career Journey</h1>
+      <p class="lead mb-4">
+        Welcome to Job Applier, your personal career management platform. Upload
+        your resume, track your applications, and take control of your
+        professional journey.
+      </p>
+      {% if not user.is_authenticated %}
+      <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+        <a
+          href="{% url 'account_login' %}"
+          class="btn btn-primary btn-lg px-4 me-md-2"
+          >Get Started</a
+        >
+        <a
+          href="{% url 'account_signup' %}"
+          class="btn btn-outline-secondary btn-lg px-4"
+          >Sign Up</a
+        >
+      </div>
+      {% else %}
+      <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+        <a href="{% url 'core:profile' %}" class="btn btn-primary btn-lg px-4"
+          >Go to Profile</a
+        >
+      </div>
+      {% endif %}
     </div>
+    <div class="col-lg-6">
+      <div class="p-4 text-center">
+        <i class="fas fa-briefcase fa-6x text-primary mb-4"></i>
+        <div class="row mt-4">
+          <div class="col-6">
+            <div class="feature-box p-3">
+              <i class="fas fa-file-alt fa-2x text-primary mb-3"></i>
+              <h5>Resume Management</h5>
+              <p class="small">Upload and parse your resume automatically</p>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="feature-box p-3">
+              <i class="fas fa-user-tie fa-2x text-primary mb-3"></i>
+              <h5>Professional Profile</h5>
+              <p class="small">Showcase your skills and experience</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
-{% endblock %} 
+{% endblock %}

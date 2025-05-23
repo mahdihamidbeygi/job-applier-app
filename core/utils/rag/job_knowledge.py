@@ -9,7 +9,9 @@ class JobKnowledgeBase:
     def __init__(self, persist_directory: str = "./job_vectors"):
         self.embeddings = OllamaEmbeddings(model="llama3:latest")
         self.vectorstore = Chroma(
-            persist_directory=persist_directory, embedding_function=self.embeddings
+            persist_directory=persist_directory,
+            embedding_function=self.embeddings,
+            collection_name="job_knowledge",
         )
         self.text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
