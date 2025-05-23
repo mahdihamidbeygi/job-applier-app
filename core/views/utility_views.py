@@ -2,8 +2,6 @@
 Utility views for the core app.
 """
 
-import base64
-import io
 import logging
 from io import BytesIO
 

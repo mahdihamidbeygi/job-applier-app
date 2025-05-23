@@ -4,19 +4,19 @@ Retrieval Augmented Generation (RAG) utilities for enhancing LLM responses with 
 
 import logging
 import os
-from typing import Dict, List, Any, Optional
+from typing import Any, Dict, List, Optional
 
 from django.conf import settings
 from langchain_community.vectorstores import Chroma
 from langchain_core.documents import Document
+from langchain_core.messages import AIMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from langchain_openai import OpenAIEmbeddings
-from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGenerativeAI
 
-from core.models import UserProfile, JobListing, ChatConversation
-from core.utils.local_llms import GoogleClient
+from core.models import ChatConversation, JobListing, UserProfile
+from core.utils.llm_clients import GoogleClient
 
 logger = logging.getLogger(__name__)
 

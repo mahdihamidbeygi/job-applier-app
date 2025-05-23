@@ -1,11 +1,15 @@
+from io import BytesIO
 import logging
 from typing import Any, Dict, List
 
 from django.utils import timezone
+from django.conf import settings
 
 from core.models import JobListing
 from core.utils.agents.base_agent import BaseAgent
 from core.utils.agents.personal_agent import PersonalAgent
+from core.utils.agents.writer_agent import WriterAgent
+from core.utils.agents.job_agent import JobAgent
 from core.utils.job_scrapers.glassdoor_scraper import GlassdoorScraper
 from core.utils.job_scrapers.indeed_scraper import IndeedScraper
 from core.utils.job_scrapers.jobbank_scraper import JobBankScraper
@@ -15,17 +19,38 @@ from core.utils.rag.job_knowledge import JobKnowledgeBase
 
 logger = logging.getLogger(__name__)
 
+# --- Celery Task Import ---
+generate_resume_for_job_task_imported = False
+generate_resume_task_func = None
+try:
+    from core.tasks import generate_resume_for_job_task as _task_func
+
+    generate_resume_task_func = _task_func
+    generate_resume_for_job_task_imported = True
+    logger.info("Successfully imported 'generate_resume_for_job_task'.")
+except ImportError:
+    logger.warning(
+        "Celery task 'generate_resume_for_job_task' could not be imported. Resume generation will be synchronous if Celery is enabled."
+    )
+# --- End Celery Task Import ---
+
 
 class SearchAgent(BaseAgent):
-    def __init__(self, user_id: int, personal_agent: PersonalAgent):
+    def __init__(self, user_id: int):
         super().__init__(user_id)
-        self.personal_agent: PersonalAgent = personal_agent
+        self.personal_agent: PersonalAgent = PersonalAgent(user_id=user_id)
         self.knowledge_base: JobKnowledgeBase = JobKnowledgeBase()
         self.linkedin_scraper = LinkedInJobScraper()
         self.indeed_scraper = IndeedScraper()
         self.glassdoor_scraper = GlassdoorScraper()
         self.monster_scraper = MonsterScraper()
         self.jobbank_scraper = JobBankScraper()
+
+        # Determine if Celery is configured for resume generation
+        self.celery_enabled_for_resumes = (
+            getattr(settings, "USE_CELERY_FOR_RESUMES", False)
+            and getattr(settings, "CELERY_BROKER_URL", None) is not None
+        )
 
     def search_jobs(
         self, role: str, location: str, platform: str = "linkedin", request=None
@@ -57,33 +82,120 @@ class SearchAgent(BaseAgent):
         else:
             raise ValueError(f"Unsupported platform: {platform}")
 
-    def _process_jobs(self, jobs: List[Dict[str, str]], source: str) -> List[JobListing]:
-        """Process jobs from a specific source and create JobListing objects"""
-        job_listings = []
-        for job in jobs:
-            if job:  # Skip None results
-                # Check for existing job with same title, company, and location
-                existing_job = JobListing.objects.filter(
-                    title=job.get("title", ""),
-                    company=job.get("company", ""),
-                    location=job.get("location", ""),
-                    source=source,
-                ).first()
+    def _generate_resume_synchronously(self, job_listing_id: int):
+        """Helper method for synchronous resume generation."""
+        logger.info(
+            f"Generating resume synchronously for job_listing_id: {job_listing_id}, user_id: {self.user_id}"
+        )
+        try:
+            # First verify the job listing exists
+            try:
+                job_listing = JobListing.objects.get(id=job_listing_id)
+            except JobListing.DoesNotExist:
+                logger.error(f"JobListing with ID {job_listing_id} not found.")
+                return
 
-                if not existing_job:
-                    job_listing = JobListing.objects.create(
-                        title=job.get("title", ""),
-                        company=job.get("company", ""),
-                        location=job.get("location", ""),
-                        description=job.get("description", ""),
-                        source_url=job.get("source_url", ""),
-                        source=source,
-                        posted_date=timezone.now().date(),
+            # Create JobAgent without user_id filter (since JobListing doesn't have user_id)
+            job_agent = JobAgent(user_id=self.user_id, job_id=job_listing_id)
+            writer_agent = WriterAgent(
+                user_id=self.user_id,
+                personal_agent=self.personal_agent,
+                job_agent=job_agent,
+            )
+            # Generate resume
+            writer_agent.generate_resume()
+            logger.info(
+                f"Synchronous resume generation completed for job_listing_id: {job_listing_id}"
+            )
+        except Exception as e:
+            logger.error(
+                f"Error during synchronous resume generation for job_listing_id: {job_listing_id}. Error: {e}",
+                exc_info=True,
+            )
+
+    def process_jobs(self, jobs_data: List[Dict[str, str]]) -> List[JobListing]:
+        """
+        Process jobs from a specific source, create JobListing objects,
+        and queue resume generation if needed.
+        """
+        processed_new_job_listings = []
+
+        for job_data in jobs_data:
+            if not job_data:  # Skip None or empty job data
+                logger.debug("Skipping empty job data.")
+                continue
+
+            # Clean and validate job data
+            title = job_data.get("title", "").strip()
+            company = job_data.get("company", "").strip()
+            location = job_data.get("location", "").strip()
+
+            if not title or not company:
+                logger.warning(f"Skipping job with missing title or company: {job_data}")
+                continue
+
+            try:
+                job_listing, created = JobListing.objects.get_or_create(
+                    user_id=self.user_id,
+                    title=title,
+                    company=company,
+                    location=location,
+                    description=job_data.get("description", ""),
+                )
+
+                if created:
+                    logger.info(
+                        f"Created new JobListing: {job_listing.id} - {job_listing.title} at {job_listing.company}"
+                    )
+                    processed_new_job_listings.append(job_listing)
+
+                    # Generate resume for new job listings
+                    self._queue_resume_generation(job_listing)
+
+                else:
+                    logger.info(
+                        f"Found existing JobListing: {job_listing.id} - {job_listing.title} at {job_listing.company}"
                     )
 
-                    job_listings.append(job_listing)
+                    # Check if existing job needs resume generation
+                    if not bool(job_listing.tailored_resume):
+                        logger.info(
+                            f"Existing JobListing {job_listing.id} needs a tailored resume."
+                        )
+                        self._queue_resume_generation(job_listing)
 
-        return job_listings
+            except Exception as e:
+                logger.error(f"Error processing job data {job_data}: {str(e)}", exc_info=True)
+                continue
+
+        return processed_new_job_listings
+
+    def _queue_resume_generation(self, job_listing: JobListing):
+        """Helper method to queue resume generation for a job listing."""
+        try:
+            if (
+                self.celery_enabled_for_resumes
+                and generate_resume_for_job_task_imported
+                and generate_resume_task_func
+            ):
+                try:
+                    generate_resume_task_func.delay(self.user_id, job_listing.id)
+                    logger.info(
+                        f"Queued resume generation via Celery for job_listing_id: {job_listing.id}, user_id: {self.user_id}"
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to queue Celery task for job_listing_id: {job_listing.id}. Error: {e}. Falling back to synchronous."
+                    )
+                    self._generate_resume_synchronously(job_listing.id)
+            else:
+                logger.info("Celery not used for resume generation. Generating synchronously.")
+                self._generate_resume_synchronously(job_listing.id)
+        except Exception as e:
+            logger.error(
+                f"Error queueing resume generation for job_listing_id: {job_listing.id}. Error: {e}",
+                exc_info=True,
+            )
 
     def analyze_job_fit(self, job_posting: Dict[str, Any]) -> Dict[str, Any]:
         """Analyzes job posting for fit with personal background"""
@@ -106,7 +218,7 @@ class SearchAgent(BaseAgent):
             {', '.join(job_posting.get('required_skills', []))}
             
             Candidate Background Summary:
-            {self.personal_agent.get_background_str()}
+            {self.personal_agent.get_formatted_background()}
             
             Provide a response in JSON format with the following structure:
             {{
@@ -124,7 +236,7 @@ class SearchAgent(BaseAgent):
             - Ensure match_score is a NUMBER between 0-100 (not a string)
             """
 
-            response = self.llm.generate_text(prompt)
+            response: str = self.llm.generate_text(prompt)
 
             try:
                 # Handle case where response is not already in JSON format
@@ -160,11 +272,11 @@ class SearchAgent(BaseAgent):
                 return formatted_response
 
             except Exception as e:
-                print(f"Error parsing job analysis response: {str(e)}")
-                print(f"Raw response: {response}")
+                logger.error(f"Error parsing job analysis response: {str(e)}")
+                logger.debug(f"Raw response: {response}")
                 # Return a default response
                 return {
-                    "match_score": 50,
+                    "match_score": 0,
                     "skills_match": {
                         "matching": ["Unable to determine matching skills"],
                         "missing": ["Unable to determine skill gaps"],
@@ -174,7 +286,7 @@ class SearchAgent(BaseAgent):
                     ],
                 }
         except Exception as e:
-            print(f"Error in analyze_job_fit: {str(e)}")
+            logger.error(f"Error in analyze_job_fit: {str(e)}")
             # Return a default response
             return {
                 "match_score": 0,
@@ -193,7 +305,7 @@ class SearchAgent(BaseAgent):
 
         prompt = f"""
         Based on the candidate's background:
-        {self.personal_agent.get_background_str()}
+        {self.personal_agent.get_formatted_background()}
         
         Similar Jobs Found:
         {similar_jobs}
@@ -229,7 +341,7 @@ class SearchAgent(BaseAgent):
         {company_contexts}
         
         Candidate Background:
-        {self.personal_agent.get_background_str()}
+        {self.personal_agent.get_formatted_background()}
         
         Provide a JSON response with:
         1. ranked_jobs: list of jobs sorted by fit

@@ -23,7 +23,7 @@ class BaseLLMClient:
         self.model: str = kwargs.get("model", "gemini-2.5-flash-preview-04-17")
         self.temperature: float = kwargs.get("temperature", settings.TEMPERATURE)
         self.api_key: str | None = kwargs.get("api_key", None)
-        self.max_tokens: int = kwargs.get("max_tokens", 100)
+        self.max_tokens: int = kwargs.get("max_tokens", 4096)
         self.temperature: float | None = kwargs.get("temperature", 0.2)
         self.top_k: int = kwargs.get("top_k", 40)
         self.top_p: float = kwargs.get("top_p", 0.95)
@@ -322,6 +322,11 @@ class GoogleClient(BaseLLMClient):
             Generated text as a string
         """
         try:
+            # it seems like it caused issue with pydantic validation
+            # GenerateContentConfig doesn't "have max_tokens"
+            if "max_tokens" in kwargs:
+                kwargs["max_output_tokens"] = kwargs.pop("max_tokens")
+
             # Set up generation config (with proper parameters for the API)
             self.config_with_search = types.GenerateContentConfig(
                 tools=[types.Tool(google_search=types.GoogleSearch())],
@@ -360,6 +365,11 @@ class GoogleClient(BaseLLMClient):
         enhanced_prompt: str = (
             f"{prompt}\n\nPlease format your response as a JSON object with the following schema:\n{json.dumps(output_schema, indent=2)}"
         )
+
+        # it seems like it caused issue with pydantic validation
+        # GenerateContentConfig doesn't "have max_tokens"
+        if "max_tokens" in kwargs:
+            kwargs["max_output_tokens"] = kwargs.pop("max_tokens")
 
         self.config_with_search = types.GenerateContentConfig(
             tools=[types.Tool(google_search=types.GoogleSearch())],

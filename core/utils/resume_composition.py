@@ -13,7 +13,7 @@ from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 from core.utils.agents.personal_agent import PersonalAgent
-from core.utils.local_llms import GoogleClient, OllamaClient
+from core.utils.llm_clients import GoogleClient, OllamaClient
 
 logger = logging.getLogger(__name__)  # <-- Add logger instance
 
@@ -560,7 +560,7 @@ class ResumeComposition:
         self.elements.append(Paragraph(skills_text, self.styles["ResumeBullet"]))
         self.elements.append(Spacer(1, 2))
 
-    def tailor_to_job(self, job_info: str = "") -> None:
+    def tailor_to_job(self, job_info: str | None = None) -> None:
         """
         Tailors the resume content based on the job description using structured LLM output.
 
@@ -571,11 +571,10 @@ class ResumeComposition:
         prompt: str = f"""
         You are a professional resume writer. Create a tailored professional summary, identify relevant skills, and suggest relevant projects based on the candidate's background and the target job description.
 
-        Job Description:
-        {job_info}
+        {f"Job Description: {job_info}" if job_info else ""}
 
         Candidate Background Summary:
-        {self.personal_agent.get_background_str()}
+        {self.personal_agent.get_formatted_background()}
 
         Applicant Skills (Full List):
         {', '.join([skill.name for skill in self.personal_agent.user_profile.skills.all()])}
@@ -587,6 +586,7 @@ class ResumeComposition:
         1. Analyze the job description and identify key requirements and skills.
         2. Review the candidate's background and identify relevant experience, skills, and projects.
         3. Create a compelling 2-3 sentence professional summary highlighting the most relevant aspects for this specific job.
+        4. Relevant titles to job description should be in the summary if not available, don't mention.
         4. Identify a list of the candidate's skills (from their full list) that are most relevant to this job description (max 15).
         5. Identify a list of the candidate's projects (from their full list) that are most relevant to this job description (max 5).
         6. Ensure the summary maintains the candidate's authentic voice and style.

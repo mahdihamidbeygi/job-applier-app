@@ -1,3 +1,5 @@
+import json
+
 from django import forms
 from django.core.validators import RegexValidator, URLValidator
 from django.utils import timezone
@@ -75,6 +77,13 @@ def validate_date_range(
 class UserProfileForm(forms.ModelForm):
     # Add a non-model field for email that updates user.email
     email = forms.EmailField(required=False)
+    linkedin_url = forms.URLField(
+        assume_scheme="http", required=False, help_text="LinkedIn profile URL"
+    )
+    github_url = forms.URLField(
+        assume_scheme="http", required=False, help_text="GitHub profile URL"
+    )
+    website = forms.URLField(assume_scheme="http", required=False, help_text="Personal website URL")
 
     class Meta:
         model = UserProfile
@@ -292,3 +301,53 @@ class JobPlatformPreferenceForm(forms.ModelForm):
     class Meta:
         model = JobPlatformPreference
         fields = ["preferred_platforms"]
+
+
+class JobListingForm(forms.ModelForm):
+    class Meta:
+        model = JobListing
+        exclude = ["user", "created_at", "updated_at"]
+        widgets = {
+            "posted_date": forms.DateInput(attrs={"type": "date"}),
+            "description": forms.Textarea(attrs={"rows": 5}),
+            "requirements": forms.Textarea(attrs={"rows": 4}),
+            "benefits": forms.Textarea(attrs={"rows": 3}),
+            "how_to_apply": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def clean_source_url(self):
+        return clean_url_field(self.cleaned_data, "source_url")
+
+    def clean_posted_date(self):
+        posted_date = self.cleaned_data.get("posted_date")
+        if posted_date and posted_date > timezone.now().date():
+            raise forms.ValidationError("Posted date cannot be in the future")
+        return posted_date
+
+    def clean_required_skills(self):
+        """Ensure required_skills is a list"""
+        skills = self.cleaned_data.get("required_skills")
+        if skills is None:
+            return []
+        if isinstance(skills, str):
+            try:
+                # Try to parse JSON
+                skills = json.loads(skills)
+            except:
+                # If not JSON, split by commas
+                skills = [s.strip() for s in skills.split(",") if s.strip()]
+        return skills
+
+    def clean_preferred_skills(self):
+        """Ensure preferred_skills is a list"""
+        skills = self.cleaned_data.get("preferred_skills")
+        if skills is None:
+            return []
+        if isinstance(skills, str):
+            try:
+                # Try to parse JSON
+                skills = json.loads(skills)
+            except:
+                # If not JSON, split by commas
+                skills = [s.strip() for s in skills.split(",") if s.strip()]
+        return skills
