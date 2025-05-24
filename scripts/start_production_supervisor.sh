@@ -36,7 +36,7 @@ else
     echo ""
     echo "✅ Production environment started!"
     echo "🌐 Django: http://localhost:8000"
-    echo "🌸 Flower: http://localhost:5555 (admin/changeme123)"
+    echo "🌸 Flower: http://localhost:5555 (admin/flower123)"
     echo ""
     echo "📝 Useful commands:"
     echo "  supervisorctl status    - Check service status"

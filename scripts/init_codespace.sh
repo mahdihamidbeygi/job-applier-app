@@ -78,8 +78,8 @@ python manage.py shell << EOF
 from django.contrib.auth import get_user_model
 User = get_user_model()
 if not User.objects.filter(username='admin').exists():
-    User.objects.create_superuser('admin', 'admin@example.com', 'changeme123')
-    print("✅ Superuser created: admin/changeme123")
+    User.objects.create_superuser('admin', 'admin@example.com', 'flower123')
+    print("✅ Superuser created: admin/flower123")
 else:
     print("ℹ️ Superuser already exists")
 EOF
@@ -108,4 +108,4 @@ echo ""
 echo "🚀 Or start production server with:"
 echo "   ./scripts/start_production.sh"
 echo ""
-echo "👤 Admin login: admin / changeme123"
+echo "👤 Admin login: admin / flower123"

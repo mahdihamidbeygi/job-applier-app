@@ -42,8 +42,9 @@ GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN = os.environ.get(
 # Configure ALLOWED_HOSTS
 if IN_CODESPACES and CODESPACE_NAME:
     ALLOWED_HOSTS = [
-        f"{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-        f"{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+        # f"{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+        # f"{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+        "https://jobapplier-backend.onrender.com",
         "localhost",
         "127.0.0.1",
     ]
@@ -114,7 +115,7 @@ WSGI_APPLICATION = "job_applier.wsgi.application"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/jobapplier"),
+        default=os.getenv("DATABASE_URL"),
         conn_max_age=600,
     )
 }
@@ -150,6 +151,7 @@ STATIC_ROOT: str = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS: list[str] = [
     os.path.join(BASE_DIR, "static"),
 ]
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files
 MEDIA_URL = "/media/"
@@ -328,6 +330,7 @@ CORS_ALLOWED_ORIGINS_BASE: list[str] = [
     "http://127.0.0.1:8000",
     "http://localhost:8001",
     "http://127.0.0.1:8001",
+    "https://jobapplier-backend.onrender.com",
 ]
 
 # Base CSRF origins
@@ -337,22 +340,23 @@ CSRF_TRUSTED_ORIGINS_BASE: list[str] = [
     "http://127.0.0.1:8000",
     "http://localhost:8001",
     "http://127.0.0.1:8001",
+    "https://jobapplier-backend.onrender.com",
 ]
 
-# Update origins for Codespaces
-if IN_CODESPACES and CODESPACE_NAME:
-    CORS_ALLOWED_ORIGINS = [
-        f"https://{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-        f"https://{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-    ] + CORS_ALLOWED_ORIGINS_BASE
+# # Update origins for Codespaces
+# if IN_CODESPACES and CODESPACE_NAME:
+#     CORS_ALLOWED_ORIGINS = [
+#         f"https://{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+#         f"https://{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+#     ] + CORS_ALLOWED_ORIGINS_BASE
 
-    CSRF_TRUSTED_ORIGINS = [
-        f"https://{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-        f"https://{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-    ] + CSRF_TRUSTED_ORIGINS_BASE
-else:
-    CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_BASE
-    CSRF_TRUSTED_ORIGINS = CSRF_TRUSTED_ORIGINS_BASE
+#     CSRF_TRUSTED_ORIGINS = [
+#         f"https://{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+#         f"https://{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+#     ] + CSRF_TRUSTED_ORIGINS_BASE
+# else:
+#     CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_BASE
+#     CSRF_TRUSTED_ORIGINS = CSRF_TRUSTED_ORIGINS_BASE
 
 # CSRF settings
 CSRF_COOKIE_HTTPONLY = False

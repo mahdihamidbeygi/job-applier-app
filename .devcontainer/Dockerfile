@@ -1,46 +1,37 @@
-FROM mcr.microsoft.com/devcontainers/python:3.11
+FROM mcr.microsoft.com/devcontainers/python:1-3.11-bullseye
 
-# Avoid warnings by switching to noninteractive
-ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED 1
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    build-essential \
-    libpq-dev \
-    wget \
-    gnupg2 \
-    # Add development tools
-    vim \
-    htop \
-    # Redis tools for monitoring
-    redis-tools \
-    # PostgreSQL client
-    postgresql-client \
-    # Process management
-    supervisor \
-    # Clean up
-    && rm -rf /var/lib/apt/lists/*
+# [Optional] If your requirements rarely change, uncomment this section to add them to the image.
+# COPY requirements.txt /tmp/pip-tmp/
+# RUN pip3 --disable-pip-version-check --no-cache-dir install -r /tmp/pip-tmp/requirements.txt \
+#    && rm -rf /tmp/pip-tmp
 
-# Install Chrome and its dependencies for Selenium
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
+# [Optional] Uncomment this section to install additional OS packages.
+# RUN apt-get update && export DEBIAN_FRONTEND=noninteractive \
+#     && apt-get -y install --no-install-recommends <your-package-list-here>
+
+# Install prerequisites for Chrome and Chromedriver, and Chrome itself
+RUN apt-get update && apt-get install -y wget gnupg unzip jq curl --no-install-recommends \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
     && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
+    # Install Chromedriver using CfT JSON endpoint
+    # Fetches the URL for the latest stable Linux64 Chromedriver
+    && CHROMEDRIVER_URL=$(curl -s https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json | jq -r '.channels.Stable.downloads.chromedriver[] | select(.platform=="linux64") | .url') \
+    && echo "Downloading Chromedriver from ${CHROMEDRIVER_URL}" \
+    # Download and install Chromedriver
+    && curl -sSL ${CHROMEDRIVER_URL} -o chromedriver_linux64.zip \
+    && unzip chromedriver_linux64.zip -d /usr/local/bin/ \
+    && rm chromedriver_linux64.zip \
+    && chmod +x /usr/local/bin/chromedriver \
+    # Clean up apt cache
     && rm -rf /var/lib/apt/lists/*
 
 # The vscode user is already created in the base image, so we skip user creation
 
-# Set work directory
-WORKDIR /workspace
-
-# Copy requirements first for better caching
-COPY requirements.txt /tmp/pip-tmp/
-
-# Install Python packages
 RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r /tmp/pip-tmp/requirements.txt && \
     # Install additional production tools
     pip install --no-cache-dir \
     black \
@@ -57,25 +48,14 @@ RUN pip install --upgrade pip && \
     django-prometheus && \
     rm -rf /tmp/pip-tmp
 
-# Create necessary directories
-RUN mkdir -p /workspace/logs /workspace/staticfiles /workspace/media && \
-    chown -R vscode:vscode /workspace
-
-# Set environment variables
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1 \
+# Set environment variables (PYTHONUNBUFFERED=1 is often set by the base image)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python \
     DJANGO_SETTINGS_MODULE=job_applier.settings \
-    PATH="${PATH}:/home/vscode/.local/bin" \
-    DEBIAN_FRONTEND=dialog \
-    HOME=/home/vscode \
+    PATH="/home/vscode/.local/bin:${PATH}" \
+    DEBIAN_FRONTEND=noninteractive \
     # Chrome driver path for Selenium
-    CHROME_DRIVER_PATH=/usr/bin/chromedriver
-
-# Copy supervisor configuration if it exists
-COPY .devcontainer/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
-
-# Switch to vscode user (already exists in base image)
-USER vscode
+    CHROME_DRIVER_PATH=/usr/local/bin/chromedriver
 
 # Expose ports
 EXPOSE 8000 5555 9090
