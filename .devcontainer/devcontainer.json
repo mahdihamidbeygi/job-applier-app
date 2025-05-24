@@ -1,8 +1,31 @@
 {
-    "name": "Job Applier Production",
-    "dockerComposeFile": "docker-compose.yml",
-    "service": "app",
-    "workspaceFolder": "/workspace",
+    "name": "Job Applier",
+    "image": "mcr.microsoft.com/devcontainers/python:3.11",
+    "features": {
+        "ghcr.io/devcontainers/features/github-cli:1": {},
+        "ghcr.io/devcontainers/features/postgresql-client:1": {},
+        "ghcr.io/devcontainers/features/redis-server:1": {}
+    },
+    "postCreateCommand": "bash scripts/init_codespace.sh",
+    "forwardPorts": [8000, 5432, 6379, 5555],
+    "portsAttributes": {
+        "8000": {
+            "label": "Django",
+            "onAutoForward": "notify"
+        },
+        "5432": {
+            "label": "PostgreSQL",
+            "onAutoForward": "silent"
+        },
+        "6379": {
+            "label": "Redis",
+            "onAutoForward": "silent"
+        },
+        "5555": {
+            "label": "Flower",
+            "onAutoForward": "silent"
+        }
+    },
     "customizations": {
         "vscode": {
             "extensions": [
@@ -16,20 +39,13 @@
                 "python.defaultInterpreterPath": "/usr/local/bin/python",
                 "python.formatting.provider": "black",
                 "python.linting.enabled": true,
-                "python.linting.flake8Enabled": true
+                "python.linting.flake8Enabled": true,
+                "editor.formatOnSave": true,
+                "editor.codeActionsOnSave": {
+                    "source.organizeImports": true
+                }
             }
         }
     },
-    "forwardPorts": [8000, 5432, 6379, 5555],
-    "portsAttributes": {
-        "8000": {"label": "Django", "onAutoForward": "notify"},
-        "5432": {"label": "PostgreSQL", "onAutoForward": "silent"},
-        "6379": {"label": "Redis", "onAutoForward": "silent"},
-        "5555": {"label": "Flower (Celery)", "onAutoForward": "notify"}
-    },
-    "postCreateCommand": "chmod +x scripts/init_codespace.sh && ./scripts/init_codespace.sh",
-    "remoteUser": "vscode",
-    "features": {
-        "ghcr.io/devcontainers/features/github-cli:1": {}
-    }
+    "remoteUser": "vscode"
 }

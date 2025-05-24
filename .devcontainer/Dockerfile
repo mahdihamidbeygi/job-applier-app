@@ -1,12 +1,7 @@
-FROM mcr.microsoft.com/devcontainers/python:3
+FROM mcr.microsoft.com/devcontainers/python:3.11
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
-
-# Create a non-root user
-ARG USERNAME=vscode
-ARG USER_UID=1000
-ARG USER_GID=$USER_UID
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -19,6 +14,12 @@ RUN apt-get update && apt-get install -y \
     # Add development tools
     vim \
     htop \
+    # Redis tools for monitoring
+    redis-tools \
+    # PostgreSQL client
+    postgresql-client \
+    # Process management
+    supervisor \
     # Clean up
     && rm -rf /var/lib/apt/lists/*
 
@@ -29,26 +30,19 @@ RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key
     && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*
 
-# Install additional packages
-RUN apt-get update && \
-    apt-get install -y postgresql-client && \
-    rm -rf /var/lib/apt/lists/*
-
-# Create the user
-RUN groupadd --gid $USER_GID $USERNAME \
-    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    # Add sudo support
-    && apt-get update \
-    && apt-get install -y sudo \
-    && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
-    && chmod 0440 /etc/sudoers.d/$USERNAME \
-    && rm -rf /var/lib/apt/lists/*
+# The vscode user is already created in the base image, so we skip user creation
 
 # Set work directory
 WORKDIR /workspace
 
-# Install Python development tools
-RUN pip install --no-cache-dir \
+# Copy requirements first for better caching
+COPY requirements.txt /tmp/pip-tmp/
+
+# Install Python packages
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r /tmp/pip-tmp/requirements.txt && \
+    # Install additional production tools
+    pip install --no-cache-dir \
     black \
     flake8 \
     isort \
@@ -56,21 +50,32 @@ RUN pip install --no-cache-dir \
     pytest-django \
     ipython \
     django-debug-toolbar \
-    celery \
-    redis
-
-# Install Python packages
-COPY requirements.txt /tmp/pip-tmp/
-RUN pip3 install --requirement /tmp/pip-tmp/requirements.txt && \
+    flower \
+    django-extensions \
+    # Monitoring tools
+    prometheus-client \
+    django-prometheus && \
     rm -rf /tmp/pip-tmp
+
+# Create necessary directories
+RUN mkdir -p /workspace/logs /workspace/staticfiles /workspace/media && \
+    chown -R vscode:vscode /workspace
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     DJANGO_SETTINGS_MODULE=job_applier.settings \
-    PATH="${PATH}:/home/${USERNAME}/.local/bin" \
+    PATH="${PATH}:/home/vscode/.local/bin" \
     DEBIAN_FRONTEND=dialog \
-    HOME=/home/${USERNAME}
+    HOME=/home/vscode \
+    # Chrome driver path for Selenium
+    CHROME_DRIVER_PATH=/usr/bin/chromedriver
 
-# Switch to non-root user
-USER $USERNAME
+# Copy supervisor configuration if it exists
+# COPY .devcontainer/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Switch to vscode user (already exists in base image)
+USER vscode
+
+# Expose ports
+EXPOSE 8000 5555 9090
