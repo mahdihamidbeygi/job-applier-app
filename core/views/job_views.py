@@ -17,14 +17,38 @@ from django.views.decorators.http import require_http_methods, require_POST
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework import serializers
+from drf_spectacular.utils import extend_schema
 
 from core.forms import JobPlatformPreferenceForm
 from core.models import JobListing, JobPlatformPreference
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.agents.search_agent import SearchAgent
-from core.views.utility_views import load_user_background
+from core.utils.agents.writer_agent import WriterAgent
+from core.utils.agents.job_agent import JobAgent
 
 logger = logging.getLogger(__name__)
+
+
+class GenerateJobDocumentsResponseSerializer(serializers.Serializer):
+    """Response schema for generate_job_documents endpoint"""
+
+    success = serializers.BooleanField()
+    resume_url = serializers.URLField()
+    cover_letter_url = serializers.URLField()
+
+
+class GetJobDocumentsResponseSerializer(serializers.Serializer):
+    success = serializers.BooleanField()
+    resume_url = serializers.URLField()
+    cover_letter_url = serializers.URLField()
+    has_documents = serializers.BooleanField()
+
+
+class JobDocumentErrorSerializer(serializers.Serializer):
+    """Error response schema"""
+
+    error = serializers.CharField()
 
 
 @login_required
@@ -289,6 +313,16 @@ def online_jobsearch(request):
     return redirect("core:search_jobs")
 
 
+@extend_schema(
+    operation_id="generate_job_documents",
+    description="Generate tailored resume and cover letter for a job",
+    request=None,
+    responses={
+        200: GenerateJobDocumentsResponseSerializer,
+        400: JobDocumentErrorSerializer,
+        500: JobDocumentErrorSerializer,
+    },
+)
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
 def generate_job_documents(request, job_id):
@@ -299,20 +333,18 @@ def generate_job_documents(request, job_id):
         job_listing = get_object_or_404(JobListing, id=job_id, user=request.user)
         user_profile = request.user.userprofile
 
-        # Load user background
-        background = load_user_background(request.user.id)
-
-        if not background:
-            return Response({"error": "Failed to load user background"}, status=400)
-
         # Initialize personal agent
         personal_agent = PersonalAgent(request.user.id)
-        personal_agent.load_background(background)
+        job_agent = JobAgent(user_id=request.user.id, job_id=job_id)
+        writer_agent = WriterAgent(
+            user_id=user_profile.user.id, personal_agent=personal_agent, job_agent=job_agent
+        )
 
         # Generate documents
-        success = personal_agent.generate_tailored_documents(job_listing)
+        resume = writer_agent.generate_resume()
+        cover_letter = writer_agent.generate_cover_letter()
 
-        if not success:
+        if not job_listing.has_tailored_documents:
             return Response({"error": "Failed to generate documents"}, status=500)
 
         return Response(
@@ -327,6 +359,11 @@ def generate_job_documents(request, job_id):
         return Response({"error": str(e)}, status=500)
 
 
+@extend_schema(
+    operation_id="get_job_documents",
+    description="Get tailored documents for a job",
+    responses={200: GetJobDocumentsResponseSerializer},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def get_job_documents(request, job_id):

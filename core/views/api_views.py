@@ -1,5 +1,5 @@
 """
-API ViewSets for the core app.
+API ViewSets for the core app
 """
 
 import json
@@ -8,6 +8,7 @@ from datetime import date
 from typing import Dict, List
 
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import AnonymousUser
 from django.db import transaction
 from django.db.models import Count, QuerySet
 from django.http import JsonResponse
@@ -73,6 +74,13 @@ class UserProfileViewSet(viewsets.ModelViewSet):
     ordering_fields: list[str] = ["years_of_experience", "created_at", "updated_at"]
 
     def get_queryset(self) -> QuerySet[UserProfile]:
+        # Fix for drf-spectacular schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return UserProfile.objects.none()
+
+        if isinstance(self.request.user, AnonymousUser):
+            return UserProfile.objects.none()
+
         return UserProfile.objects.filter(user=self.request.user)
 
     @extend_schema(
@@ -127,6 +135,13 @@ class WorkExperienceViewSet(viewsets.ModelViewSet):
     ordering_fields = ["start_date", "end_date", "created_at"]
 
     def get_queryset(self) -> QuerySet[WorkExperience]:
+        # Fix for drf-spectacular schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return WorkExperience.objects.none()
+
+        if isinstance(self.request.user, AnonymousUser):
+            return WorkExperience.objects.none()
+
         return WorkExperience.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -169,6 +184,13 @@ class ProjectViewSet(viewsets.ModelViewSet):
     ordering_fields: list[str] = ["start_date", "end_date", "created_at"]
 
     def get_queryset(self) -> QuerySet[Project]:
+        # Fix for drf-spectacular schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Project.objects.none()
+
+        if isinstance(self.request.user, AnonymousUser):
+            return Project.objects.none()
+
         return Project.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -203,6 +225,13 @@ class EducationViewSet(viewsets.ModelViewSet):
     ordering_fields: list[str] = ["start_date", "end_date", "gpa", "created_at"]
 
     def get_queryset(self) -> QuerySet[Education]:
+        # Fix for drf-spectacular schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Education.objects.none()
+
+        if isinstance(self.request.user, AnonymousUser):
+            return Education.objects.none()
+
         return Education.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -232,6 +261,13 @@ class CertificationViewSet(viewsets.ModelViewSet):
     ordering_fields: list[str] = ["issue_date", "expiry_date", "created_at"]
 
     def get_queryset(self) -> QuerySet[Certification]:
+        # Fix for drf-spectacular schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Certification.objects.none()
+
+        if isinstance(self.request.user, AnonymousUser):
+            return Certification.objects.none()
+
         return Certification.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -261,6 +297,13 @@ class PublicationViewSet(viewsets.ModelViewSet):
     ordering_fields: list[str] = ["publication_date", "created_at"]
 
     def get_queryset(self) -> QuerySet[Publication]:
+        # Fix for drf-spectacular schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Publication.objects.none()
+
+        if isinstance(self.request.user, AnonymousUser):
+            return Publication.objects.none()
+
         return Publication.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -290,6 +333,13 @@ class SkillViewSet(viewsets.ModelViewSet):
     ordering_fields: list[str] = ["proficiency", "created_at"]
 
     def get_queryset(self) -> QuerySet[Skill]:
+        # Fix for drf-spectacular schema generation
+        if getattr(self, "swagger_fake_view", False):
+            return Skill.objects.none()
+
+        if isinstance(self.request.user, AnonymousUser):
+            return Skill.objects.none()
+
         return Skill.objects.filter(profile__user=self.request.user)
 
     @action(detail=False, methods=["get"])
@@ -298,7 +348,7 @@ class SkillViewSet(viewsets.ModelViewSet):
         Group skills by category
         """
         categories: QuerySet[Skill] = (
-            Skill.objects.filter(profile__user=self.request.user)
+            Skill.objects.filter(profile__user=request.user)
             .values("category")
             .annotate(count=Count("id"))
             .order_by("-count")
@@ -311,7 +361,7 @@ class SkillViewSet(viewsets.ModelViewSet):
         Group skills by proficiency level
         """
         proficiency_levels: QuerySet[Skill] = (
-            Skill.objects.filter(profile__user=self.request.user)
+            Skill.objects.filter(profile__user=request.user)
             .values("proficiency")
             .annotate(count=Count("id"))
             .order_by("-proficiency")
