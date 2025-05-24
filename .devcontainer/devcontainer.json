@@ -1,12 +1,14 @@
 {
-    "name": "Project Development",
-    "image": "mcr.microsoft.com/devcontainers/universal:2",
+    "name": "Job Applier Production",
     "dockerComposeFile": "docker-compose.yml",
     "service": "app",
     "workspaceFolder": "/workspace",
     "customizations": {
         "vscode": {
             "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "batisteo.vscode-django",
                 "github.copilot",
                 "github.vscode-pull-request-github"
             ],
@@ -14,16 +16,18 @@
                 "python.defaultInterpreterPath": "/usr/local/bin/python",
                 "python.formatting.provider": "black",
                 "python.linting.enabled": true,
-                "python.linting.flake8Enabled": true,
-                "editor.formatOnSave": true,
-                "editor.codeActionsOnSave": {
-                    "source.organizeImports": true
-                }
+                "python.linting.flake8Enabled": true
             }
         }
     },
-    "forwardPorts": [],
-    "postCreateCommand": "pip install -r requirements.txt && python manage.py migrate",
+    "forwardPorts": [8000, 5432, 6379, 5555],
+    "portsAttributes": {
+        "8000": {"label": "Django", "onAutoForward": "notify"},
+        "5432": {"label": "PostgreSQL", "onAutoForward": "silent"},
+        "6379": {"label": "Redis", "onAutoForward": "silent"},
+        "5555": {"label": "Flower (Celery)", "onAutoForward": "notify"}
+    },
+    "postCreateCommand": "chmod +x scripts/init_codespace.sh && ./scripts/init_codespace.sh",
     "remoteUser": "vscode",
     "features": {
         "ghcr.io/devcontainers/features/github-cli:1": {}

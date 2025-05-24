@@ -1,16 +1,38 @@
 """
-Schema API views.
+Schema API views - FIXED VERSION
 """
 
 from django.apps import apps
+from rest_framework import serializers
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema
 
 from core.models.base import TimestampMixin
 
 
+# Add serializers for API documentation
+class ModelSchemaResponseSerializer(serializers.Serializer):
+    model_name = serializers.CharField()
+    fields = serializers.DictField()
+
+
+class AppModelsSchemasResponseSerializer(serializers.Serializer):
+    app_name = serializers.CharField()
+    models = serializers.DictField()
+
+
+class AllModelsSchemasResponseSerializer(serializers.Serializer):
+    apps = serializers.DictField()
+
+
+@extend_schema(
+    operation_id="model_schema",
+    description="Get JSON schema for a specific model",
+    responses={200: ModelSchemaResponseSerializer},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def model_schema(request: Request, model_name: str) -> Response:
@@ -39,6 +61,11 @@ def model_schema(request: Request, model_name: str) -> Response:
     return Response({"error": f"Model '{model_name}' not found"}, status=404)
 
 
+@extend_schema(
+    operation_id="app_models_schemas",
+    description="Get JSON schemas for all models in an app",
+    responses={200: AppModelsSchemasResponseSerializer},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def app_models_schemas(request: Request, app_name: str = "core") -> Response:
@@ -68,6 +95,11 @@ def app_models_schemas(request: Request, app_name: str = "core") -> Response:
         return Response({"error": f"App '{app_name}' not found"}, status=404)
 
 
+@extend_schema(
+    operation_id="all_models_schemas",
+    description="Get JSON schemas for all models in all apps",
+    responses={200: AllModelsSchemasResponseSerializer},
+)
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def all_models_schemas(request: Request) -> Response:

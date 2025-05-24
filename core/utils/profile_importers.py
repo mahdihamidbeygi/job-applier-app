@@ -41,8 +41,8 @@ class GitHubProfileImporter:
         self.headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
         self.repos_url: str = self.url_user + "/repos"
         # Add GitHub token if available in settings
-        if hasattr(settings, "GITHUB_TOKEN") and settings.GITHUB_TOKEN:
-            self.headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
+        if hasattr(settings, "TOKEN_GITHUB") and settings.TOKEN_GITHUB:
+            self.headers["Authorization"] = f"token {settings.TOKEN_GITHUB}"
         else:
             logger.error("No GitHub token found in settings")
             raise ValueError("No GitHub token found in settings")

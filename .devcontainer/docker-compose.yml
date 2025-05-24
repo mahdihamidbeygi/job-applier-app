@@ -7,18 +7,58 @@ services:
       dockerfile: .devcontainer/Dockerfile
     volumes:
       - ../..:/workspace:cached
+      - ~/.ssh:/home/vscode/.ssh:ro
     command: sleep infinity
-    network_mode: service:db
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/jobapplier
+      - REDIS_URL=redis://redis:6379/0
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      - FLOWER_BASIC_AUTH=admin:changeme123
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8000:8000" # Django
+      - "5555:5555" # Flower
+      - "9090:9090" # Prometheus (optional)
 
   db:
-    image: postgres:latest
+    image: postgres:15-alpine
     restart: unless-stopped
     volumes:
       - postgres-data:/var/lib/postgresql/data
     environment:
       POSTGRES_PASSWORD: postgres
       POSTGRES_USER: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_DB: jobapplier
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+
+  # Optional: Separate Celery containers for scaling
+  # celery-worker:
+  #   build:
+  #     context: ..
+  #     dockerfile: .devcontainer/Dockerfile
+  #   command: celery -A job_applier worker -l info
+  #   volumes:
+  #     - ../..:/workspace:cached
+  #   environment:
+  #     - DATABASE_URL=postgresql://postgres:postgres@db:5432/jobapplier
+  #     - REDIS_URL=redis://redis:6379/0
+  #   depends_on:
+  #     - db
+  #     - redis
+  #     - app
 
 volumes:
   postgres-data:

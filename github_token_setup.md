@@ -22,7 +22,7 @@ To fix the "rate limit exceeded" error when importing GitHub profiles, you need 
 1. Open your project's `.env` file (or create one in the project root if it doesn't exist)
 2. Add the following line:
    ```
-   GITHUB_TOKEN=your_token_here
+   TOKEN_GITHUB=your_token_here
    ```
 3. Replace `your_token_here` with the token you copied from GitHub
 4. Save the file
@@ -30,12 +30,12 @@ To fix the "rate limit exceeded" error when importing GitHub profiles, you need 
 ### Option 2: Set as environment variable
 **Windows PowerShell:**
 ```
-$env:GITHUB_TOKEN="your_token_here"
+$env:TOKEN_GITHUB="your_token_here"
 ```
 
 **macOS or Linux:**
 ```
-export GITHUB_TOKEN=your_token_here
+export TOKEN_GITHUB=your_token_here
 ```
 
 ## Step 3: Restart Your Application
