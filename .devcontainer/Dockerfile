@@ -72,7 +72,7 @@ ENV PYTHONUNBUFFERED=1 \
     CHROME_DRIVER_PATH=/usr/bin/chromedriver
 
 # Copy supervisor configuration if it exists
-# COPY .devcontainer/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+COPY .devcontainer/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Switch to vscode user (already exists in base image)
 USER vscode
