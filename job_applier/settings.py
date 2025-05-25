@@ -207,8 +207,8 @@ GROK_MODEL = "grok-2-1212"
 GOOGLE_MODEL = "gemini-2.5-flash-preview-04-17"
 
 # OAuth Client IDs (these are public)
-GOOGLE_CLIENT_ID = "282027751559-71o55osq3jg7uod3skdprf53adf2bji5.apps.googleusercontent.com"
-GITHUB_CLIENT_ID = "Ov23liDZh0VjkJrszhiF"
+GOOGLE_CLIENT_ID = "282027751559-r0ocro82n0n6ibftimraa331gogpa399.apps.googleusercontent.com"
+GITHUB_CLIENT_ID = "Ov23li8zHEpBhxA22rFa"
 LINKEDIN_CLIENT_ID = "78tdz1i9cak3fw"
 
 # Email Configuration (non-sensitive parts)
