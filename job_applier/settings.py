@@ -306,7 +306,6 @@ SPECTACULAR_SETTINGS: dict[str, Any] = {
 TEMPERATURE = 0.0
 
 # Security Settings
-SECURE_SSL_REDIRECT = not DEBUG
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_BROWSER_XSS_FILTER = True
@@ -415,12 +414,10 @@ SOCIALACCOUNT_PROVIDERS = {
     },
 }
 
-# Additional security settings for production:
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = "DENY"
+# Trust Fly.io's proxy headers
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-# For HTTPS in production:
-# SECURE_SSL_REDIRECT = True
-# SESSION_COOKIE_SECURE = True
-# CSRF_COOKIE_SECURE = True
+# Only redirect to HTTPS if not behind a proxy
+SECURE_SSL_REDIRECT = False  # Fly.io handles this
