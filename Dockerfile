@@ -5,6 +5,9 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
+ENV GIT_PYTHON_REFRESH=quiet
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROMEDRIVER_PATH=/usr/bin/chromedriver
 
 # Set work directory
 WORKDIR /app
@@ -15,6 +18,11 @@ RUN apt-get update \
     build-essential \
     libpq-dev \
     curl \
+    git \
+    wget \
+    gnupg \
+    chromium \
+    chromium-driver \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
