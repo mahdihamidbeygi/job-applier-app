@@ -229,7 +229,6 @@ PINECONE_API_KEY: str | None = os.getenv("PINECONE_API_KEY")
 TOKEN_GITHUB: str | None = os.getenv("TOKEN_GITHUB")
 GROK_API_KEY: str | None = os.getenv("GROK_API_KEY")
 GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY")
-ANTHROPIC_API_KEY: str | None = os.getenv("ANTHROPIC_API_KEY", "")
 
 # OAuth Secrets
 GOOGLE_CLIENT_SECRET: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
