@@ -41,36 +41,3 @@ primary_region = "iad"
 [processes]
   app = "gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 job_applier.wsgi:application"
   worker = "celery -A job_applier worker --loglevel=info --concurrency=2"
-
-[[services]]
-  internal_port = 8000
-  protocol = "tcp"
-
-  [[services.ports]]
-    handlers = ["http"]
-    port = 80
-    force_https = true
-
-  [[services.ports]]
-    handlers = ["tls", "http"]
-    port = 443
-
-  [services.concurrency]
-    type = "connections"
-    hard_limit = 25
-    soft_limit = 20
-
-  [[services.tcp_checks]]
-    grace_period = "1s"
-    interval = "15s"
-    restart_limit = 0
-    timeout = "2s"
-
-  [[services.http_checks]]
-    interval = "10s"
-    grace_period = "5s"
-    method = "get"
-    path = "/health/"
-    protocol = "http"
-    timeout = "2s"
-    tls_skip_verify = false
