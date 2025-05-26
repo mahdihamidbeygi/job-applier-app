@@ -20,6 +20,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+APP_NAME = "job-applier-app"
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
 
@@ -44,6 +47,7 @@ if IN_CODESPACES and CODESPACE_NAME:
     ALLOWED_HOSTS = [
         # f"{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
         # f"{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
+        f"{APP_NAME}.fly.dev",
         "https://jobapplier-backend.onrender.com",
         "localhost",
         "127.0.0.1",
