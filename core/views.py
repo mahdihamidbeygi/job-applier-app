@@ -68,6 +68,7 @@ from core.views.utility_views import (
     test_s3,
     parse_pdf_resume,
     load_user_background,
+    health_check,
 )
 
 # Base permission classes

@@ -43,17 +43,11 @@ GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN = os.environ.get(
 )
 
 # Configure ALLOWED_HOSTS
-if IN_CODESPACES and CODESPACE_NAME:
-    ALLOWED_HOSTS = [
-        # f"{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-        # f"{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-        f"{APP_NAME}.fly.dev",
-        "https://jobapplier-backend.onrender.com",
-        "localhost",
-        "127.0.0.1",
-    ]
-else:
-    ALLOWED_HOSTS = ["*"]  # Configure this based on your domain in production
+ALLOWED_HOSTS = [
+    f"{APP_NAME}.fly.dev",
+    "localhost",
+    "127.0.0.1",
+]
 
 # Application definition
 INSTALLED_APPS: list[str] = [
@@ -117,12 +111,12 @@ WSGI_APPLICATION = "job_applier.wsgi.application"
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-DATABASES = {
-    "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL"),
-        conn_max_age=600,
-    )
-}
+# DATABASES = {
+#     "default": dj_database_url.config(
+#         default=os.getenv("DATABASE_URL"),
+#         conn_max_age=600,
+#     )
+# }
 
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
@@ -327,40 +321,20 @@ SECURE_HSTS_PRELOAD = not DEBUG
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
 
-# Base CORS origins
-CORS_ALLOWED_ORIGINS_BASE: list[str] = [
-    "https://jobs.lever.co",
+# Update CORS and CSRF for production
+CORS_ALLOWED_ORIGINS = [
+    "https://job-applier-app.fly.dev",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://localhost:8001",
-    "http://127.0.0.1:8001",
-    "https://jobapplier-backend.onrender.com",
 ]
 
 # Base CSRF origins
-CSRF_TRUSTED_ORIGINS_BASE: list[str] = [
-    "chrome-extension://gjhaikeodndcnemkibilnmbplmicjnif",
+CSRF_TRUSTED_ORIGINS = [
+    "https://job-applier-app.fly.dev",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://localhost:8001",
-    "http://127.0.0.1:8001",
-    "https://jobapplier-backend.onrender.com",
 ]
 
-# # Update origins for Codespaces
-# if IN_CODESPACES and CODESPACE_NAME:
-#     CORS_ALLOWED_ORIGINS = [
-#         f"https://{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-#         f"https://{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-#     ] + CORS_ALLOWED_ORIGINS_BASE
-
-#     CSRF_TRUSTED_ORIGINS = [
-#         f"https://{CODESPACE_NAME}-8000.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-#         f"https://{CODESPACE_NAME}-8001.{GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN}",
-#     ] + CSRF_TRUSTED_ORIGINS_BASE
-# else:
-#     CORS_ALLOWED_ORIGINS = CORS_ALLOWED_ORIGINS_BASE
-#     CSRF_TRUSTED_ORIGINS = CSRF_TRUSTED_ORIGINS_BASE
 
 # CSRF settings
 CSRF_COOKIE_HTTPONLY = False
@@ -369,10 +343,6 @@ CSRF_USE_SESSIONS = False
 CSRF_COOKIE_NAME = "csrftoken"
 CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
 
-# Exempt all API endpoints from CSRF
-# CSRF_EXEMPT_URLS: list[str] = [
-#     "/api/",
-# ]
 
 # Celery Configuration
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -389,7 +359,7 @@ FLOWER_BASIC_AUTH = os.getenv("FLOWER_BASIC_AUTH", "admin:flower123")
 # URLField default scheme
 FORMS_URLFIELD_ASSUME_HTTPS = True
 
-# Logging Configuration
+# Logging for production
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
@@ -398,33 +368,23 @@ LOGGING = {
             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
             "style": "{",
         },
-        "simple": {
-            "format": "{levelname} {asctime} {module}: {message}",
-            "style": "{",
-        },
     },
     "handlers": {
         "console": {
-            "level": "DEBUG" if DEBUG else "INFO",
+            "level": "INFO",
             "class": "logging.StreamHandler",
-            "formatter": "simple",
+            "formatter": "verbose",
         },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
             "level": "INFO",
-            "propagate": True,
-        },
-        "django.request": {
-            "handlers": ["console"],
-            "level": "WARNING",
             "propagate": False,
-        },
-        "core": {
-            "handlers": ["console"],
-            "level": "DEBUG" if DEBUG else "INFO",
-            "propagate": True,
         },
     },
 }
