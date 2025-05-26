@@ -1,4 +1,3 @@
-# fly.toml app configuration file
 app = "job-applier-app"
 primary_region = "iad"
 
@@ -10,6 +9,9 @@ primary_region = "iad"
   GIT_PYTHON_REFRESH = "quiet"
   CHROME_BIN = "/usr/bin/chromium"
   CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+  DATABASE_URL = "postgres://job_applier_app:lC3v48mkPGJlOCt@job-applier-postgres.flycast:5432/job_applier_app"
+  FLY_APP_NAME = "job-applier-app"
+  SITE_DOMAIN = "job-applier-app.fly.dev"
 
 [http_service]
   internal_port = 8000
@@ -29,7 +31,7 @@ primary_region = "iad"
   destination = "/data"
 
 [deploy]
-  release_command = "python manage.py migrate"
+  release_command = "python -c \"import os, django; print('DATABASE_URL:', os.getenv('DATABASE_URL', 'NOT SET')); os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'job_applier.settings'); django.setup(); from django.conf import settings; print('Django DB config:', settings.DATABASES)\""
 
 [processes]
   app = "gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 job_applier.wsgi:application"
