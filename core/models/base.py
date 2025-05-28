@@ -86,14 +86,15 @@ class TimestampMixin(models.Model):
         return "\n".join(lines)
 
     @classmethod
-    def get_schema(cls) -> Dict[str, Any]:
+    def get_schema(cls, exclude_fields: Optional[List[str]] = None) -> Dict[str, Any]:
         """
         Generate a JSON schema for this model.
 
+        Args:
+            exclude_fields: Optional list of field names to exclude from the schema.
         Returns:
             A dictionary containing the JSON schema for the model
         """
-        # Generate basic schema from model fields
         # Generate basic schema from model fields
         fields_dict = {}
         required_fields = []
@@ -113,9 +114,14 @@ class TimestampMixin(models.Model):
             "TimeField": "string",
         }
 
+        _exclude_fields = exclude_fields or []
+
         # Extract information from model fields
         for field in cls._meta.fields:
             field_name = field.name
+            if field_name in _exclude_fields:
+                continue
+
             internal_type = field.get_internal_type()
 
             field_type = field_type_mapping.get(internal_type, "string")
@@ -125,8 +131,8 @@ class TimestampMixin(models.Model):
             else:
                 fields_dict[field_name] = {"type": field_type}
 
-                # Track required fields
-
+            # Track required fields (only if not nullable and not blank)
+            if not field.null and not field.blank:
                 required_fields.append(field_name)
 
         return {
@@ -137,7 +143,9 @@ class TimestampMixin(models.Model):
         }
 
     @classmethod
-    def get_schema_as_json(cls, indent: Optional[int] = 2) -> str:
+    def get_schema_as_json(
+        cls, exclude_fields: Optional[List[str]] = None, indent: Optional[int] = 2
+    ) -> str:
         """
         Get the JSON schema for this model as a JSON string.
 
@@ -147,7 +155,7 @@ class TimestampMixin(models.Model):
         Returns:
             JSON string representation of the schema
         """
-        schema = cls.get_schema()
+        schema = cls.get_schema(exclude_fields=exclude_fields)
         return json.dumps(schema, indent=indent)
 
     @staticmethod
@@ -186,11 +194,14 @@ class TimestampMixin(models.Model):
                     model, "get_schema"
                 ):
                     # Generate schema using the model's get_schema method
-                    schema = model.get_schema()
+                    # Pass exclude_fields if you want to exclude common fields from app_schemas too
+                    schema = model.get_schema(exclude_fields=None)  # Modify if needed
                     result[model_name] = schema
                 else:
                     # For non-TimestampMixin models, generate a basic schema
-                    schema = TimestampMixin._generate_basic_schema(model)
+                    schema = TimestampMixin._generate_basic_schema(
+                        model, exclude_fields=None
+                    )  # Modify if needed
                     result[model_name] = schema
             except Exception as e:
                 logger.error(f"Error generating schema for {model_name}: {str(e)}")
@@ -198,7 +209,9 @@ class TimestampMixin(models.Model):
         return result
 
     @staticmethod
-    def _generate_basic_schema(model_class) -> Dict[str, Any]:
+    def _generate_basic_schema(
+        model_class, exclude_fields: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
         """
         Generate a basic schema for any model class, even if it doesn't inherit from TimestampMixin.
 
@@ -210,10 +223,14 @@ class TimestampMixin(models.Model):
         """
         fields_dict = {}
         required_fields = []
+        _exclude_fields = exclude_fields or []
 
         # Extract information from model fields
         for field in model_class._meta.fields:
             field_name = field.name
+            if field_name in _exclude_fields:
+                continue
+
             field_type = "string"  # Default type
 
             # Map Django field types to JSON Schema types
@@ -236,7 +253,7 @@ class TimestampMixin(models.Model):
             fields_dict[field_name] = {"type": field_type}
 
             # Track required fields
-            if not field.null and not field.blank:
+            if not field.null and not field.blank and field_name not in _exclude_fields:
                 required_fields.append(field_name)
 
         return {

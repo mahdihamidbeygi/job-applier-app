@@ -2,21 +2,47 @@
 Views for importing profile data from various sources.
 """
 
+from typing import Optional
 import json
 import logging
 from datetime import datetime
 
-from django.contrib import messages
 from django.http import JsonResponse
-from django.shortcuts import redirect
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from core.models import Certification, Education, Project, Publication, Skill, WorkExperience
 from core.utils.profile_importers import GitHubProfileImporter, LinkedInImporter, ResumeImporter
-from core.views.utility_views import parse_pdf_resume
 
 logger = logging.getLogger(__name__)
+
+
+def parse_flexible_date(
+    date_str: Optional[str], field_name: str = "date"
+) -> Optional[datetime.date]:
+    """
+    Parses a date string that can be in YYYY-MM-DD, YYYY-MM, or YYYY format.
+    Returns a date object or None if parsing fails or input is None.
+    """
+    if not date_str:
+        return None
+    try:
+        if len(date_str) == 10:  # YYYY-MM-DD
+            return datetime.strptime(date_str, "%Y-%m-%d").date()
+        elif len(date_str) == 7:  # YYYY-MM
+            # Assume the 1st of the month
+            return datetime.strptime(date_str + "-01", "%Y-%m-%d").date()
+        elif len(date_str) == 4:  # YYYY
+            # Assume January 1st
+            return datetime.strptime(date_str + "-01-01", "%Y-%m-%d").date()
+        else:
+            logger.warning(
+                f"Date string '{date_str}' for field '{field_name}' has an unsupported format/length."
+            )
+            return None
+    except ValueError:
+        logger.warning(f"Could not parse {field_name}: '{date_str}'. Invalid date format.")
+        return None
 
 
 @require_http_methods(["POST"])
@@ -104,27 +130,21 @@ def import_github_profile(request) -> JsonResponse:
 
 
 @require_http_methods(["POST"])
-def import_resume(request):
+def import_resume(request) -> JsonResponse:
     """Import resume data"""
     try:
         if "resume" not in request.FILES:
             return JsonResponse({"error": "No file uploaded"}, status=400)
 
         resume_file = request.FILES["resume"]
-        if not resume_file.name.endswith((".pdf", ".docx")):
-            return JsonResponse(
-                {"error": "Invalid file format. Please upload a PDF or DOCX file."}, status=400
-            )
 
-        # Parse resume
-        importer = ResumeImporter(request.user.userprofile)
-
-        if resume_file.name.endswith(".pdf"):
-            resume_text = parse_pdf_resume(resume_file)
-            result = importer.parse_resume_text(resume_text)
-        else:
-            # For non-PDF files, use the ResumeImporter directly
-            result = importer.parse_resume_file(resume_file)
+        try:
+            # resume_file is an UploadedFile object (e.g., InMemoryUploadedFile)
+            with ResumeImporter(resume_file) as importer:  # Use as context manager
+                result = importer.parse_resume()
+        except Exception as e:  # Catch exceptions from ResumeImporter init or parse
+            logger.error(f"Error during resume import process: {str(e)}")  # This logs the error
+            return JsonResponse({"error": f"Failed to process resume: {str(e)}"}, status=500)
 
         if not result:
             return JsonResponse({"error": "Failed to parse resume"}, status=400)
@@ -132,60 +152,109 @@ def import_resume(request):
         # Update user profile
         profile = request.user.userprofile
 
-        # Apply basic info
-        if result.get("name") and not profile.name:
-            profile.name = result.get("name")
+        # Apply personal_info
+        personal_info = result.get("basic_info", {})
+        profile_updated = False
 
-        if result.get("email"):
-            profile.user.email = result.get("email")
-            profile.user.save()
+        if personal_info.get("name") and not profile.name:
+            profile.name = personal_info.get("name")
+            profile_updated = True
 
-        if result.get("phone") and not profile.phone:
-            profile.phone = result.get("phone")
+        if personal_info.get("title") and not profile.title:
+            profile.title = personal_info.get("title")
+            profile_updated = True
 
-        if result.get("location"):
-            location = result.get("location", {})
-            if location.get("city") and not profile.city:
-                profile.city = location.get("city")
-            if location.get("state") and not profile.state:
-                profile.state = location.get("state")
-            if location.get("country") and not profile.country:
-                profile.country = location.get("country")
+        if personal_info.get("email"):
+            if profile.user.email != personal_info.get("email"):
+                profile.user.email = personal_info.get("email")
+                profile.user.save(update_fields=["email"])
+                # No need to set profile_updated = True here, as user is saved separately
 
-        if result.get("summary") and not profile.professional_summary:
-            profile.professional_summary = result.get("summary")
+        if personal_info.get("phone") and not profile.phone:
+            profile.phone = personal_info.get("phone")
+            profile_updated = True
+
+        if personal_info.get("address") and not profile.address:
+            profile.address = personal_info.get("address", None)
+            profile_updated = True
+        if personal_info.get("city") and not profile.city:
+            profile.city = personal_info.get("city", None)
+            profile_updated = True
+        if personal_info.get("state") and not profile.state:
+            profile.state = personal_info.get("state", None)
+            profile_updated = True
+        if personal_info.get("country") and not profile.country:
+            profile.country = personal_info.get("country", None)
+            profile_updated = True
+        if personal_info.get("postal_code") and not profile.postal_code:
+            profile.postal_code = personal_info.get("postal_code")
+            profile_updated = True
+
+        # Assuming professional_summary is part of basic_info as per your LLM prompt
+        if personal_info.get("professional_summary") and not profile.professional_summary:
+            profile.professional_summary = personal_info.get("professional_summary")
+            profile_updated = True
+
+        # Add other fields from UserProfile that might be in basic_info
+        if personal_info.get("website") and not profile.website:
+            profile.website = personal_info.get("website")
+            profile_updated = True
+        # Note: github_url and linkedin_url are typically handled by their specific importers
+        # but if the resume contains them and they are not set, we can update.
+        if personal_info.get("github_url") and not profile.github_url:
+            profile.github_url = personal_info.get("github_url")
+            profile_updated = True
+        if personal_info.get("linkedin_url") and not profile.linkedin_url:
+            profile.linkedin_url = personal_info.get("linkedin_url")
+            profile_updated = True
+
+        if personal_info.get("headline") and not profile.headline:
+            profile.headline = personal_info.get("headline")
+            profile_updated = True
+        if personal_info.get("current_position") and not profile.current_position:
+            profile.current_position = personal_info.get("current_position")
+            profile_updated = True
+        if personal_info.get("company") and not profile.company:
+            profile.company = personal_info.get("company")
+            profile_updated = True
 
         # Save profile
-        profile.save()
+        if profile_updated:
+            profile.save()
 
         # Import work experiences
         experiences_added = 0
-        for exp_data in result.get("work_experience", []):
+        for exp_data in result.get("work_experiences", []):
             # Check if the experience already exists (based on company and position)
             existing_exp = WorkExperience.objects.filter(
                 profile=profile,
-                company__iexact=exp_data.get("company", ""),
-                position__iexact=exp_data.get("position", ""),
+                company__iexact=exp_data.get("company", None),
+                position__iexact=exp_data.get("position", None),
             ).first()
 
             if not existing_exp:
-                # Convert date strings to date objects
-                start_date = datetime.strptime(
-                    exp_data.get("start_date", "2000-01-01"), "%Y-%m-%d"
-                ).date()
-                end_date = None
-                if exp_data.get("end_date"):
-                    end_date = datetime.strptime(exp_data.get("end_date"), "%Y-%m-%d").date()
+                start_date = parse_flexible_date(
+                    exp_data.get("start_date"), "work experience start_date"
+                )
+                # Default start_date if not provided or unparseable, as per original logic
+                if start_date is None and not exp_data.get("start_date"):
+                    start_date = datetime.strptime("2000-01-01", "%Y-%m-%d").date()
+
+                end_date = parse_flexible_date(exp_data.get("end_date"), "work experience end_date")
 
                 # Create new experience
                 WorkExperience.objects.create(
                     profile=profile,
-                    company=exp_data.get("company", ""),
-                    position=exp_data.get("position", ""),
+                    company=exp_data.get("company", None),
+                    position=exp_data.get("position", None),
+                    location=exp_data.get("location", None),
                     start_date=start_date,
                     end_date=end_date,
                     current=exp_data.get("current", False),
-                    description=exp_data.get("description", ""),
+                    description=exp_data.get("description", None),
+                    achievements=exp_data.get("achievements", None),
+                    technologies=exp_data.get("technologies", None),
+                    # 'order' field has a default and is usually not set by LLM
                 )
                 experiences_added += 1
 
@@ -195,35 +264,141 @@ def import_resume(request):
             # Check if education already exists
             existing_edu = Education.objects.filter(
                 profile=profile,
-                institution__iexact=edu_data.get("institution", ""),
-                degree__iexact=edu_data.get("degree", ""),
+                institution__iexact=edu_data.get("institution", None),
+                degree__iexact=edu_data.get("degree", None),
             ).first()
 
             if not existing_edu:
-                # Convert date strings to date objects
-                start_date = None
-                end_date = None
-                if edu_data.get("start_date"):
-                    start_date = datetime.strptime(edu_data.get("start_date"), "%Y-%m-%d").date()
-                if edu_data.get("end_date"):
-                    end_date = datetime.strptime(edu_data.get("end_date"), "%Y-%m-%d").date()
+                start_date = parse_flexible_date(edu_data.get("start_date"), "education start_date")
+                end_date = parse_flexible_date(edu_data.get("end_date"), "education end_date")
 
                 # Create new education
                 Education.objects.create(
                     profile=profile,
-                    institution=edu_data.get("institution", ""),
-                    degree=edu_data.get("degree", ""),
-                    field_of_study=edu_data.get("field_of_study", ""),
+                    institution=edu_data.get("institution", None),
+                    degree=edu_data.get("degree", None),
+                    field_of_study=edu_data.get("field_of_study", None),
                     start_date=start_date,
                     end_date=end_date,
                     current=edu_data.get("current", False),
                 )
                 education_added += 1
 
+        # Import projects
+        project_added = 0
+        for project_data in result.get("projects", []):
+            project_title = project_data.get("title", None)
+            if not project_title:
+                continue
+
+            # Check if project already exists (e.g., by title)
+            existing_project = Project.objects.filter(
+                profile=profile,
+                title__iexact=project_title,
+            ).first()
+
+            if not existing_project:
+                start_date = parse_flexible_date(
+                    project_data.get("start_date"), "project start_date"
+                )
+                end_date = parse_flexible_date(project_data.get("end_date"), "project end_date")
+
+                Project.objects.create(
+                    profile=profile,
+                    title=project_title,
+                    description=project_data.get("description", None),
+                    technologies=project_data.get("technologies", None),
+                    start_date=start_date,
+                    end_date=end_date,
+                    current=project_data.get("current", False),
+                    github_url=project_data.get("github_url", None),
+                    live_url=project_data.get("live_url", None),
+                )
+                project_added += 1
+
+        # Import certifications
+        certification_added = 0
+        for cert_data in result.get("certifications", []):
+            cert_name = cert_data.get("name", "")
+            if not cert_name:  # Skips if name is None or empty string
+                continue
+
+            # Prepare issuer for comparison and saving
+            issuer_val = cert_data.get("issuer")
+            issuer_to_save = issuer_val if issuer_val is not None else ""
+
+            # Check if certification already exists using prepared values
+            existing_cert = Certification.objects.filter(
+                profile=profile,
+                name__iexact=cert_name,
+                issuer__iexact=issuer_to_save,
+            ).first()
+
+            if not existing_cert:
+                issue_date = parse_flexible_date(
+                    cert_data.get("issue_date"), "certification issue_date"
+                )
+                expiry_date = parse_flexible_date(
+                    cert_data.get("expiry_date"), "certification expiry_date"
+                )
+
+                # Prepare credential_id for saving, ensuring it's not None
+                credential_id_val = cert_data.get("credential_id")
+                credential_id_to_save = credential_id_val if credential_id_val is not None else ""
+
+                # Prepare credential_url for saving, ensuring it's not None
+                credential_url_val = cert_data.get("credential_url")
+                credential_url_to_save = (
+                    credential_url_val if credential_url_val is not None else ""
+                )
+
+                Certification.objects.create(
+                    profile=profile,
+                    name=cert_name,
+                    issuer=issuer_to_save,  # Use the prepared value
+                    issue_date=issue_date,
+                    expiry_date=expiry_date,
+                    credential_id=credential_id_to_save,  # Use the prepared value
+                    credential_url=credential_url_to_save,  # Use the prepared value
+                )
+                certification_added += 1
+
+        # Import publications
+        publication_added = 0
+        for pub_data in result.get("publications", []):
+            pub_title = pub_data.get("title", "")
+            if not pub_title:
+                continue
+
+            # Check if publication already exists
+            existing_pub = Publication.objects.filter(
+                profile=profile,
+                title__iexact=pub_title,
+                # authors__iexact=pub_data.get("authors", ""), # Authors can be tricky for exact match
+            ).first()
+
+            if not existing_pub:
+                publication_date = parse_flexible_date(
+                    pub_data.get("publication_date"), "publication_date"
+                )
+
+                Publication.objects.create(
+                    profile=profile,
+                    title=pub_title,
+                    authors=pub_data.get("authors", None),
+                    publication_date=publication_date,
+                    publisher=pub_data.get("publisher", None),
+                    journal=pub_data.get("journal", None),
+                    doi=pub_data.get("doi", None),
+                    url=pub_data.get("url", None),
+                    abstract=pub_data.get("abstract", None),
+                )
+                publication_added += 1
+
         # Import skills
         skills_added = 0
         for skill_data in result.get("skills", []):
-            skill_name = skill_data.get("name", "")
+            skill_name = skill_data.get("name", None)
             if not skill_name:
                 continue
 
@@ -234,12 +409,18 @@ def import_resume(request):
             ).first()
 
             if not existing_skill:
+                # Prepare proficiency, ensuring it's not None
+                proficiency_val = skill_data.get("proficiency")
+                proficiency_to_save = (
+                    proficiency_val if proficiency_val is not None else 3
+                )  # Default to 3 if None
+
                 # Create new skill
                 Skill.objects.create(
                     profile=profile,
                     name=skill_name,
                     category=skill_data.get("category", "other"),
-                    proficiency=skill_data.get("proficiency", 3),
+                    proficiency=proficiency_to_save,
                 )
                 skills_added += 1
 
@@ -247,8 +428,10 @@ def import_resume(request):
             {
                 "success": True,
                 "message": (
-                    f"Successfully imported resume data. Added {experiences_added} work experiences, "
-                    f"{education_added} education entries, and {skills_added} skills."
+                    f"Successfully imported resume data. Added: "
+                    f"{experiences_added} work experiences, {education_added} education entries, "
+                    f"{project_added} projects, {certification_added} certifications, "
+                    f"{publication_added} publications, and {skills_added} skills."
                 ),
             }
         )

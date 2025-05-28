@@ -186,9 +186,7 @@ class AssistantAgent:
         try:
 
             llm = ChatGoogleGenerativeAI(
-                # model="gemini-2.5-flash-preview-04-17",
-                # model="gemini-1.5-pro",
-                model="gemini-2.5-pro-preview-05-06",
+                model=settings.PRO_GOOGLE_MODEL,
                 api_key=settings.GOOGLE_API_KEY,
                 temperature=0.1,
                 # convert_system_message_to_human=True,
