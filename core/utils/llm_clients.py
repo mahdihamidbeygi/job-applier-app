@@ -5,17 +5,16 @@ Local LLM clients for text generation.
 import json
 import logging
 import os
-from typing import Any, Dict
 import time
 from pathlib import Path
+from typing import Any, Dict
 
+import httpx
 import requests
 from django.conf import settings
 from google import genai
 from google.api_core import retry
 from google.genai import types
-import httpx
-from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
