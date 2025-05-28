@@ -1,4 +1,7 @@
 from django.apps import AppConfig
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class CoreConfig(AppConfig):
@@ -7,3 +10,5 @@ class CoreConfig(AppConfig):
 
     def ready(self):
         import core.signals
+
+        logger.info("Core signals registered successfully.")

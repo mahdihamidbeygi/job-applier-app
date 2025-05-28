@@ -2,11 +2,11 @@
 from celery import shared_task
 import logging
 from django.apps import apps
-from celery.exceptions import Retry
 
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.agents.writer_agent import WriterAgent
 from core.utils.agents.job_agent import JobAgent
+from core.utils.agents.assistant_agent import AssistantAgent
 
 logger = logging.getLogger(__name__)
 
@@ -69,17 +69,23 @@ def generate_resume_for_job_task(self, user_id: int, job_listing_id: int):
             raise
 
 
-@shared_task
-def refresh_vector_store_async():
+@shared_task(bind=True, max_retries=3, default_retry_delay=60 * 5)  # Retry after 5 mins
+def refresh_vector_store_async(self, user_id: int):
     """
-    Simple task to refresh vector store - replace with your actual implementation
+    Celery task to refresh the vector store for a given user.
     """
     try:
-        logger.info("Starting vector store refresh task")
-        # Add your vector store refresh logic here
-        # For now, just return success to test if the error is fixed
-        logger.info("Vector store refresh completed successfully")
-        return "Vector store refreshed successfully"
-    except Exception as e:
-        logger.error(f"Error in refresh_vector_store_async: {str(e)}", exc_info=True)
-        raise
+        logger.info(f"Task refresh_vector_store_async started for user_id: {user_id}")
+        agent = AssistantAgent(user_id=user_id)
+        refreshed = agent.refresh_vectorstore()  # This method must exist on AssistantAgent
+
+        if refreshed:
+            logger.info(f"Successfully refreshed vector store for user_id: {user_id}")
+        else:
+            logger.warning(
+                f"Vector store refresh may not have completed successfully for user_id: {user_id}"
+            )
+        return f"Vector store refresh process completed for user {user_id}."
+    except Exception as exc:
+        logger.error(f"Error refreshing vector store for user_id {user_id}: {exc}", exc_info=True)
+        raise self.retry(exc=exc)

@@ -1287,7 +1287,7 @@
         <p>Import your professional information from LinkedIn (Coming Soon)</p>
         <button
           onclick="showImportForm('linkedin')"
-          class="retry-button"
+          class="retry-button disabled"
           disabled
         >
           Import from LinkedIn
@@ -1684,7 +1684,9 @@
           </button>
         </div>
         <h3>{{ pub.title }}</h3>
+        {% if pub.authors %}
         <p class="description">{{ pub.authors }}</p>
+        {% endif %}
         <div class="date-range">{{ pub.publication_date|date:"M Y" }}</div>
         {% if pub.publisher %}
         <p class="description">Publisher: {{ pub.publisher }}</p>

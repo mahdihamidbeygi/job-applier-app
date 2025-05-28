@@ -50,7 +50,7 @@ class RAGProcessor:
             # Try to use Google embeddings if API key is available
             if os.environ.get("GOOGLE_API_KEY"):
                 self.embeddings = GoogleGenerativeAIEmbeddings(
-                    model="models/embedding-001",
+                    model="models/embedding-004",
                     google_api_key=os.environ.get("GOOGLE_API_KEY"),
                 )
                 logger.info("Using Google AI embeddings")
@@ -68,12 +68,12 @@ class RAGProcessor:
         try:
             # Use Google Gemini LLM
             self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
+                model=settings.PRO_GOOGLE_MODEL,
                 google_api_key=os.environ.get("GOOGLE_API_KEY"),
                 temperature=0.2,
             )
             self.direct_client = GoogleClient(
-                model="gemini-2.0-flash",
+                model=settings.PRO_GOOGLE_MODEL,
                 temperature=0.2,
                 max_tokens=1024,
             )

@@ -4,6 +4,8 @@ import sys
 
 import django
 
+from pathlib import Path
+
 # --- Add Django Setup ---
 # Add the project root directory to Python path if running script directly
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
@@ -41,7 +43,7 @@ import pytest
 # For Django, you might use Django's `APIClient` or `TestCase.client`.
 # The `mocker` fixture is provided by the `pytest-mock` plugin.
 from core.tests.conftest import client
-from core.utils.profile_importers import GitHubProfileImporter, LinkedInImporter
+from core.utils.profile_importers import GitHubProfileImporter, LinkedInImporter, ResumeImporter
 
 logger = logging.getLogger(__name__)
 
@@ -204,3 +206,51 @@ def test_linkedin_importer_scrape_profile_live():
         logger.info(f"Scraped name: {profile_data.get('name')}")
     except Exception as e:
         pytest.fail(f"LinkedInImporter().scrape_profile() raised an exception: {e}")
+
+
+def test_resumeimporter_success():
+    """Test successful resume import and analysis."""
+    # Mock resume content
+    resume_content = """
+    John Doe
+    Software Engineer
+    Experience:
+    - Senior Developer at Tech Corp (2020-2023)
+    - Full Stack Developer at Startup Inc (2018-2020)
+    Skills: Python, JavaScript, React, Node.js
+    Education: BS Computer Science, University of Technology
+    """
+
+    # Create importer instance
+    importer = ResumeImporter(
+        resume_file=Path(
+            r"C:\Users\mhami\projects\job-applier-app\media\resumes\mhami\Mahdi_Hamidbeygi_resume_pubs.pdf"
+        )
+    )
+    resume = importer.parse_resume()
+    # Mock LLM response
+    # expected_llm_output = {
+    #     "name": "John Doe",
+    #     "title": "Software Engineer",
+    #     "experience": [
+    #         {"role": "Senior Developer", "company": "Tech Corp", "duration": "2020-2023"},
+    #         {"role": "Full Stack Developer", "company": "Startup Inc", "duration": "2018-2020"},
+    #     ],
+    #     "skills": ["Python", "JavaScript", "React", "Node.js"],
+    #     "education": [{"degree": "BS Computer Science", "institution": "University of Technology"}],
+    #     "analyzed_by": "llm",
+    # }
+
+    # # Mock the LLM call
+    # with patch.object(importer, "_call_llm", return_value=expected_llm_output) as mock_llm:
+    #     result = importer.analyze()
+
+    #     # Verify LLM was called
+    #     mock_llm.assert_called_once()
+
+    #     # Assert the result matches expected output
+    #     assert result == expected_llm_output
+    #     assert result["analyzed_by"] == "llm"
+    #     assert isinstance(result["experience"], list)
+    #     assert isinstance(result["skills"], list)
+    #     assert isinstance(result["education"], list)

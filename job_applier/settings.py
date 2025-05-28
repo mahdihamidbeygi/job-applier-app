@@ -57,8 +57,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.sites",  # Required for allauth
-    "core",
+    "django.contrib.sites",
     "widget_tweaks",
     "rest_framework",
     "rest_framework_simplejwt",
@@ -71,6 +70,7 @@ INSTALLED_APPS: list[str] = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
+    "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -353,6 +353,12 @@ CELERY_TIMEZONE = TIME_ZONE
 
 # Flower Configuration
 FLOWER_BASIC_AUTH = os.getenv("FLOWER_BASIC_AUTH", "admin:flower123")
+
+# Google API Settings
+FAST_GOOGLE_MODEL: str | None = os.environ.get("FAST_GOOGLE_MODEL")
+PRO_GOOGLE_MODEL: str | None = os.environ.get("PRO_GOOGLE_MODEL")
+GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
 # URLField default scheme
 FORMS_URLFIELD_ASSUME_HTTPS = True
