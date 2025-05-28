@@ -28,12 +28,12 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-your-secret-key-here")
+SECRET_KEY: str = os.getenv("DJANGO_SECRET_KEY", "django-insecure-your-secret-key-here")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
+DEBUG: bool = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
 
-ALLOWED_HOSTS = ["*"]  # Configure this based on your domain
+ALLOWED_HOSTS: list[str] = ["*"]  # Configure this based on your domain
 
 
 # Application definition
@@ -66,12 +66,11 @@ MIDDLEWARE: list[str] = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
-    "core.middleware.CustomCsrfMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
-    "allauth.account.middleware.AccountMiddleware",  # Required for django-allauth
+    "allauth.account.middleware.AccountMiddleware",
 ]
 
 ROOT_URLCONF = "job_applier.urls"
@@ -103,7 +102,7 @@ WSGI_APPLICATION = "job_applier.wsgi.application"
 
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/jobapplier"),
+        default=os.getenv("DATABASE_URL"),
         conn_max_age=600,
     )
 }
@@ -130,13 +129,9 @@ AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
-
 LANGUAGE_CODE = "en-us"
-
 TIME_ZONE = "UTC"
-
 USE_I18N = True
-
 USE_TZ = True
 
 
@@ -180,43 +175,90 @@ LOGIN_REDIRECT_URL = "core:profile"
 LOGOUT_REDIRECT_URL = "core:home"
 
 # AWS S3 Settings
+AWS_S3_REGION_NAME = "us-east-1"
+AWS_STORAGE_BUCKET_NAME = "job-applier-files"
 AWS_ACCESS_KEY_ID: str | None = os.getenv("AWS_ACCESS_KEY_ID")
 AWS_SECRET_ACCESS_KEY: str | None = os.getenv("AWS_SECRET_ACCESS_KEY")
-AWS_STORAGE_BUCKET_NAME: str | None = os.getenv("AWS_STORAGE_BUCKET_NAME")
-AWS_S3_REGION_NAME: str | None = os.getenv("AWS_S3_REGION_NAME")
 AWS_S3_FILE_OVERWRITE = False
 AWS_DEFAULT_ACL = None
 AWS_S3_VERIFY = True
 AWS_S3_SIGNATURE_VERSION = "s3v4"
 
+# Pinecone Configuration (non-sensitive parts)
+PINECONE_ENVIRONMENT = "us-east-1"
+PINECONE_INDEX = "jobapplier"
+PINECONE_HOST = os.getenv(
+    "PINECONE_HOST", "https://jobapplier-p993bwh.svc.aped-4627-b74a.pinecone.io"
+)
+
+# Model Configuration
+FAST_GOOGLE_MODEL = "gemini-2.5-flash-preview-04-17"
+PRO_GOOGLE_MODEL = "gemini-2.5-pro-preview-05-06"
+OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
+GROK_MODEL: str = os.getenv("GROK_MODEL", "grok-1")
+
+# OAuth Client IDs (these are public)
+GOOGLE_CLIENT_ID = "282027751559-r0ocro82n0n6ibftimraa331gogpa399.apps.googleusercontent.com"
+GITHUB_CLIENT_ID = "Ov23li8zHEpBhxA22rFa"
+LINKEDIN_CLIENT_ID = "78tdz1i9cak3fw"
+
+# Email Configuration (non-sensitive parts)
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+
+# ===========================
+# SENSITIVE CONFIGURATION (from environment)
+# ===========================
+
+# AWS S3 Credentials
+AWS_ACCESS_KEY_ID: str | None = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY: str | None = os.getenv("AWS_SECRET_ACCESS_KEY")
+
+# API Keys
+OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
+PINECONE_API_KEY: str | None = os.getenv("PINECONE_API_KEY")
+TOKEN_GITHUB: str | None = os.getenv("TOKEN_GITHUB")
+GROK_API_KEY: str | None = os.getenv("GROK_API_KEY")
+GOOGLE_API_KEY: str | None = os.getenv("GOOGLE_API_KEY")
+
+# OAuth Secrets
+GOOGLE_CLIENT_SECRET: str | None = os.getenv("GOOGLE_CLIENT_SECRET")
+CLIENT_SECRET_GITHUB: str | None = os.getenv("CLIENT_SECRET_GITHUB")
+LINKEDIN_CLIENT_SECRET: str | None = os.getenv("LINKEDIN_CLIENT_SECRET")
+
+# Email Credentials
+EMAIL_HOST_USER: str | None = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD: str | None = os.getenv("EMAIL_HOST_PASSWORD")
+DEFAULT_FROM_EMAIL: str | None = os.getenv("DEFAULT_FROM_EMAIL", "noreply@jobapplier.com")
+SERVER_EMAIL: str | None = os.getenv("DEFAULT_FROM_EMAIL", "noreply@jobapplier.com")
+
+# LinkedIn Credentials
+LINKEDIN_EMAIL: str | None = os.getenv("LINKEDIN_EMAIL")
+LINKEDIN_PASSWORD: str | None = os.getenv("LINKEDIN_PASSWORD")
+
+# LangSmith Configuration
+LANGSMITH_API_KEY: str | None = os.getenv("LANGSMITH_API_KEY")
+LANGSMITH_TRACING: str = os.getenv("LANGSMITH_TRACING", "false")
+LANGSMITH_ENDPOINT: str = os.getenv("LANGSMITH_ENDPOINT", "https://api.smith.langchain.com")
+LANGSMITH_PROJECT: str = os.getenv("LANGSMITH_PROJECT", "job_applier_app")
+
 # Use S3 for media files
-# Django Storages configuration (replaces DEFAULT_FILE_STORAGE)
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
         "OPTIONS": {
-            # Options can be added here if needed, e.g.:
-            # "bucket_name": AWS_STORAGE_BUCKET_NAME,
-            # "region_name": AWS_S3_REGION_NAME,
-            # "access_key": AWS_ACCESS_KEY_ID, # If not using IAM roles
-            # "secret_key": AWS_SECRET_ACCESS_KEY, # If not using IAM roles
+            "bucket_name": AWS_STORAGE_BUCKET_NAME,
+            "region_name": AWS_S3_REGION_NAME,
+            "access_key": AWS_ACCESS_KEY_ID,  # If not using IAM roles
+            "secret_key": AWS_SECRET_ACCESS_KEY,  # If not using IAM roles
         },
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
-
-# OpenAI Settings
-OPENAI_API_KEY: str | None = os.getenv("OPENAI_API_KEY")
-OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
-
-# GitHub API Settings
-GITHUB_TOKEN: str | None = os.getenv("GITHUB_TOKEN")
-
-# Grok API Settings
-GROK_API_KEY: str | None = os.getenv("GROK_API_KEY")
-GROK_MODEL: str = os.getenv("GROK_MODEL", "grok-1")
 
 # REST Framework settings
 REST_FRAMEWORK: dict[str, Any] = {
@@ -262,34 +304,33 @@ SPECTACULAR_SETTINGS: dict[str, Any] = {
 TEMPERATURE = 0.0
 
 # Security Settings
-SECURE_SSL_REDIRECT = False  # Disable SSL redirect for development
-SESSION_COOKIE_SECURE = False  # Allow non-HTTPS cookies in development
+SECURE_SSL_REDIRECT: bool = not DEBUG  # Disable SSL redirect for development
+SESSION_COOKIE_SECURE: bool = not DEBUG  # Allow non-HTTPS cookies in development
 CSRF_COOKIE_SECURE = False  # Allow non-HTTPS CSRF cookies in development
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
-SECURE_HSTS_SECONDS = 31536000  # 1 year
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS: bool = not DEBUG
+SECURE_HSTS_PRELOAD: bool = not DEBUG
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = DEBUG  # Allow all origins in development, restrict in production
+CORS_ALLOW_ALL_ORIGINS: bool = DEBUG  # Allow all origins in development, restrict in production
 CORS_ALLOW_CREDENTIALS = True
+
+# Update CORS and CSRF for production
 CORS_ALLOWED_ORIGINS: list[str] = [
-    "https://jobs.lever.co",
+    "https://job-applier-app.fly.dev",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://localhost:8001",
-    "http://127.0.0.1:8001",
 ]
 
 # CSRF settings
 CSRF_TRUSTED_ORIGINS: list[str] = [
+    "https://job-applier-app.fly.dev",
     "chrome-extension://gjhaikeodndcnemkibilnmbplmicjnif",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
-    "http://localhost:8001",
-    "http://127.0.0.1:8001",
 ]
 
 # Disable CSRF for API endpoints
@@ -304,14 +345,10 @@ CSRF_EXEMPT_URLS: list[str] = [
     "/api/",
 ]
 
-# LinkedIn Settings
-LINKEDIN_EMAIL: str | None = os.getenv("LINKEDIN_EMAIL")
-LINKEDIN_PASSWORD: str | None = os.getenv("LINKEDIN_PASSWORD")
-
 # Celery Configuration
-CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 USE_CELERY_FOR_RESUMES = True
-CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 CELERY_ACCEPT_CONTENT: list[str] = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
@@ -328,17 +365,6 @@ SECURE_HSTS_SECONDS = 31536000  # 1 year
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 
-# Whitenoise for static files
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-
-# Google API Settings
-FAST_GOOGLE_MODEL: str | None = os.environ.get("FAST_GOOGLE_MODEL")
-PRO_GOOGLE_MODEL: str | None = os.environ.get("PRO_GOOGLE_MODEL")
-GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-
-# URLField default scheme (to address RemovedInDjango60Warning)
-# Set to True to default to 'https', False to default to 'http' (current behavior)
 FORMS_URLFIELD_ASSUME_HTTPS = True  # Or False, depending on your preference
 
 LOGGING = {
@@ -394,6 +420,7 @@ LOGGING = {
 }
 
 
+# Social Account Providers
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": [
@@ -404,20 +431,18 @@ SOCIALACCOUNT_PROVIDERS = {
             "access_type": "online",
         },
         "OAUTH_PKCE_ENABLED": True,
+        "APP": {
+            "client_id": GOOGLE_CLIENT_ID,
+            "secret": os.getenv("GOOGLE_CLIENT_SECRET"),
+        },
     },
     "github": {
         "SCOPE": [
-            "user:email",  # To get user's email
+            "user:email",
         ],
+        "APP": {
+            "client_id": GITHUB_CLIENT_ID,
+            "secret": os.getenv("CLIENT_SECRET_GITHUB"),
+        },
     },
 }
-
-# Email settings
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_USE_TLS = True
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
-DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
-SERVER_EMAIL = os.getenv("DEFAULT_FROM_EMAIL")
