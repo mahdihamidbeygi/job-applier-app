@@ -42,8 +42,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.sites",  # Required for allauth
-    "core",
+    "django.contrib.sites",
     "widget_tweaks",
     "rest_framework",
     "storages",
@@ -55,6 +54,7 @@ INSTALLED_APPS: list[str] = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
+    "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -317,7 +317,8 @@ CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
 # Google API Settings
-GOOGLE_MODEL: str | None = os.environ.get("GOOGLE_MODEL")
+FAST_GOOGLE_MODEL: str | None = os.environ.get("FAST_GOOGLE_MODEL")
+PRO_GOOGLE_MODEL: str | None = os.environ.get("PRO_GOOGLE_MODEL")
 GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 

@@ -6,12 +6,16 @@ import json
 import logging
 import os
 from typing import Any, Dict
+import time
+from pathlib import Path
 
 import requests
 from django.conf import settings
 from google import genai
 from google.api_core import retry
 from google.genai import types
+import httpx
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -304,7 +308,7 @@ class GoogleClient(BaseLLMClient):
 
     def generate_text(
         self,
-        prompt: str,
+        prompt: str | list,
         **kwargs,
     ) -> str:
         """
@@ -395,6 +399,29 @@ class GoogleClient(BaseLLMClient):
             return json.loads(json_text)
         else:
             raise Exception("Failed to extract valid JSON from response")
+
+    def upload_file(self, file_path: str | Path):
+        """
+        Upload a file to the Google API.
+
+        Args:
+            file_path: Path to the file to upload
+
+        Returns:
+            The uploaded file object
+        """
+        try:
+            file_path = Path(file_path)
+
+            response = types.Part.from_bytes(
+                data=file_path.read_bytes(),
+                mime_type="application/pdf",
+            )
+
+            return response
+        except Exception as e:
+            logger.error(f"Error uploading file: {str(e)}")
+            raise Exception(f"Error uploading file: {str(e)}")
 
 
 class OpenAIClient(BaseLLMClient):

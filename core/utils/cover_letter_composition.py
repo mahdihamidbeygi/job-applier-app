@@ -11,6 +11,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
 from core.utils.agents.job_agent import JobAgent
 from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.llm_clients import GoogleClient, GrokClient
+from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,6 @@ class CoverLetterComposition:
         self.job_agent: JobAgent = job_agent
         self.buffer = BytesIO()
         self.styles = self._setup_styles()
-        self.grok_client = GrokClient(model="grok-2-1212", temperature=0.0)
         self.llm = GoogleClient()
 
     def _setup_styles(self) -> Dict[str, ParagraphStyle]:
