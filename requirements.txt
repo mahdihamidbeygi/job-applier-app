@@ -36,5 +36,3 @@ google-auth-oauthlib>=1.2.0
 django-allauth>=0.61.1
 google-generativeai==0.3.0 
 
-# Utilities
-PyPDF2>=3.0.1
