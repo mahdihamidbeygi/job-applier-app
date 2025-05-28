@@ -35,6 +35,9 @@ COPY . .
 # Create static files directory
 RUN mkdir -p staticfiles
 
+ARG DJANGO_SECRET_KEY
+ENV SECRET_KEY=$DJANGO_SECRET_KEY
+
 # Collect static files
 RUN python manage.py collectstatic --noinput
 

@@ -2,6 +2,8 @@ app = "job-applier-app"
 primary_region = "iad"
 
 [build]
+  [build.args]
+    DJANGO_SECRET_KEY="@60hffxk70=y*m3$@gc+b)5oiy!smc!y4qzji#o4c_xy=)^k97"
 
 [env]
   PORT = "8000"
