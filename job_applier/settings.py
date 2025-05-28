@@ -44,8 +44,7 @@ INSTALLED_APPS: list[str] = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.sites",  # Required for allauth
-    "core",
+    "django.contrib.sites",
     "widget_tweaks",
     "rest_framework",
     "rest_framework_simplejwt",
@@ -59,6 +58,7 @@ INSTALLED_APPS: list[str] = [
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
     "sslserver",
+    "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE: list[str] = [
@@ -332,7 +332,8 @@ SECURE_HSTS_PRELOAD = True
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Google API Settings
-GOOGLE_MODEL: str | None = os.environ.get("GOOGLE_MODEL")
+FAST_GOOGLE_MODEL: str | None = os.environ.get("FAST_GOOGLE_MODEL")
+PRO_GOOGLE_MODEL: str | None = os.environ.get("PRO_GOOGLE_MODEL")
 GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 

@@ -563,13 +563,13 @@ class WorkExperience(TimestampMixin):
     )
     company = models.CharField(max_length=200)
     position = models.CharField(max_length=200)
-    location = models.CharField(max_length=200, blank=True)
-    start_date = models.DateField()
+    location = models.CharField(max_length=200, blank=True, null=True)
+    start_date = models.DateField(null=True)
     end_date = models.DateField(null=True, blank=True)
     current = models.BooleanField(default=False)
-    description = models.TextField()
-    achievements = models.TextField(blank=True)
-    technologies = models.TextField(blank=True)
+    description = models.TextField(null=True)
+    achievements = models.TextField(blank=True, null=True)
+    technologies = models.TextField(blank=True, null=True)
     order = models.IntegerField(default=0)
 
     class Meta:
@@ -582,13 +582,13 @@ class WorkExperience(TimestampMixin):
 class Project(TimestampMixin):
     profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="projects")
     title = models.CharField(max_length=200)
-    description = models.TextField()
-    start_date = models.DateField()
+    description = models.TextField(null=True, blank=True)
+    start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     current = models.BooleanField(default=False)
-    technologies = models.TextField(blank=True)
-    github_url = models.URLField(blank=True)
-    live_url = models.URLField(blank=True)
+    technologies = models.TextField(null=True, blank=True)
+    github_url = models.URLField(null=True, blank=True)
+    live_url = models.URLField(null=True, blank=True)
     order = models.IntegerField(default=0)
 
     class Meta:
@@ -600,14 +600,14 @@ class Project(TimestampMixin):
 
 class Education(TimestampMixin):
     profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="education")
-    institution = models.CharField(max_length=200)
+    institution = models.CharField(max_length=200, null=True, blank=True)
     degree = models.CharField(max_length=200)
     field_of_study = models.CharField(max_length=200)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
-    current = models.BooleanField(default=False)
+    current = models.BooleanField(default=False, null=True, blank=True)
     gpa = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
-    achievements = models.TextField(blank=True)
+    achievements = models.TextField(null=True, blank=True)
     order = models.IntegerField(default=0)
 
     class Meta:
@@ -622,11 +622,11 @@ class Certification(TimestampMixin):
         UserProfile, on_delete=models.CASCADE, related_name="certifications"
     )
     name = models.CharField(max_length=200)
-    issuer = models.CharField(max_length=200)
+    issuer = models.CharField(max_length=200, null=True, blank=True)
     issue_date = models.DateField(null=True, blank=True)
     expiry_date = models.DateField(null=True, blank=True)
-    credential_id = models.CharField(max_length=100, blank=True)
-    credential_url = models.URLField(blank=True)
+    credential_id = models.CharField(max_length=100, null=True, blank=True)
+    credential_url = models.URLField(null=True, blank=True)
     order = models.IntegerField(default=0)
 
     class Meta:
@@ -639,13 +639,13 @@ class Certification(TimestampMixin):
 class Publication(TimestampMixin):
     profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="publications")
     title = models.CharField(max_length=500)
-    authors = models.TextField()
-    publication_date = models.DateField()
-    publisher = models.CharField(max_length=200)
-    journal = models.CharField(max_length=200, blank=True)
-    doi = models.CharField(max_length=100, blank=True)
-    url = models.URLField(blank=True)
-    abstract = models.TextField(blank=True)
+    authors = models.TextField(blank=True, null=True)
+    publication_date = models.DateField(blank=True, null=True)
+    publisher = models.CharField(max_length=200, null=True, blank=True)
+    journal = models.CharField(max_length=200, null=True, blank=True)
+    doi = models.CharField(max_length=100, null=True, blank=True)
+    url = models.URLField(null=True, blank=True)
+    abstract = models.TextField(null=True, blank=True)
     order = models.IntegerField(default=0)
 
     class Meta:

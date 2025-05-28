@@ -1,93 +1,82 @@
-# core/signals.py
+from django.db.models.signals import post_save, post_delete
+from django.dispatch import receiver
 import logging
 
-from django.contrib.auth.models import User
-from django.db.models.signals import post_save
-from django.dispatch import receiver
-
-from .models import (
-    Certification,
-    Education,
-    Project,
-    Publication,
-    Skill,
+from core.models import (
     UserProfile,
     WorkExperience,
+    Education,
+    Project,
+    Certification,
+    Publication,
+    Skill,
+    JobListing,
+    ChatMessage,  # Assuming ChatMessage changes might also warrant a refresh
 )
-
-# Import other relevant profile models if needed
-from .utils.agents.assistant_agent import AssistantAgent as PrimaryProcessor
+from core.tasks import refresh_vector_store_async
 
 logger = logging.getLogger(__name__)
 
-# List of models that should trigger a vector store refresh
-PROFILE_RELATED_MODELS = [
-    UserProfile,
-    WorkExperience,
-    Education,
-    Project,
-    Skill,
-    Certification,
-    Publication,
-]
 
-
-@receiver(post_save, sender=User)  # Also trigger on User model changes (like email)
-@receiver(post_save, sender=UserProfile)
-@receiver(post_save, sender=WorkExperience)
-@receiver(post_save, sender=Education)
-@receiver(post_save, sender=Project)
-@receiver(post_save, sender=Skill)
-@receiver(post_save, sender=Certification)
-@receiver(post_save, sender=Publication)
-def refresh_vector_store_on_update(sender, instance, created, **kwargs):
+def get_user_id_from_instance(instance):
     """
-    Signal handler to refresh the RAG vector store when profile-related data changes.
+    Helper function to extract user_id from various model instances.
     """
-    user_id = None
-    model_name = sender.__name__
+    if hasattr(instance, "user_id") and instance.user_id is not None:
+        return instance.user_id
+    if hasattr(instance, "user") and hasattr(
+        instance.user, "id"
+    ):  # e.g., UserProfile instance itself
+        return instance.user.id
+    if hasattr(instance, "profile") and hasattr(
+        instance.profile, "user_id"
+    ):  # e.g., WorkExperience, Education etc.
+        return instance.profile.user_id
+    logger.debug(
+        f"Could not directly find user_id or profile.user_id on instance of {type(instance)}"
+    )
+    return None
 
-    try:
-        if isinstance(instance, User):
-            user_id = instance.id
-        elif hasattr(instance, "user"):  # For UserProfile
-            user_id = instance.user.id
-        elif hasattr(instance, "profile") and hasattr(
-            instance.profile, "user"
-        ):  # For related models like WorkExperience
-            user_id = instance.profile.user.id
-        else:
-            # Use string formatting to sanitize the log message
-            logger.warning(
-                "Could not determine user_id for updated %s instance %s", model_name, instance.pk
-            )
-            return
 
-        if user_id:
-            # Use string formatting to sanitize the log message
+@receiver([post_save, post_delete], sender=UserProfile)
+@receiver([post_save, post_delete], sender=WorkExperience)
+@receiver([post_save, post_delete], sender=Education)
+@receiver([post_save, post_delete], sender=Project)
+@receiver([post_save, post_delete], sender=Certification)
+@receiver([post_save, post_delete], sender=Publication)
+@receiver([post_save, post_delete], sender=Skill)
+@receiver([post_save, post_delete], sender=JobListing)
+@receiver([post_save, post_delete], sender=ChatMessage)
+def refresh_vector_store_on_update(sender, instance, **kwargs):
+    """
+    Signal handler to trigger vector store refresh when monitored models change.
+    """
+    user_id = get_user_id_from_instance(instance)
+
+    if user_id:
+        try:
+            created = kwargs.get("created", False)  # For post_save
+            action = "created/updated" if kwargs.get("signal") == post_save else "deleted"
+            if (
+                kwargs.get("signal") == post_save
+                and not created
+                and not kwargs.get("update_fields")
+            ):
+                action = "updated (full save)"
+
             logger.info(
-                "Detected change in %s for user %s. Triggering vector store refresh.",
-                model_name,
-                user_id,
+                f"Signal received: {sender.__name__} instance (ID: {instance.pk}) was {action}. "
+                f"Queueing vector store refresh for user_id: {user_id}."
             )
-
-            # Option 1: Synchronous Refresh (Simpler, might block request)
-            # from .utils.rag import RAGProcessor
-            # try:
-            #     rag_processor = RAGProcessor(user_id=user_id)
-            #     rag_processor.refresh_vectorstore()
-            #     logger.info("Successfully refreshed vector store for user %s", user_id)
-            # except Exception as e:
-            #     logger.error("Error refreshing vector store for user %s: %s", user_id, e)
-
-            # Option 2: Asynchronous Refresh (Recommended for performance)
-            from .tasks import refresh_vector_store_async  # Create this task
-
-            refresh_vector_store_async.delay(user_id)
-            logger.info("Queued async vector store refresh for user %s", user_id)
-
-    except Exception as e:
-        # Use string formatting to sanitize the log message
-        logger.error(
-            "Error in signal handler refresh_vector_store_on_update for %s: %s", model_name, e
+            refresh_vector_store_async.delay(user_id=user_id)
+        except Exception as e:
+            logger.error(
+                f"Error queueing vector store refresh for user_id {user_id} "
+                f"triggered by {sender.__name__} (ID: {instance.pk}): {e}",
+                exc_info=True,
+            )
+    else:
+        logger.warning(
+            f"Could not determine user_id from instance of {sender.__name__} (ID: {instance.pk}). "
+            f"Vector store refresh not queued."
         )

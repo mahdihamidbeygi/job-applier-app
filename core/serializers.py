@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+from typing import Union
 
 from .models import (
     Certification,
@@ -12,27 +14,33 @@ from .models import (
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
+
+    years_of_experience = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.IntegerField)
+    def get_years_of_experience(self, obj) -> int:
+        """Calculate years of experience"""
+        # Your existing calculation logic here
+        if hasattr(obj, "years_of_experience") and obj.years_of_experience:
+            return obj.years_of_experience
+
+        # Calculate from work experiences if not directly available
+        if hasattr(obj, "work_experiences"):
+            from datetime import date
+
+            total_years = 0
+            for exp in obj.work_experiences.all():
+                if exp.start_date:
+                    end_date = exp.end_date or date.today()
+                    years = (end_date - exp.start_date).days / 365.25
+                    total_years += years
+            return int(total_years)
+
+        return 0
+
     class Meta:
         model = UserProfile
-        fields = [
-            "id",
-            "phone",
-            "address",
-            "city",
-            "state",
-            "country",
-            "postal_code",
-            "website",
-            "linkedin_url",
-            "github_url",
-            "headline",
-            "professional_summary",
-            "current_position",
-            "company",
-            "years_of_experience",
-            "resume",
-            "github_data",
-        ]
+        fields = "__all__"
         read_only_fields = ["id"]
 
 

@@ -1,13 +1,17 @@
 from typing import Any, Dict, List
+import os
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
-from langchain_ollama import OllamaEmbeddings
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 
 class JobKnowledgeBase:
     def __init__(self, persist_directory: str = "./job_vectors"):
-        self.embeddings = OllamaEmbeddings(model="llama3:latest")
+        self.embeddings = GoogleGenerativeAIEmbeddings(
+            model="models/embedding-004",
+            google_api_key=os.environ.get("GOOGLE_API_KEY"),
+        )
         self.vectorstore = Chroma(
             persist_directory=persist_directory,
             embedding_function=self.embeddings,

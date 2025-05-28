@@ -6,18 +6,29 @@ import random
 import shutil
 import tempfile
 import time
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 import git
-import openai
+from google.genai.types import File
 import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
 
 from core.utils.llm_clients import GoogleClient
+from django.conf import settings
+from core.models.profile import (
+    UserProfile,
+    WorkExperience,
+    Education,
+    Project,
+    Certification,
+    Publication,
+    Skill,
+)
+from django.core.files.uploadedfile import UploadedFile
 
 # For parsing pyproject.toml
 try:
@@ -32,7 +43,7 @@ logger = logging.getLogger(__name__)
 class GitHubProfileImporter:
     def __init__(self, github_username: str):
         self.github_username = github_username
-        self.client = GoogleClient(model="gemini-2.5-flash-preview-04-17")
+        self.client = GoogleClient(model=settings.FAST_GOOGLE_MODEL)
         # self.client_fast = GoogleClient()
         # Create a fresh temporary directory for this import session
         self.temp_dir: str = tempfile.mkdtemp(prefix="github_import_")
@@ -41,8 +52,8 @@ class GitHubProfileImporter:
         self.headers: Dict[str, str] = {"Accept": "application/vnd.github.v3+json"}
         self.repos_url: str = self.url_user + "/repos"
         # Add GitHub token if available in settings
-        if hasattr(settings, "GITHUB_TOKEN") and settings.GITHUB_TOKEN:
-            self.headers["Authorization"] = f"token {settings.GITHUB_TOKEN}"
+        if hasattr(settings, "TOKEN_GITHUB") and settings.TOKEN_GITHUB:
+            self.headers["Authorization"] = f"token {settings.TOKEN_GITHUB}"
         else:
             logger.error("No GitHub token found in settings")
             raise ValueError("No GitHub token found in settings")
@@ -718,334 +729,197 @@ Format as JSON:
 class ResumeImporter:
     """Class for handling resume uploads and parsing."""
 
-    def __init__(self, resume_file):
-        self.resume_file = resume_file
-        self.openai_client = openai.OpenAI(api_key=settings.OPENAI_API_KEY)
+    EXCLUSION_PROPS_PROF: List[str] = [
+        "id",
+        "user",
+        "created_at",
+        "updated_at",
+        "last_github_refresh",
+        "github_data",
+        "parsed_resume_data",
+        "resume",
+    ]
+    EXCLUSION_PROPS: List[str] = [
+        "id",
+        "user",
+        "created_at",
+        "updated_at",
+        "profile",
+        "order",
+        "credential_id",
+    ]
 
-    def parse_date(self, date_str):
-        """Parse date string into a datetime.date object."""
-        if not date_str:
-            return None
+    def __init__(self, uploaded_resume_file: UploadedFile) -> None:
+        self.google_client = GoogleClient(model=settings.PRO_GOOGLE_MODEL)
 
+        self._temp_file_path: Optional[str] = None  # Store path of the temp file
+
+        if not isinstance(uploaded_resume_file, UploadedFile):
+            raise TypeError("ResumeImporter expects an Django UploadedFile object.")
+
+        original_suffix = Path(uploaded_resume_file.name).suffix
+        # Create a temporary file. It's opened in 'w+b' mode.
+        # delete=False means we are responsible for deleting it.
+        temp_f = tempfile.NamedTemporaryFile(delete=False, suffix=original_suffix)
         try:
-            # Try different date formats
-            for fmt in ["%Y-%m-%d", "%B %Y", "%b %Y", "%m/%Y", "%m/%d/%Y", "%Y"]:
-                try:
-                    return datetime.strptime(date_str.strip(), fmt).date()
-                except ValueError:
-                    continue
-            return None
-        except Exception:
-            return None
-
-    def extract_text(self) -> str:
-        """Extract text from the resume file."""
-        try:
-            if self.resume_file.name.endswith(".pdf"):
-                import PyPDF2
-
-                pdf_reader = PyPDF2.PdfReader(self.resume_file)
-                text = ""
-                for page in pdf_reader.pages:
-                    text += page.extract_text()
-                return text
-            elif self.resume_file.name.endswith((".doc", ".docx")):
-                import docx
-
-                doc = docx.Document(self.resume_file)
-                text = ""
-                for paragraph in doc.paragraphs:
-                    text += paragraph.text + "\n"
-                return text
-            else:
-                raise ValueError("Unsupported file format. Please upload PDF or Word document.")
+            for chunk in uploaded_resume_file.chunks():
+                temp_f.write(chunk)
+            temp_f.flush()  # Ensure all data is written to disk
+            self._temp_file_path = temp_f.name  # Get the path (string)
         except Exception as e:
-            raise Exception(f"Error extracting text from resume: {str(e)}")
+            # Clean up if init fails mid-way
+            if Path(temp_f.name).exists():  # Path(temp_f.name) is correct here
+                try:
+                    os.remove(temp_f.name)
+                except OSError:  # pragma: no cover
+                    pass  # Ignore if removal fails for some reason
+            raise Exception(f"Failed to process uploaded resume file: {e}")
+        finally:
+            if not temp_f.closed:  # Ensure it's closed
+                temp_f.close()
 
-    def parse_with_chatgpt(self, text: str) -> Dict:
+        # Now validate the path of the temp file.
+        # self._temp_file_path is a string path.
+        self.validated_resume_path: Path = self._validate_resume_path(self._temp_file_path)
+
+    def _cleanup_temp_file(self):
+        if self._temp_file_path:
+            try:
+                temp_path = Path(self._temp_file_path)
+                if temp_path.exists():
+                    os.remove(temp_path)
+                    logger.debug(f"Temporary resume file {self._temp_file_path} removed.")
+            except Exception as e:  # pragma: no cover
+                logger.error(f"Error cleaning up temporary resume file {self._temp_file_path}: {e}")
+            self._temp_file_path = None
+
+    def _validate_resume_path(self, file_path_str: str) -> Path:
+        """Validate the resume file."""
+
+        # file_path_str is expected to be a string path.
+        file_path = Path(file_path_str)  # Converts the string path to a Path object.
+
+        if not file_path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
+
+        if file_path.suffix.lower() not in [".pdf", ".doc", ".docx"]:
+            raise ValueError("Unsupported file format. Please upload PDF or Word document.")
+
+        if not file_path.is_file():
+            raise IsADirectoryError(f"The path {file_path} is a directory, not a file.")
+
+        if not file_path.is_absolute():
+            file_path = file_path.resolve() or file_path.absolute()
+
+        return file_path
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self._cleanup_temp_file()
+
+    def parse_with_llm(self, resume_file) -> Dict:
         """Parse resume text using ChatGPT to extract structured information."""
         try:
+
+            # Pass exclude_fields to get_schema to remove 'id' and 'user'
+            user_profile_schema_properties = json.dumps(
+                UserProfile.get_schema(exclude_fields=self.EXCLUSION_PROPS_PROF)["properties"],
+                indent=2,
+            )
+            work_experience_schema_properties = json.dumps(
+                WorkExperience.get_schema(exclude_fields=self.EXCLUSION_PROPS)["properties"],
+                indent=2,
+            )
+            education_schema_properties = json.dumps(
+                Education.get_schema(exclude_fields=self.EXCLUSION_PROPS)["properties"],
+                indent=2,
+            )
+            project_schema_properties = json.dumps(
+                Project.get_schema(exclude_fields=self.EXCLUSION_PROPS)["properties"],
+                indent=2,
+            )
+            certification_schema_properties = json.dumps(
+                Certification.get_schema(exclude_fields=self.EXCLUSION_PROPS)["properties"],
+                indent=2,
+            )
+            skill_schema_properties = json.dumps(
+                Skill.get_schema(exclude_fields=self.EXCLUSION_PROPS)["properties"],
+                indent=2,
+            )
+            publication_schema_properties = json.dumps(
+                Publication.get_schema(exclude_fields=self.EXCLUSION_PROPS)["properties"],
+                indent=2,
+            )
+
             # First, get basic information
-            basic_prompt = f"""Please help me fill out these fields from the resume. Only provide the answers in exactly this format:
+            all_prompt = f"""
+                    You are an expert resume parsing assistant. Your task is to extract information from the provided resume text and structure it as a single, valid JSON object.
+                    Adhere strictly to the specified field names and data types.
 
-Name: [full name]
-Email: [email address]
-Phone: [phone number]
-Location: [city, state/country]
-LinkedIn URL: [full LinkedIn URL]
-GitHub URL: [full GitHub URL]
-Professional Summary: [brief summary]
+                    **Output Format:**
+                    Your entire response MUST be a single JSON object. Do not include any text, explanations, or markdown before or after the JSON.
 
-Resume text:
-{text}"""
+                    **JSON Structure and Field Definitions:**
 
-            basic_response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that extracts information from resumes. Only provide the requested information in the exact format specified.",
-                    },
-                    {"role": "user", "content": basic_prompt},
-                ],
-                temperature=0.1,
+                    1.  `"basic_info"`: (Object) Contains general information about the candidate.
+                        *   Properties for this object:
+                            {user_profile_schema_properties}
+
+                    2.  `"work_experiences"`: (List of Objects) Each object in the list represents a distinct work experience entry.
+                        *   Properties for each work experience object:
+                            {work_experience_schema_properties}
+                        *   Example of the list structure: `[ {{ "company": "Example Corp", "position": "Developer", ... }}, {{ ... }} ]`
+
+                    3.  `"education"`: (List of Objects) Each object in the list represents an education entry.
+                        *   Properties for each education object:
+                            {education_schema_properties}
+                        *   Example of the list structure: `[ {{ "institution": "University of Example", "degree": "B.S.", ... }}, {{ ... }} ]`
+
+                    4.  `"projects"`: (List of Objects) Each object in the list represents a project.
+                        *   Properties for each project object:
+                            {project_schema_properties}
+                        *   Example of the list structure: `[ {{ "title": "Project X", "description": "...", ... }}, {{ ... }} ]`
+
+                    5.  `"certifications"`: (List of Objects) Each object in the list represents a certification.
+                        *   Properties for each certification object:
+                            {certification_schema_properties}
+                        *   Example of the list structure: `[ {{ "name": "Certified Example Professional", "issuer": "...", ... }}, {{ ... }} ]`
+
+                    6.  `"skills"`: (List of Objects) Each object in the list represents a skill.
+                        *   Properties for each skill object:
+                            {skill_schema_properties}
+                        *   Example of the list structure: `[ {{ "name": "Python", "category": "Programming Language", ... }}, {{ ... }} ]`
+
+                    7.  `"publications"`: (List of Objects) Each object in the list represents a publication.
+                        *   Properties for each publication object:
+                            {publication_schema_properties}
+                        *   Example of the list structure: `[ {{ "title": "Research Paper on Example", "authors": "...", ... }}, {{ ... }} ]`
+
+                    **Data Handling Guidelines:**
+                    *   If information for a specific field is not found in the resume, use `null` for object or string fields. For fields expecting a list, use an empty list `[]`.
+                    *   For date fields (e.g., `start_date`, `end_date`, `publication_date`):
+                        *   If the full date is available, format it as "YYYY-MM-DD".
+                        *   If only year and month are available, use "YYYY-MM".
+                        *   If only year is available, use "YYYY".
+                        *   If a date is ongoing (e.g., "Present" for an end date), represent the `end_date` as `null`. If the schema includes a "current" boolean field (like in WorkExperience or Education), ensure it is set to `true`.
+                    *   Ensure all string values are properly escaped within the JSON.
+
+                    The resume text will be provided next. Begin your JSON output immediately.
+                    """
+
+            response = self.google_client.generate_text(
+                prompt=[resume_file, all_prompt], temperature=0.1
             )
+            try:
+                if "```json" in response:
+                    response = response.replace("```json", "").replace("```", "")
+                response: dict = json.loads(response)
+            except Exception as e:
+                logger.error(f"Error parsing response: {str(e)}")
 
-            # Get work experience
-            work_prompt = f"""List all work experiences from this resume. For each position, provide in this exact format:
-
-Company: [company name]
-Position: [position title]
-Start Date: [date in YYYY-MM-DD format]
-End Date: [date in YYYY-MM-DD format or 'Present' if current]
-Description: [key responsibilities]
-Technologies: [comma-separated list of technologies used]
-
-Resume text:
-{text}"""
-
-            work_response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that extracts work experience from resumes. List each position separately and use the exact format specified.",
-                    },
-                    {"role": "user", "content": work_prompt},
-                ],
-                temperature=0.1,
-            )
-
-            # Get education
-            education_prompt = f"""List all education entries from this resume. For each entry, provide in this exact format:
-
-Institution: [school name]
-Degree: [degree name]
-Field of Study: [field name]
-Start Date: [date in YYYY-MM-DD format]
-End Date: [date in YYYY-MM-DD format or 'Present' if current]
-GPA: [numeric value between 0-4.0, or leave empty if not mentioned]
-Achievements: [comma-separated list of achievements]
-
-Resume text:
-{text}"""
-
-            education_response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that extracts education information from resumes. List each education entry separately and use the exact format specified.",
-                    },
-                    {"role": "user", "content": education_prompt},
-                ],
-                temperature=0.1,
-            )
-
-            # Get projects
-            projects_prompt = f"""List all projects from this resume. For each project, provide in this exact format:
-
-Title: [project name]
-Description: [brief description]
-Start Date: [date in YYYY-MM-DD format]
-End Date: [date in YYYY-MM-DD format or 'Present' if current]
-Technologies: [comma-separated list of technologies]
-GitHub URL: [GitHub URL if available]
-Live URL: [Live URL if available]
-
-Resume text:
-{text}"""
-
-            projects_response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that extracts project information from resumes. List each project separately and use the exact format specified.",
-                    },
-                    {"role": "user", "content": projects_prompt},
-                ],
-                temperature=0.1,
-            )
-
-            # Get certifications
-            certifications_prompt = f"""List all certifications from this resume. For each certification, provide in this exact format:
-
-Name: [certification name]
-Issuer: [issuing organization]
-Issue Date: [date in YYYY-MM-DD format]
-Expiry Date: [date in YYYY-MM-DD format or leave empty if no expiry]
-Credential ID: [credential ID if available]
-URL: [verification URL if available]
-
-Resume text:
-{text}"""
-
-            certifications_response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that extracts certification information from resumes. List each certification separately and use the exact format specified.",
-                    },
-                    {"role": "user", "content": certifications_prompt},
-                ],
-                temperature=0.1,
-            )
-
-            # Get publications
-            publications_prompt = f"""List all publications from this resume. For each publication, provide in this exact format:
-
-Title: [publication title]
-Authors: [comma-separated list of authors]
-Publication Date: [date in YYYY-MM-DD format]
-Publisher: [publisher name]
-Journal: [journal name if applicable]
-DOI: [DOI if available]
-URL: [URL if available]
-Abstract: [brief abstract if available]
-
-Resume text:
-{text}"""
-
-            publications_response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that extracts publication information from resumes. List each publication separately and use the exact format specified.",
-                    },
-                    {"role": "user", "content": publications_prompt},
-                ],
-                temperature=0.1,
-            )
-
-            # Get skills with categories
-            skills_prompt = f"""List all skills from this resume, categorized by type. Use this exact format for each skill:
-
-Name: [skill name]
-Category: [one of: programming, frameworks, databases, tools, soft_skills, languages, other]
-Proficiency: [number between 1-5]
-
-Resume text:
-{text}"""
-
-            skills_response = self.openai_client.chat.completions.create(
-                model=settings.OPENAI_MODEL,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "You are a helpful assistant that extracts and categorizes skills from resumes. For each skill, provide the name, category, and a proficiency level from 1-5. Use the exact format specified.",
-                    },
-                    {"role": "user", "content": skills_prompt},
-                ],
-                temperature=0.1,
-            )
-
-            # Process responses into a structured format
-            def parse_key_value_response(response_text):
-                result = {}
-                current_key = None
-                for line in response_text.strip().split("\n"):
-                    if ":" in line:
-                        key, value = line.split(":", 1)
-                        key = key.strip().lower().replace(" ", "_")
-                        value = value.strip()
-
-                        # Handle dates specifically
-                        if key in [
-                            "start_date",
-                            "end_date",
-                            "issue_date",
-                            "expiry_date",
-                            "publication_date",
-                        ]:
-                            if value.lower() == "present":
-                                if key == "end_date":
-                                    result["current"] = True
-                                    value = None
-                            else:
-                                parsed_date = self.parse_date(value)
-                                if parsed_date:
-                                    value = parsed_date.isoformat()
-                                else:
-                                    value = None
-
-                        # Handle proficiency
-                        if key == "proficiency":
-                            try:
-                                value = int(value)
-                                if value < 1:
-                                    value = 1
-                                elif value > 5:
-                                    value = 5
-                            except (ValueError, TypeError):
-                                value = 3  # Default proficiency
-
-                        result[key] = value
-                return result
-
-            # Structure all the data
-            basic_info = parse_key_value_response(basic_response.choices[0].message.content)
-
-            # Parse work experiences
-            work_text = work_response.choices[0].message.content
-            work_entries = [entry.strip() for entry in work_text.split("\n\n") if entry.strip()]
-            work_experiences = [parse_key_value_response(entry) for entry in work_entries]
-
-            # Parse education entries
-            education_text = education_response.choices[0].message.content
-            education_entries = [
-                entry.strip() for entry in education_text.split("\n\n") if entry.strip()
-            ]
-            education = [parse_key_value_response(entry) for entry in education_entries]
-
-            # Parse projects
-            projects_text = projects_response.choices[0].message.content
-            project_entries = [
-                entry.strip() for entry in projects_text.split("\n\n") if entry.strip()
-            ]
-            projects = [parse_key_value_response(entry) for entry in project_entries]
-
-            # Parse certifications
-            certifications_text = certifications_response.choices[0].message.content
-            certification_entries = [
-                entry.strip() for entry in certifications_text.split("\n\n") if entry.strip()
-            ]
-            certifications = [parse_key_value_response(entry) for entry in certification_entries]
-
-            # Parse publications
-            publications_text = publications_response.choices[0].message.content
-            publication_entries = [
-                entry.strip() for entry in publications_text.split("\n\n") if entry.strip()
-            ]
-            publications = [parse_key_value_response(entry) for entry in publication_entries]
-
-            # Parse skills
-            skills_text = skills_response.choices[0].message.content
-            skill_entries = [entry.strip() for entry in skills_text.split("\n\n") if entry.strip()]
-            skills = [parse_key_value_response(entry) for entry in skill_entries]
-
-            # Combine everything into the final structure
-            parsed_data = {
-                "personal_info": {
-                    "name": basic_info.get("name", ""),
-                    "email": basic_info.get("email", ""),
-                    "phone": basic_info.get("phone", ""),
-                    "location": basic_info.get("location", ""),
-                    "linkedin": basic_info.get("linkedin_url", ""),
-                    "github": basic_info.get("github_url", ""),
-                    "professional_summary": basic_info.get("professional_summary", ""),
-                },
-                "work_experiences": work_experiences,
-                "education": education,
-                "projects": projects,
-                "certifications": certifications,
-                "publications": publications,
-                "skills": skills,
-            }
-
-            return parsed_data
+            return response
 
         except Exception as e:
             raise Exception(f"Error parsing resume with ChatGPT: {str(e)}")
@@ -1053,70 +927,23 @@ Resume text:
     def parse_resume(self) -> Dict:
         """Parse the resume and return structured data."""
         try:
-            # Extract text from the resume
-            text = self.extract_text()
+            # self.validated_resume_path should be a Path object from _validate_resume_path
+            if (
+                not hasattr(self, "validated_resume_path")
+                or not self.validated_resume_path.exists()
+            ):
+                # .exists() is called on self.validated_resume_path (a Path object)
+                raise FileNotFoundError("Validated resume file path does not exist or was not set.")
+
+            google_uploaded_file: File = self.google_client.upload_file(self.validated_resume_path)
 
             # Parse the text using ChatGPT
-            parsed_data = self.parse_with_chatgpt(text)
-
-            # Add the raw text to the parsed data
-            parsed_data["raw_text"] = text
+            parsed_data = self.parse_with_llm(google_uploaded_file)
 
             return parsed_data
 
         except Exception as e:
             raise Exception(f"Error parsing resume: {str(e)}")
-
-    def parse_resume_text(self, text):
-        """
-        Parse resume text and extract relevant information.
-
-        Args:
-            text (str): The raw text from a resume
-
-        Returns:
-            dict: Extracted data from the resume
-        """
-        try:
-            # Basic implementation - in real-world scenario, this would use NLP
-            # to extract more detailed information
-            result = {
-                "raw_text": text,
-                "work_experience": [],
-                "education": [],
-                "skills": [],
-            }
-
-            # We'd use more sophisticated parsing here in a real implementation
-            # This is a minimal implementation to fix linter errors
-
-            return result
-        except Exception as e:
-            logger.error(f"Error parsing resume text: {str(e)}")
-            return None
-
-    def parse_resume_file(self, file_obj):
-        """
-        Parse resume file (docx, etc.) and extract relevant information.
-
-        Args:
-            file_obj: File object for the resume
-
-        Returns:
-            dict: Extracted data from the resume
-        """
-        try:
-            # For docx files we would use a library like python-docx
-            # This is a minimal implementation to fix linter errors
-
-            # Extract text from the file
-            text = "Resume content would be extracted here"
-
-            # Parse the extracted text
-            return self.parse_resume_text(text)
-        except Exception as e:
-            logger.error(f"Error parsing resume file: {str(e)}")
-            return None
 
 
 class LinkedInImporter:
