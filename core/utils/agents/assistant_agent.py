@@ -4,6 +4,9 @@ import operator
 import os
 import uuid
 from typing import Annotated, Any, Dict, List, Never, Optional, TypedDict, cast
+from datetime import datetime
+from django.db.models import Max
+from django.utils import timezone
 
 from django.conf import settings
 from django.db.models.manager import BaseManager
@@ -12,7 +15,7 @@ from django.shortcuts import get_object_or_404
 # LangChain core imports (some might be slightly different for graph nodes)
 from langchain.agents import create_tool_calling_agent  # Still used for the agent node logic
 from langchain.tools import StructuredTool
-from langchain_community.vectorstores import Chroma
+from langchain_chroma import Chroma
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.documents import Document
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
@@ -30,10 +33,8 @@ from pydantic import BaseModel, Field
 # Your existing imports
 from core.models import (
     ChatConversation,
-    Education,
     JobListing,
     Project,
-    Skill,
     UserProfile,
     WorkExperience,
 )
@@ -43,6 +44,7 @@ from core.utils.agents.personal_agent import PersonalAgent
 from core.utils.agents.writer_agent import WriterAgent
 from core.utils.db_utils import safe_get_or_none
 from core.utils.langgraph_checkpointer import DjangoCheckpointSaver
+from django.db.models import Max
 
 logger = logging.getLogger(__name__)
 
@@ -154,6 +156,13 @@ class AssistantAgent:
         )
         self.llm: ChatGoogleGenerativeAI = self._initialize_llm()
         self.vectorstore: Chroma | None = self._initialize_vectorstore(exclude_conversations=True)
+
+        # Check if vector store needs refresh before creating retriever
+        if self._should_refresh_vectorstore():
+            logger.info(f"Data is stale, refreshing vector store for user_id {self.user_id}")
+            if self.vectorstore:
+                self.refresh_vectorstore()
+
         self.retriever: VectorStoreRetriever | None = self._create_retriever()
         self.tools: list[StructuredTool] = self._initialize_tools()  # Tool functions defined below
         self.tool_map: Dict[str, StructuredTool] = {tool.name: tool for tool in self.tools}
@@ -348,7 +357,6 @@ class AssistantAgent:
             # Add documents to the vectorstore
             if documents:
                 vectorstore.add_documents(documents)
-                vectorstore.persist()
             else:
                 logger.warning(f"No documents found to add to vector store for user {self.user_id}")
 
@@ -1320,6 +1328,141 @@ class AssistantAgent:
                 f"Error during Agentic RAG (LangGraph) execution for user {self.user_id}: {str(e)}"
             )
             return "I'm sorry, I encountered an internal error. Please try again."
+
+    def _should_refresh_vectorstore(self) -> bool:
+        """
+        Check if vector store needs refresh by comparing data timestamps.
+        Returns True if vector store is stale or missing.
+        """
+        try:
+            try:
+                profile = UserProfile.objects.get(user_id=self.user_id)
+            except UserProfile.DoesNotExist:
+                logger.warning(f"No profile found for user_id {self.user_id}")
+                return True
+
+            # Collect all relevant timestamps
+            timestamps = []
+
+            # 1. Profile timestamp
+            if hasattr(profile, "updated_at") and profile.updated_at:
+                timestamps.append(profile.updated_at)
+
+            # 2. Work experience timestamps
+            work_exp_max = profile.work_experiences.aggregate(max_date=Max("updated_at"))[
+                "max_date"
+            ]
+            if work_exp_max:
+                timestamps.append(work_exp_max)
+
+            # 3. Education timestamps
+            edu_max = profile.education.aggregate(max_date=Max("updated_at"))["max_date"]
+            if edu_max:
+                timestamps.append(edu_max)
+
+            # 4. Project timestamps
+            project_max = profile.projects.aggregate(max_date=Max("updated_at"))["max_date"]
+            if project_max:
+                timestamps.append(project_max)
+
+            # 5. Skills timestamps (if skills have updated_at field)
+            try:
+                skills_max = profile.skills.aggregate(max_date=Max("updated_at"))["max_date"]
+                if skills_max:
+                    timestamps.append(skills_max)
+            except Exception:
+                # Skills might not have updated_at field
+                pass
+
+            # 6. Job listings timestamps
+            try:
+                jobs_max = JobListing.objects.filter(user_id=self.user_id).aggregate(
+                    max_date=Max("updated_at")
+                )["max_date"]
+                if jobs_max:
+                    timestamps.append(jobs_max)
+            except Exception:
+                # JobListing might not have updated_at field
+                pass
+
+            # 7. Add created_at timestamps as fallback
+            if hasattr(profile, "created_at") and profile.created_at:
+                timestamps.append(profile.created_at)
+
+            # Find the most recent data update
+            if not timestamps:
+                logger.warning(f"No timestamps found for user_id {self.user_id}")
+                return True  # Refresh if we can't determine freshness
+
+            last_data_update = max(timestamps)
+
+            # Check vector store file modification time
+            vector_store_path = os.path.join(self.persist_directory, f"user_{self.user_id}")
+
+            # If vector store directory doesn't exist, definitely refresh
+            if not os.path.exists(vector_store_path):
+                logger.info(
+                    f"Vector store directory doesn't exist for user_id {self.user_id}. Refresh needed."
+                )
+                return True
+
+            # Check if any files exist in the vector store directory
+            try:
+                vector_files = [f for f in os.listdir(vector_store_path) if not f.startswith(".")]
+                if not vector_files:
+                    logger.info(
+                        f"Vector store directory is empty for user_id {self.user_id}. Refresh needed."
+                    )
+                    return True
+            except OSError:
+                logger.warning(f"Could not read vector store directory for user_id {self.user_id}")
+                return True
+
+            # Get the most recent file modification time in vector store
+            try:
+                vector_mod_times = []
+                for filename in vector_files:
+                    file_path = os.path.join(vector_store_path, filename)
+                    if os.path.isfile(file_path):
+                        mod_time = datetime.fromtimestamp(os.path.getmtime(file_path))
+                        # Make it timezone-aware if needed
+                        if timezone.is_naive(mod_time) and timezone.is_aware(last_data_update):
+                            mod_time = timezone.make_aware(mod_time)
+                        elif timezone.is_aware(mod_time) and timezone.is_naive(last_data_update):
+                            last_data_update = timezone.make_aware(last_data_update)
+                        vector_mod_times.append(mod_time)
+
+                if not vector_mod_times:
+                    logger.info(f"No valid vector store files found for user_id {self.user_id}")
+                    return True
+
+                vector_store_modified = max(vector_mod_times)
+
+                # Compare timestamps
+                needs_refresh = last_data_update > vector_store_modified
+
+                if needs_refresh:
+                    logger.info(
+                        f"Vector store refresh needed for user_id {self.user_id}. "
+                        f"Data updated: {last_data_update}, Vector store: {vector_store_modified}"
+                    )
+                else:
+                    logger.debug(
+                        f"Vector store is up-to-date for user_id {self.user_id}. "
+                        f"Data updated: {last_data_update}, Vector store: {vector_store_modified}"
+                    )
+
+                return needs_refresh
+
+            except Exception as e:
+                logger.warning(
+                    f"Error checking vector store file times for user_id {self.user_id}: {e}"
+                )
+                return True
+
+        except Exception as e:
+            logger.error(f"Error in _should_refresh_vectorstore for user_id {self.user_id}: {e}")
+            return True
 
     def refresh_vectorstore(self) -> bool:
         """Refresh the vector store with updated user data."""

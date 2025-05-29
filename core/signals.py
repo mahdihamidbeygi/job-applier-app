@@ -38,15 +38,6 @@ def get_user_id_from_instance(instance):
     return None
 
 
-@receiver([post_save, post_delete], sender=UserProfile)
-@receiver([post_save, post_delete], sender=WorkExperience)
-@receiver([post_save, post_delete], sender=Education)
-@receiver([post_save, post_delete], sender=Project)
-@receiver([post_save, post_delete], sender=Certification)
-@receiver([post_save, post_delete], sender=Publication)
-@receiver([post_save, post_delete], sender=Skill)
-@receiver([post_save, post_delete], sender=JobListing)
-@receiver([post_save, post_delete], sender=ChatMessage)
 def refresh_vector_store_on_update(sender, instance, **kwargs):
     """
     Signal handler to trigger vector store refresh when monitored models change.
