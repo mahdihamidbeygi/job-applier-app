@@ -11,7 +11,7 @@ import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import git
@@ -20,6 +20,7 @@ import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
 from django.core.files.uploadedfile import UploadedFile
+from django.db import models as django_models
 from google.genai.types import File
 
 from core.models.profile import (
@@ -1676,7 +1677,7 @@ class GitHubProfileImporter:
             logger.error(f"Error fetching GitHub contribution data: {str(e)}")
             return {"total_stars": 0, "total_commits": 0, "languages": {}}
 
-    def import_profile(self) -> str:
+    def import_profile(self) -> dict:
         """Import profile data from GitHub"""
         try:
             # Get user profile info
@@ -1724,7 +1725,7 @@ class GitHubProfileImporter:
                 "repositories": repo_data,
             }
 
-            return json.dumps(combined_data)
+            return combined_data
 
         except Exception as e:
             logger.error(f"Error in import_profile: {str(e)}")
@@ -1760,9 +1761,6 @@ class GitHubProfileImporter:
                 technologies = []
                 if repo.get("code_analysis"):
                     technologies = repo["code_analysis"]["technical_skills"]
-
-                # Remove duplicates and join with commas
-                technologies = ", ".join(sorted(set(filter(None, technologies))))
 
                 project_data = {
                     "profile": user_profile,
@@ -1891,6 +1889,245 @@ class ResumeImporter:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._cleanup_temp_file()
 
+    def _parse_date_flexible(
+        self,
+        date_str: Optional[str],
+        field_name: str,
+        section_name: str,
+        item_identifier: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Parses date strings (YYYY-MM-DD, YYYY-MM, YYYY) into "YYYY-MM-DD" or None.
+        Defaults to day 01 / month 01 if not specified.
+        """
+        if not date_str or not isinstance(date_str, str):
+            return None
+
+        original_date_str = date_str
+        log_prefix = f"Validation for {section_name}"
+        if item_identifier:
+            log_prefix += f" (item: {item_identifier})"
+        log_prefix += f", field '{field_name}':"
+
+        try:
+            # Try YYYY-MM-DD
+            datetime.strptime(date_str, "%Y-%m-%d")
+            return date_str
+        except ValueError:
+            try:
+                # Try YYYY-MM
+                dt_obj = datetime.strptime(date_str, "%Y-%m")
+                parsed_date = dt_obj.strftime("%Y-%m-01")
+                logger.info(
+                    f"{log_prefix} Date '{original_date_str}' parsed as YYYY-MM, converted to '{parsed_date}'."
+                )
+                return parsed_date
+            except ValueError:
+                try:
+                    # Try YYYY
+                    dt_obj = datetime.strptime(date_str, "%Y")
+                    parsed_date = dt_obj.strftime("%Y-01-01")
+                    logger.info(
+                        f"{log_prefix} Date '{original_date_str}' parsed as YYYY, converted to '{parsed_date}'."
+                    )
+                    return parsed_date
+                except ValueError:
+                    logger.warning(
+                        f"{log_prefix} Could not parse date string '{original_date_str}'. Expected YYYY-MM-DD, YYYY-MM, or YYYY. Setting to None."
+                    )
+                    return None
+
+    def _truncate_string(
+        self,
+        value: Optional[Any],
+        max_length: int,
+        field_name: str,
+        section_name: str,
+        item_identifier: Optional[str] = None,
+    ) -> Optional[str]:
+        """Truncates string if it exceeds max_length. Converts non-strings to strings if possible."""
+        if value is None:
+            return None
+
+        log_prefix = f"Validation for {section_name}"
+        if item_identifier:
+            log_prefix += f" (item: {item_identifier})"
+        log_prefix += f", field '{field_name}':"
+
+        if not isinstance(value, str):
+            original_type = type(value).__name__
+            try:
+                value = str(value)
+                logger.warning(
+                    f"{log_prefix} Expected string, got {original_type}. Converted to string: '{value[:50]}...'"
+                )
+            except Exception:
+                logger.error(
+                    f"{log_prefix} Could not convert non-string value of type {original_type} to string. Setting to empty string."
+                )
+                return ""
+
+        if len(value) > max_length:
+            truncated_value = value[:max_length]
+            logger.warning(
+                f"{log_prefix} Value '{value[:30]}...' (len: {len(value)}) exceeded max_length {max_length}. Truncated to '{truncated_value[:30]}...'."
+            )
+            return truncated_value
+        return value
+
+    def _validate_and_clean_parsed_data(self, parsed_data: Dict) -> Dict:
+        """Validates and cleans data parsed by LLM against model schemas."""
+        cleaned_data = parsed_data.copy()
+
+        # --- Basic Info (UserProfile) ---
+        basic_info = cleaned_data.get("basic_info")
+        if isinstance(basic_info, dict):
+            model_cls = UserProfile
+            for field_name, value in basic_info.items():
+                try:
+                    field_obj = model_cls._meta.get_field(field_name)
+                    if isinstance(field_obj, django_models.CharField) and not isinstance(
+                        field_obj, django_models.TextField
+                    ):
+                        basic_info[field_name] = self._truncate_string(
+                            value, field_obj.max_length, field_name, "basic_info"
+                        )
+                except django_models.fields.FieldDoesNotExist:
+                    logger.debug(
+                        f"Field '{field_name}' in 'basic_info' from LLM not found in UserProfile model. Retaining."
+                    )
+                except AttributeError:  # e.g. field_obj.max_length might not exist
+                    pass
+        elif basic_info is not None:
+            logger.warning(
+                f"'basic_info' from LLM is not a dictionary: {type(basic_info)}. Defaulting to empty dict."
+            )
+            cleaned_data["basic_info"] = {}
+
+        # --- Helper function for list items ---
+        def validate_list_items(
+            data_list: Optional[List[Dict]],
+            section_name: str,
+            model_cls,
+            date_fields: List[str],
+            bool_fields: List[str],
+            float_fields: List[str] = [],
+            int_fields: List[str] = [],
+        ):
+            if not isinstance(data_list, list):
+                if (
+                    data_list is not None
+                ):  # If None, it's fine, will be defaulted by get_schema later if needed
+                    logger.warning(
+                        f"'{section_name}' from LLM is not a list: {type(data_list)}. Setting to empty list."
+                    )
+                return []
+
+            validated_list = []
+            for i, item in enumerate(data_list):
+                if not isinstance(item, dict):
+                    logger.warning(
+                        f"Item {i} in '{section_name}' is not a dictionary: {type(item)}. Skipping."
+                    )
+                    continue
+
+                cleaned_item = item.copy()
+                item_identifier = cleaned_item.get(
+                    "title", cleaned_item.get("name", cleaned_item.get("company", f"item {i}"))
+                )
+
+                for field_name, value in cleaned_item.items():
+                    try:
+                        field_obj = model_cls._meta.get_field(field_name)
+                        if isinstance(field_obj, django_models.CharField) and not isinstance(
+                            field_obj, django_models.TextField
+                        ):
+                            cleaned_item[field_name] = self._truncate_string(
+                                value,
+                                field_obj.max_length,
+                                field_name,
+                                section_name,
+                                item_identifier,
+                            )
+                        elif field_name in date_fields and isinstance(
+                            field_obj, django_models.DateField
+                        ):
+                            cleaned_item[field_name] = self._parse_date_flexible(
+                                value, field_name, section_name, item_identifier
+                            )
+                        elif field_name in bool_fields and isinstance(
+                            field_obj, django_models.BooleanField
+                        ):
+                            if not isinstance(value, bool) and value is not None:
+                                logger.debug(
+                                    f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Expected boolean, got {type(value)} ('{value}'). Converting."
+                                )
+                                cleaned_item[field_name] = str(value).lower() in [
+                                    "true",
+                                    "1",
+                                    "yes",
+                                    "present",
+                                ]
+                        elif field_name in float_fields and isinstance(
+                            field_obj, django_models.FloatField
+                        ):
+                            if value is not None:
+                                try:
+                                    cleaned_item[field_name] = float(value)
+                                except (ValueError, TypeError):
+                                    logger.warning(
+                                        f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Could not convert '{value}' to float. Setting to None."
+                                    )
+                                    cleaned_item[field_name] = None
+                        elif field_name in int_fields and isinstance(
+                            field_obj, django_models.IntegerField
+                        ):
+                            if value is not None:
+                                try:
+                                    cleaned_item[field_name] = int(value)
+                                except (ValueError, TypeError):
+                                    logger.warning(
+                                        f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Could not convert '{value}' to int. Setting to None."
+                                    )
+                                    cleaned_item[field_name] = None
+                    except django_models.fields.FieldDoesNotExist:
+                        logger.debug(
+                            f"Field '{field_name}' in '{section_name}' (item: {item_identifier}) from LLM not found in {model_cls.__name__} model. Retaining."
+                        )
+                    except AttributeError:  # e.g. field_obj.max_length might not exist
+                        pass
+                validated_list.append(cleaned_item)
+            return validated_list
+
+        # --- Validate sections ---
+        sections_config = {
+            "work_experiences": (WorkExperience, ["start_date", "end_date"], ["current"], [], []),
+            "education": (Education, ["start_date", "end_date"], ["current"], ["gpa"], []),
+            "projects": (Project, ["start_date", "end_date"], ["current"], [], []),
+            "certifications": (Certification, ["issue_date", "expiration_date"], [], [], []),
+            "skills": (Skill, [], [], [], ["proficiency"]),
+            "publications": (Publication, ["publication_date"], [], [], []),
+        }
+
+        for section_key, (
+            model_cls,
+            date_fields,
+            bool_fields,
+            float_fields,
+            int_fields,
+        ) in sections_config.items():
+            cleaned_data[section_key] = validate_list_items(
+                cleaned_data.get(section_key),
+                section_key,
+                model_cls,
+                date_fields,
+                bool_fields,
+                float_fields,
+                int_fields,
+            )
+
+        return cleaned_data
+
     def parse_with_llm(self, resume_file) -> Dict:
         """Parse resume text using ChatGPT to extract structured information."""
         try:
@@ -1988,6 +2225,7 @@ class ResumeImporter:
                 if "```json" in response:
                     response = response.replace("```json", "").replace("```", "")
                 response: dict = json.loads(response)
+
             except Exception as e:
                 logger.error(f"Error parsing response: {str(e)}")
 
@@ -2010,11 +2248,26 @@ class ResumeImporter:
             google_uploaded_file: File = self.google_client.upload_file(self.validated_resume_path)
 
             # Parse the text using ChatGPT
-            parsed_data = self.parse_with_llm(google_uploaded_file)
+            raw_parsed_data = self.parse_with_llm(google_uploaded_file)
 
-            return parsed_data
+            # Validate and clean the parsed data
+            if isinstance(raw_parsed_data, dict) and not raw_parsed_data.get("error"):
+                logger.debug("LLM parsing successful, proceeding to validation and cleaning.")
+                validated_data = self._validate_and_clean_parsed_data(raw_parsed_data)
+                return validated_data
+            else:
+                # If parsing failed, or returned an error structure, or not a dict, return as is or a generic error
+                logger.warning(
+                    f"LLM parsing did not return a clean dictionary for validation. Raw data: {str(raw_parsed_data)[:500]}"
+                )
+                return (
+                    raw_parsed_data
+                    if isinstance(raw_parsed_data, dict)
+                    else {"error": "LLM parsing failed to return a valid data structure."}
+                )
 
         except Exception as e:
+            logger.error(f"Error parsing resume: {str(e)}")
             raise Exception(f"Error parsing resume: {str(e)}")
 
 
