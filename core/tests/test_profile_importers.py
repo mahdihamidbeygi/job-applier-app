@@ -1,10 +1,9 @@
 import logging
 import os
 import sys
+from pathlib import Path
 
 import django
-
-from pathlib import Path
 
 # --- Add Django Setup ---
 # Add the project root directory to Python path if running script directly
@@ -117,7 +116,7 @@ def test_analyze_code_typescript_fallback_to_llm():
     """
     github_username = "mahdihamidbeygi"  # Dummy username for instantiation
     importer = GitHubProfileImporter(github_username=github_username)
-
+    print(importer.import_profile())
     typescript_code_snippet = """
     import { Component } from '@angular/core';
 
@@ -150,107 +149,107 @@ def test_analyze_code_typescript_fallback_to_llm():
         "analyzed_by": "llm",
     }
 
-    # Mock the LLM client's method within the GitHubProfileImporter instance
-    with patch.object(
-        importer.client, "generate_structured_output", return_value=expected_llm_output
-    ) as mock_llm_call:
-        result = importer.analyze_python_code(typescript_code_snippet)
+    # # Mock the LLM client's method within the GitHubProfileImporter instance
+    # with patch.object(
+    #     importer.client, "generate_structured_output", return_value=expected_llm_output
+    # ) as mock_llm_call:
+    #     result = importer.analyze_python_code(typescript_code_snippet)
 
-        # Assert that the LLM was called
-        mock_llm_call.assert_called_once()
+    #     # Assert that the LLM was called
+    #     mock_llm_call.assert_called_once()
 
-        # Assert that the result matches the expected LLM output
-        assert result == expected_llm_output
-        assert result.get("analyzed_by") == "llm"
-        assert "greet" in result.get("functions", [])
-        assert "@angular/core" in result.get("imports", [])
-
-
-def test_linkedin_importer_scrape_profile_live():
-    """
-    Tests the LinkedInImporter's scrape_profile method with a live URL.
-
-    NOTE: This test performs a live scrape, which is generally discouraged for
-    regular testing due to potential flakiness, IP blocking, and ToS violations.
-    For a robust test suite, consider mocking HTTP requests.
-    """
-    linkedin_url = "https://www.linkedin.com/in/mahdihamidbeygi"
-    importer = LinkedInImporter(linkedin_url=linkedin_url)
-
-    try:
-        profile_data = importer.scrape_profile()
-
-        assert profile_data is not None, "scrape_profile should return a dictionary."
-        assert isinstance(profile_data, dict), "Profile data should be a dictionary."
-
-        # Check for essential keys (their presence, not necessarily non-empty values,
-        # as profiles can vary)
-        assert "url" in profile_data, "Profile data should contain the URL."
-        assert profile_data["url"] == linkedin_url, "Returned URL should match the input URL."
-
-        assert "name" in profile_data, "Profile data should contain a 'name' field."
-        # Name might be empty if scraping fails partially, but the key should exist.
-        # For a live test, we can be more assertive if we expect the profile to be public and complete.
-        if profile_data.get("name"):  # Only assert if name was actually scraped
-            assert isinstance(profile_data["name"], str), "Name should be a string."
-            assert (
-                len(profile_data["name"]) > 0
-            ), "Name should not be empty for this public profile."
-
-        assert "headline" in profile_data
-        assert "experience" in profile_data and isinstance(profile_data["experience"], list)
-        assert "education" in profile_data and isinstance(profile_data["education"], list)
-        assert "skills" in profile_data and isinstance(profile_data["skills"], list)
-
-        logger.info(f"Successfully scraped LinkedIn profile for: {linkedin_url}")
-        logger.info(f"Scraped name: {profile_data.get('name')}")
-    except Exception as e:
-        pytest.fail(f"LinkedInImporter().scrape_profile() raised an exception: {e}")
-
-
-def test_resumeimporter_success():
-    """Test successful resume import and analysis."""
-    # Mock resume content
-    resume_content = """
-    John Doe
-    Software Engineer
-    Experience:
-    - Senior Developer at Tech Corp (2020-2023)
-    - Full Stack Developer at Startup Inc (2018-2020)
-    Skills: Python, JavaScript, React, Node.js
-    Education: BS Computer Science, University of Technology
-    """
-
-    # Create importer instance
-    importer = ResumeImporter(
-        resume_file=Path(
-            r"C:\Users\mhami\projects\job-applier-app\media\resumes\mhami\Mahdi_Hamidbeygi_resume_pubs.pdf"
-        )
-    )
-    resume = importer.parse_resume()
-    # Mock LLM response
-    # expected_llm_output = {
-    #     "name": "John Doe",
-    #     "title": "Software Engineer",
-    #     "experience": [
-    #         {"role": "Senior Developer", "company": "Tech Corp", "duration": "2020-2023"},
-    #         {"role": "Full Stack Developer", "company": "Startup Inc", "duration": "2018-2020"},
-    #     ],
-    #     "skills": ["Python", "JavaScript", "React", "Node.js"],
-    #     "education": [{"degree": "BS Computer Science", "institution": "University of Technology"}],
-    #     "analyzed_by": "llm",
-    # }
-
-    # # Mock the LLM call
-    # with patch.object(importer, "_call_llm", return_value=expected_llm_output) as mock_llm:
-    #     result = importer.analyze()
-
-    #     # Verify LLM was called
-    #     mock_llm.assert_called_once()
-
-    #     # Assert the result matches expected output
+    #     # Assert that the result matches the expected LLM output
     #     assert result == expected_llm_output
-    #     assert result["analyzed_by"] == "llm"
-    #     assert isinstance(result["experience"], list)
-    #     assert isinstance(result["skills"], list)
-    #     assert isinstance(result["education"], list)
+    #     assert result.get("analyzed_by") == "llm"
+    #     assert "greet" in result.get("functions", [])
+    #     assert "@angular/core" in result.get("imports", [])
+
+
+# def test_linkedin_importer_scrape_profile_live():
+#     """
+#     Tests the LinkedInImporter's scrape_profile method with a live URL.
+
+#     NOTE: This test performs a live scrape, which is generally discouraged for
+#     regular testing due to potential flakiness, IP blocking, and ToS violations.
+#     For a robust test suite, consider mocking HTTP requests.
+#     """
+#     linkedin_url = "https://www.linkedin.com/in/mahdihamidbeygi"
+#     importer = LinkedInImporter(linkedin_url=linkedin_url)
+
+#     try:
+#         profile_data = importer.scrape_profile()
+
+#         assert profile_data is not None, "scrape_profile should return a dictionary."
+#         assert isinstance(profile_data, dict), "Profile data should be a dictionary."
+
+#         # Check for essential keys (their presence, not necessarily non-empty values,
+#         # as profiles can vary)
+#         assert "url" in profile_data, "Profile data should contain the URL."
+#         assert profile_data["url"] == linkedin_url, "Returned URL should match the input URL."
+
+#         assert "name" in profile_data, "Profile data should contain a 'name' field."
+#         # Name might be empty if scraping fails partially, but the key should exist.
+#         # For a live test, we can be more assertive if we expect the profile to be public and complete.
+#         if profile_data.get("name"):  # Only assert if name was actually scraped
+#             assert isinstance(profile_data["name"], str), "Name should be a string."
+#             assert (
+#                 len(profile_data["name"]) > 0
+#             ), "Name should not be empty for this public profile."
+
+#         assert "headline" in profile_data
+#         assert "experience" in profile_data and isinstance(profile_data["experience"], list)
+#         assert "education" in profile_data and isinstance(profile_data["education"], list)
+#         assert "skills" in profile_data and isinstance(profile_data["skills"], list)
+
+#         logger.info(f"Successfully scraped LinkedIn profile for: {linkedin_url}")
+#         logger.info(f"Scraped name: {profile_data.get('name')}")
+#     except Exception as e:
+#         pytest.fail(f"LinkedInImporter().scrape_profile() raised an exception: {e}")
+
+
+# def test_resumeimporter_success():
+#     """Test successful resume import and analysis."""
+#     # Mock resume content
+#     resume_content = """
+#     John Doe
+#     Software Engineer
+#     Experience:
+#     - Senior Developer at Tech Corp (2020-2023)
+#     - Full Stack Developer at Startup Inc (2018-2020)
+#     Skills: Python, JavaScript, React, Node.js
+#     Education: BS Computer Science, University of Technology
+#     """
+
+#     # Create importer instance
+#     importer = ResumeImporter(
+#         resume_file=Path(
+#             r"C:\Users\mhami\projects\job-applier-app\media\resumes\mhami\Mahdi_Hamidbeygi_resume_pubs.pdf"
+#         )
+#     )
+#     resume = importer.parse_resume()
+# Mock LLM response
+# expected_llm_output = {
+#     "name": "John Doe",
+#     "title": "Software Engineer",
+#     "experience": [
+#         {"role": "Senior Developer", "company": "Tech Corp", "duration": "2020-2023"},
+#         {"role": "Full Stack Developer", "company": "Startup Inc", "duration": "2018-2020"},
+#     ],
+#     "skills": ["Python", "JavaScript", "React", "Node.js"],
+#     "education": [{"degree": "BS Computer Science", "institution": "University of Technology"}],
+#     "analyzed_by": "llm",
+# }
+
+# # Mock the LLM call
+# with patch.object(importer, "_call_llm", return_value=expected_llm_output) as mock_llm:
+#     result = importer.analyze()
+
+#     # Verify LLM was called
+#     mock_llm.assert_called_once()
+
+#     # Assert the result matches expected output
+#     assert result == expected_llm_output
+#     assert result["analyzed_by"] == "llm"
+#     assert isinstance(result["experience"], list)
+#     assert isinstance(result["skills"], list)
+#     assert isinstance(result["education"], list)

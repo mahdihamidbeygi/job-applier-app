@@ -10,7 +10,7 @@
       rel="stylesheet"
     />
     <link
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
       rel="stylesheet"
     />
     <link
@@ -284,6 +284,91 @@
         padding: var(--spacing-xl) 0;
         margin-top: var(--spacing-xl);
       }
+      .password-field-wrapper {
+        position: relative;
+        display: block;
+      }
+
+      .password-toggle {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: none;
+        border: none;
+        color: #a0aec0;
+        cursor: pointer;
+        padding: 8px;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .password-toggle:hover {
+        color: #ffffff;
+      }
+
+      .password-toggle:focus {
+        outline: 2px solid #667eea;
+        outline-offset: 2px;
+        color: #667eea;
+      }
+
+      /* Make room for the toggle button */
+      .password-field-wrapper .form-control {
+        padding-right: 45px !important;
+      }
+      .google-signin-container {
+        margin: var(--spacing-lg) 0;
+        display: flex;
+        justify-content: center;
+      }
+
+      .btn-google-signin {
+        background-color: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius-md);
+        padding: var(--spacing-md) var(--spacing-xl);
+        color: var(--text-primary);
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--spacing-md);
+        font-weight: 500;
+        font-size: 1rem;
+        transition: all var(--transition-speed) var(--transition-timing);
+        min-width: 200px;
+        justify-content: center;
+      }
+
+      .btn-google-signin:hover {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+        color: var(--text-primary);
+        text-decoration: none;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(108, 99, 255, 0.3);
+      }
+
+      .btn-google-signin:focus {
+        outline: 2px solid var(--primary-color);
+        outline-offset: 2px;
+      }
+
+      .google-icon {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+      }
+
+      /* Responsive adjustments */
+      @media (max-width: 576px) {
+        .btn-google-signin {
+          width: 100%;
+          padding: var(--spacing-lg) var(--spacing-md);
+        }
+      }
     </style>
   </head>
   <body>
@@ -369,6 +454,41 @@
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    {% block extra_js %}{% endblock %}
+    {% block extra_js %}
+    <script>
+      function togglePasswordField(button) {
+        const targetId = button.getAttribute("data-target");
+        const input = document.getElementById(targetId);
+        const icon = button.querySelector("i");
+
+        if (!input || !icon) {
+          console.error("Password toggle error: Could not find input or icon");
+          return;
+        }
+
+        if (input.type === "password") {
+          input.type = "text";
+          icon.classList.remove("fa-eye");
+          icon.classList.add("fa-eye-slash");
+          button.setAttribute("aria-label", "Hide password");
+        } else {
+          input.type = "password";
+          icon.classList.remove("fa-eye-slash");
+          icon.classList.add("fa-eye");
+          button.setAttribute("aria-label", "Show password");
+        }
+      }
+
+      // Fallback event delegation method
+      document.addEventListener("click", function (e) {
+        if (e.target.closest(".password-toggle")) {
+          const button = e.target.closest(".password-toggle");
+          if (!button.onclick) {
+            togglePasswordField(button);
+          }
+        }
+      });
+    </script>
+    {% endblock %}
   </body>
 </html>

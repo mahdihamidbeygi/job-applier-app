@@ -32,7 +32,7 @@
               class="btn btn-outline-light btn-lg w-100 mt-2"
             >
               <i class="fab fa-google me-2"></i>
-              Sign in with Google
+              {% trans "Sign in with Google" %}
             </a>
             <!-- GitHub Sign-in Button (Add margin if needed) -->
             <a
@@ -40,7 +40,7 @@
               class="btn btn-outline-light btn-lg w-100 mt-2"
             >
               <i class="fab fa-github me-2"></i>
-              Sign in with GitHub
+              {% trans "Sign in with GitHub" %}
             </a>
           </div>
 
@@ -67,12 +67,21 @@
             </div>
 
             <div class="form-group mb-3">
-              <label for="{{ form.password.id_for_label }}" class="form-label"
-                >{% trans "Password" %}</label
-              >
-              {{ form.password|add_class:"form-control form-control-lg" }}
+              <label for="{{ form.password.id_for_label }}" class="form-label">
+                {% trans "Password" %}
+              </label>
+              <div class="password-field-wrapper">
+                {{ form.password|add_class:"form-control form-control-lg" }}
+                <button
+                  type="button"
+                  class="password-toggle"
+                  data-target="{{ form.password.id_for_label }}"
+                  onclick="togglePasswordField(this)"
+                >
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
             </div>
-
             <div class="form-group mb-3">
               <div class="form-check">
                 <input

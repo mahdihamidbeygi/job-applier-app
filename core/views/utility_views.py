@@ -2,22 +2,27 @@
 Utility views for the core app.
 """
 
+import json
 import logging
+import smtplib
+from datetime import timedelta
 from io import BytesIO
 
 import pdfminer.high_level
+from django.conf import settings
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import User
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sites.models import Site
+from django.core.cache import cache
 from django.core.files.storage import default_storage
+
 from django.shortcuts import render
 from django.http import JsonResponse
 from django.db import connection
 from django.views.decorators.csrf import csrf_exempt
 import logging
-
-logger = logging.getLogger(__name__)
-
-
-from core.models import UserProfile
 
 logger = logging.getLogger(__name__)
 
