@@ -2,10 +2,10 @@
 Views for importing profile data from various sources.
 """
 
-from typing import Optional
 import json
 import logging
 from datetime import datetime
+from typing import Any, Optional
 
 from django.http import JsonResponse
 from django.utils import timezone
@@ -68,13 +68,10 @@ def import_github_profile(request) -> JsonResponse:
 
         # Create importer and get data
         importer = GitHubProfileImporter(username)
-        github_data = importer.import_profile()
+        github_data_json = importer.import_profile()
 
-        if not github_data:
+        if not github_data_json:
             return JsonResponse({"error": "Failed to fetch GitHub profile"}, status=400)
-
-        # Parse the JSON string
-        github_data_json = json.loads(github_data)
 
         # Update user profile with GitHub data
         profile = request.user.userprofile
@@ -217,6 +214,36 @@ def import_resume(request) -> JsonResponse:
         if personal_info.get("company") and not profile.company:
             profile.company = personal_info.get("company")
             profile_updated = True
+
+        if profile.github_url:
+            if not profile.github_data:
+                github_importer = GitHubProfileImporter(profile.github_url)
+                github_data: dict[str, Any] = github_importer.import_profile()
+                if github_data:
+                    profile.github_data = github_data
+                    profile_updated = True
+
+                    # Transform repositories into projects
+                    projects = github_importer.transform_repos_to_projects(
+                        github_data.get("repositories", []), profile
+                    )
+
+                    # Save projects
+                    for project_data in projects:
+                        # Check if project already exists (based on GitHub URL)
+                        existing_project = Project.objects.filter(
+                            profile=profile, github_url=project_data["github_url"]
+                        ).first()
+
+                        if existing_project:
+                            # Update existing project
+                            for key, value in project_data.items():
+                                if key != "profile":  # Skip updating the profile reference
+                                    setattr(existing_project, key, value)
+                            existing_project.save()
+                        else:
+                            # Create new project
+                            Project.objects.create(**project_data)
 
         # Save profile
         if profile_updated:
