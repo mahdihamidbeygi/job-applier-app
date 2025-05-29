@@ -446,3 +446,8 @@ CACHES: dict[str, dict[str, str]] = {
         "LOCATION": "verification_email_cache_table",
     }
 }
+
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
