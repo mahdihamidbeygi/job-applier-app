@@ -1471,7 +1471,7 @@
             <i class="fas fa-trash"></i>
           </button>
         </div>
-        <h3>{{ experience.position }}</h3>
+        <h3>{{ experience.position }} at {{ experience.company }}</h3>
         <div class="date-range">
           {{ experience.start_date|date:"M Y" }} - {% if experience.current %}
           Present {% else %} {{ experience.end_date }}
@@ -1479,11 +1479,12 @@
           {% endif %}
           <!-- Debug info: End Date: {{ experience.end_date }}, Current: {{ experience.current }} -->
         </div>
-        <div class="location">{{ experience.company }}</div>
         <p class="description">{{ experience.description }}</p>
         {% if experience.achievements %}
         <div class="achievements">{{ experience.achievements }}</div>
-        {% endif %} {% if experience.technologies %}
+        {% endif %} 
+        <!---->
+        {% if experience.technologies %}
         <div class="technologies">{{ experience.technologies }}</div>
         {% endif %}
       </div>
@@ -1530,8 +1531,12 @@
         <h3>{{ project.title }}</h3>
         <p class="description">{{ project.description }}</p>
         {% if project.technologies %}
-        <div class="technologies">{{ project.technologies }}</div>
-        {% endif %}
+        <!-- Use repo-tech-stack for consistent styling with GitHub section -->
+        <div class="technologies repo-tech-stack"> 
+            {% for tech_item in project.technologies|split:"," %}
+            <span class="tech-tag">{{ tech_item }}</span>
+            {% endfor %}
+        </div>        {% endif %}
         <div class="project-links">
           {% if project.github_url %}
           <a href="{{ project.github_url }}" target="_blank">GitHub</a>

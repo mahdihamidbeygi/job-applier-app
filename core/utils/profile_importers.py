@@ -1,34 +1,38 @@
-import ast
+import base64
+import io
 import json
 import logging
+import mimetypes
 import os
 import random
+import re
 import shutil
 import tempfile
 import time
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
 
 import git
-from google.genai.types import File
+import httpx
 import requests
 from bs4 import BeautifulSoup
 from django.conf import settings
+from django.core.files.uploadedfile import UploadedFile
+from django.db import models as django_models
+from google.genai.types import File
 
-from core.utils.llm_clients import GoogleClient
-from django.conf import settings
 from core.models.profile import (
-    UserProfile,
-    WorkExperience,
+    Certification,
     Education,
     Project,
-    Certification,
     Publication,
     Skill,
+    UserProfile,
+    WorkExperience,
 )
-from django.core.files.uploadedfile import UploadedFile
+from core.utils.llm_clients import GoogleClient
 
 # For parsing pyproject.toml
 try:
@@ -40,11 +44,843 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+class CodeFileFilter:
+    def __init__(self):
+        # Existing extension exclusions
+        self.EXCLUSION_EXTS = list(
+            set(
+                {
+                    # MEDIA FILES
+                    # Images
+                    ".jpg",
+                    ".jpeg",
+                    ".png",
+                    ".gif",
+                    ".bmp",
+                    ".tiff",
+                    ".tif",
+                    ".svg",
+                    ".webp",
+                    ".ico",
+                    ".psd",
+                    ".ai",
+                    ".eps",
+                    ".raw",
+                    ".cr2",
+                    ".nef",
+                    ".orf",
+                    ".sr2",
+                    ".dng",
+                    ".heic",
+                    ".heif",
+                    ".avif",
+                    ".jxl",
+                    # Audio
+                    ".mp3",
+                    ".wav",
+                    ".flac",
+                    ".aac",
+                    ".ogg",
+                    ".wma",
+                    ".m4a",
+                    ".opus",
+                    ".ape",
+                    ".ac3",
+                    ".dts",
+                    ".au",
+                    ".aiff",
+                    ".amr",
+                    ".3gp",
+                    ".m4p",
+                    ".m4b",
+                    # Video
+                    ".mp4",
+                    ".avi",
+                    ".mkv",
+                    ".mov",
+                    ".wmv",
+                    ".flv",
+                    ".webm",
+                    ".m4v",
+                    ".3gp",
+                    ".ogv",
+                    ".asf",
+                    ".rm",
+                    ".rmvb",
+                    ".vob",
+                    ".ts",
+                    ".mts",
+                    ".m2ts",
+                    ".divx",
+                    ".xvid",
+                    ".f4v",
+                    ".mpg",
+                    ".mpeg",
+                    ".m2v",
+                    # DOCUMENT FILES
+                    # Office Documents
+                    ".doc",
+                    ".docx",
+                    ".xls",
+                    ".xlsx",
+                    ".ppt",
+                    ".pptx",
+                    ".odt",
+                    ".ods",
+                    ".odp",
+                    ".rtf",
+                    ".pages",
+                    ".numbers",
+                    ".key",
+                    # PDF and eBooks
+                    ".pdf",
+                    ".epub",
+                    ".mobi",
+                    ".azw",
+                    ".azw3",
+                    ".fb2",
+                    ".lit",
+                    ".pdb",
+                    ".djvu",
+                    # Text Documents (non-code)
+                    ".txt",
+                    ".docm",
+                    ".dotx",
+                    ".dotm",
+                    ".xlsm",
+                    ".xltx",
+                    ".xltm",
+                    ".xlsb",
+                    ".pptm",
+                    ".potx",
+                    ".potm",
+                    ".ppsx",
+                    ".ppsm",
+                    # ARCHIVE FILES
+                    ".zip",
+                    ".rar",
+                    ".7z",
+                    ".tar",
+                    ".gz",
+                    ".bz2",
+                    ".xz",
+                    ".tar.gz",
+                    ".tar.bz2",
+                    ".tar.xz",
+                    ".tgz",
+                    ".tbz2",
+                    ".txz",
+                    ".cab",
+                    ".arj",
+                    ".lzh",
+                    ".ace",
+                    ".iso",
+                    ".dmg",
+                    ".img",
+                    ".bin",
+                    ".cue",
+                    ".nrg",
+                    ".mdf",
+                    ".udf",
+                    # EXECUTABLE FILES
+                    ".exe",
+                    ".msi",
+                    ".app",
+                    ".deb",
+                    ".rpm",
+                    ".pkg",
+                    ".dmg",
+                    ".run",
+                    ".bin",
+                    ".com",
+                    ".scr",
+                    ".bat",
+                    ".cmd",
+                    ".vbs",
+                    ".ps1",
+                    ".sh",
+                    # SYSTEM FILES
+                    ".dll",
+                    ".so",
+                    ".dylib",
+                    ".sys",
+                    ".drv",
+                    ".ocx",
+                    ".cpl",
+                    ".scr",
+                    ".tmp",
+                    ".temp",
+                    ".cache",
+                    ".log",
+                    ".bak",
+                    ".old",
+                    ".orig",
+                    ".swp",
+                    ".swo",
+                    ".~",
+                    # DATABASE FILES (Binary)
+                    ".db",
+                    ".sqlite",
+                    ".sqlite3",
+                    ".mdb",
+                    ".accdb",
+                    ".dbf",
+                    ".frm",
+                    ".myd",
+                    ".myi",
+                    ".ibd",
+                    # FONT FILES
+                    ".ttf",
+                    ".otf",
+                    ".woff",
+                    ".woff2",
+                    ".eot",
+                    ".fon",
+                    ".fnt",
+                    # 3D AND CAD FILES
+                    ".obj",
+                    ".fbx",
+                    ".dae",
+                    ".3ds",
+                    ".max",
+                    ".blend",
+                    ".c4d",
+                    ".ma",
+                    ".mb",
+                    ".dwg",
+                    ".dxf",
+                    ".step",
+                    ".stp",
+                    ".iges",
+                    ".igs",
+                    ".stl",
+                    ".ply",
+                    ".x3d",
+                    # GAME FILES
+                    ".unity",
+                    ".unitypackage",
+                    ".pak",
+                    ".vpk",
+                    ".bsp",
+                    ".wad",
+                    ".pk3",
+                    ".pk4",
+                    ".sav",
+                    ".dat",
+                    ".gam",
+                    ".rom",
+                    ".iso",
+                    # ENCRYPTED/PROTECTED FILES
+                    ".p12",
+                    ".pfx",
+                    ".cer",
+                    ".crt",
+                    ".der",
+                    ".pem",
+                    ".key",
+                    ".pub",
+                    ".sig",
+                    ".gpg",
+                    ".pgp",
+                    ".asc",
+                    # BACKUP FILES
+                    ".bak",
+                    ".backup",
+                    ".old",
+                    ".orig",
+                    ".save",
+                    ".autosave",
+                    ".recover",
+                    ".~bak",
+                    ".tmp",
+                    # TEMPORARY/CACHE FILES
+                    ".tmp",
+                    ".temp",
+                    ".cache",
+                    ".log",
+                    ".thumbs.db",
+                    ".ds_store",
+                    ".localized",
+                    ".spotlight-v100",
+                    ".trashes",
+                    ".fseventsd",
+                    ".temporaryitems",
+                    ".apdisk",
+                    # PROPRIETARY FORMATS
+                    # Adobe
+                    ".psd",
+                    ".ai",
+                    ".indd",
+                    ".prproj",
+                    ".aep",
+                    ".fla",
+                    ".swf",
+                    # Microsoft specific
+                    ".lnk",
+                    ".url",
+                    ".contact",
+                    ".group",
+                    ".library-ms",
+                    ".searchconnector-ms",
+                    # Apple specific
+                    ".plist",
+                    ".nib",
+                    ".xib",
+                    ".storyboard",
+                    ".xcassets",
+                    ".car",
+                    # OBSOLETE/LEGACY FORMATS
+                    ".fla",
+                    ".swf",
+                    ".as2",
+                    ".as3",
+                    ".hqx",
+                    ".sit",
+                    ".sitx",
+                    ".sea",
+                    ".cpt",
+                    ".pict",
+                    ".rsrc",
+                    # VIRTUAL MACHINE FILES
+                    ".vmdk",
+                    ".vdi",
+                    ".vhd",
+                    ".vhdx",
+                    ".ova",
+                    ".ovf",
+                    ".qcow2",
+                    ".img",
+                    # TORRENT AND P2P
+                    ".torrent",
+                    ".magnet",
+                    ".ed2k",
+                    ".metalink",
+                    # EMAIL FILES
+                    ".msg",
+                    ".eml",
+                    ".emlx",
+                    ".mbox",
+                    ".pst",
+                    ".ost",
+                    ".nsf",
+                    ".dbx",
+                    # CALENDAR/CONTACT FILES
+                    ".ics",
+                    ".ical",
+                    ".vcf",
+                    ".vcard",
+                    ".ldif",
+                    # GIS/MAPPING FILES
+                    ".shp",
+                    ".kml",
+                    ".kmz",
+                    ".gpx",
+                    ".geojson",
+                    ".mxd",
+                    ".qgs",
+                    # SCIENTIFIC DATA
+                    ".mat",
+                    ".hdf5",
+                    ".h5",
+                    ".fits",
+                    ".nc",
+                    ".cdf",
+                    ".sav",
+                    # BLOCKCHAIN/CRYPTO
+                    ".wallet",
+                    ".dat",
+                    ".keys",
+                    ".seed",
+                    # PACKAGE MANAGERS (Binary packages, not source)
+                    ".apk",
+                    ".ipa",
+                    ".deb",
+                    ".rpm",
+                    ".msi",
+                    ".pkg",
+                    ".snap",
+                    ".flatpak",
+                    # BROWSER FILES
+                    ".crx",
+                    ".xpi",
+                    ".bookmark",
+                    ".webloc",
+                    # SUBTITLE FILES (not code)
+                    ".srt",
+                    ".ass",
+                    ".ssa",
+                    ".vtt",
+                    ".sub",
+                    ".idx",
+                    # LICENSE/LEGAL FILES (when not code-related)
+                    ".license",
+                    ".copying",
+                    ".authors",
+                    ".contributors",
+                    ".credits",
+                }
+            )
+        )
+
+        # Size limits
+        self.MAX_INDIVIDUAL_FILE_SIZE_BYTES = 2 * 1024 * 1024  # 2MB
+        self.MIN_FILE_SIZE_BYTES = 1  # Skip empty files
+        self.MAX_TOTAL_ANALYSIS_SIZE = 50 * 1024 * 1024  # 50MB total
+
+        # Path-based exclusions
+        self.EXCLUDED_DIRECTORIES = {
+            # Dependencies and packages
+            "node_modules",
+            "vendor",
+            "packages",
+            "lib",
+            "libs",
+            "third_party",
+            "external",
+            "dependencies",
+            "bower_components",
+            # Build outputs and generated files
+            "build",
+            "dist",
+            "out",
+            "output",
+            "release",
+            "debug",
+            "bin",
+            "obj",
+            "target",
+            "cmake-build-debug",
+            "cmake-build-release",
+            # IDE and editor files
+            ".vscode",
+            ".idea",
+            ".vs",
+            ".eclipse",
+            ".settings",
+            ".metadata",
+            "__pycache__",
+            ".pytest_cache",
+            ".mypy_cache",
+            ".tox",
+            # Version control
+            ".git",
+            ".svn",
+            ".hg",
+            ".bzr",
+            # Cache and temporary
+            ".cache",
+            ".tmp",
+            "tmp",
+            "temp",
+            ".temp",
+            "cache",
+            # Documentation builds
+            "_site",
+            "_build",
+            "site",
+            "docs/_build",
+            ".docusaurus",
+            # Test coverage and reports
+            "coverage",
+            "htmlcov",
+            ".nyc_output",
+            ".coverage",
+            # Mobile development
+            "Pods",
+            "DerivedData",
+            ".expo",
+            ".flutter-plugins",
+            # Logs
+            "logs",
+            "log",
+            ".logs",
+        }
+
+        self.EXCLUDED_FILENAMES = {
+            # Lock files
+            "package-lock.json",
+            "yarn.lock",
+            "composer.lock",
+            "Pipfile.lock",
+            "poetry.lock",
+            "Gemfile.lock",
+            "cargo.lock",
+            "mix.lock",
+            # Generated files
+            "bundle.js",
+            "bundle.min.js",
+            "app.min.js",
+            "vendor.js",
+            "main.bundle.js",
+            "polyfills.js",
+            "runtime.js",
+            # Database files
+            "database.sqlite",
+            "database.db",
+            "data.db",
+            "app.db",
+            # IDE files
+            ".DS_Store",
+            "Thumbs.db",
+            "desktop.ini",
+            ".directory",
+            # Compiled Python
+            "*.pyc",
+            "*.pyo",
+            "*.pyd",
+            # Environment files with potentially sensitive data
+            ".env.local",
+            ".env.production",
+            ".env.staging",
+        }
+
+        # Filename pattern exclusions (regex-based, NO CONTENT READING)
+        self.EXCLUDED_FILENAME_PATTERNS = [
+            # Minified files (detectable by name)
+            r".*\.min\.(js|css|html)$",
+            r".*-min\.(js|css)$",
+            r".*\.bundle\.(js|css)$",
+            r".*\.chunk\.[a-f0-9]+\.(js|css)$",  # Webpack chunks
+            # Temporary files
+            r".*\.tmp$",
+            r".*\.temp$",
+            r".*\.bak$",
+            r".*\.backup$",
+            r".*\.old$",
+            r".*\.orig$",
+            r".*~$",
+            r"^\#.*\#$",
+            r"\..*\.sw[po]$",  # Vim swap files
+            # Lock and generated patterns
+            r".*-lock\..*$",
+            r".*\.lockfile$",
+            # Version/build artifacts
+            r".*\.[a-f0-9]{8,}\.js$",  # Hash-based filenames
+            r".*\.[a-f0-9]{8,}\.css$",
+            r".*\.generated\..*$",
+            r".*\.auto\..*$",
+            # Compiled files
+            r".*\.pyc$",
+            r".*\.pyo$",
+            r".*\.pyd$",
+            r".*\.class$",
+            r".*\.o$",
+            r".*\.obj$",
+            # Log files
+            r".*\.log$",
+            r".*\.log\.\d+$",
+            # Test artifacts
+            r".*\.test\.js\.snap$",  # Jest snapshots
+            r".*__snapshots__.*$",
+            # Coverage files
+            r".*\.lcov$",
+            r".*\.coverage$",
+            # Map files
+            r".*\.map$",
+            r".*\.js\.map$",
+            r".*\.css\.map$",
+        ]
+
+        # Content-based filters
+        self.GENERATED_FILE_INDICATORS = [
+            "auto-generated",
+            "automatically generated",
+            "do not edit",
+            "generated by",
+            "this file was generated",
+            "// <auto-generated",
+            "/* auto-generated */",
+            "# Auto-generated",
+            "# Generated by",
+            "Code generated by",
+            "WARNING: do not modify",
+        ]
+
+        self.MINIFIED_FILE_INDICATORS = [
+            # Single line with high character density
+            r"^.{500,}$",  # Single line over 500 chars
+            # Minified JS/CSS patterns
+            r"[a-zA-Z]\w*\(\w*\)\s*{[^}]+}[a-zA-Z]\w*\(\w*\)\s*{",  # Compressed functions
+        ]
+
+        # Binary file detection
+        self.BINARY_EXTENSIONS = {
+            ".so",
+            ".dll",
+            ".dylib",
+            ".a",
+            ".lib",
+            ".exe",
+            ".bin",
+            ".dat",
+            ".class",
+            ".jar",
+            ".war",
+            ".ear",
+            ".dex",
+            ".apk",
+            ".ipa",
+        }
+
+        # Suspicious size patterns (files that are likely generated)
+        self.SUSPICIOUS_SIZE_RANGES: List[tuple[int, float]] = [
+            # Very large single files (likely bundled/generated)
+            (1024 * 1024, float("inf")),  # > 1MB single files
+        ]
+
+    def should_skip_file(self, file_path: str, file_size: int, name: str = "") -> tuple[bool, str]:
+        """
+        Comprehensive file filtering WITHOUT reading file content.
+
+        Returns:
+            tuple[bool, str]: (should_skip, reason)
+        """
+        path_obj = Path(file_path)
+        ext = path_obj.suffix.lower()
+        filename = path_obj.name
+        filename_lower = filename.lower()
+
+        # 1. Extension-based exclusion (your existing check)
+        if ext in self.EXCLUSION_EXTS:
+            return True, f"Excluded extension: {ext}"
+
+        # 2. File size checks (your existing checks)
+        if file_size > self.MAX_INDIVIDUAL_FILE_SIZE_BYTES:
+            return (
+                True,
+                f"File too large: {file_size:,} bytes > {self.MAX_INDIVIDUAL_FILE_SIZE_BYTES:,}",
+            )
+
+        if file_size <= self.MIN_FILE_SIZE_BYTES:
+            return True, "Empty or near-empty file"
+
+        # 3. Directory-based exclusions
+        path_parts = [p.lower() for p in path_obj.parts]
+        for excluded_dir in self.EXCLUDED_DIRECTORIES:
+            if excluded_dir in path_parts:
+                return True, f"In excluded directory: {excluded_dir}"
+
+        # 4. Exact filename exclusions
+        if filename_lower in {f.lower() for f in self.EXCLUDED_FILENAMES}:
+            return True, f"Excluded filename: {filename}"
+
+        # 5. Filename pattern exclusions
+        for pattern in self.EXCLUDED_FILENAME_PATTERNS:
+            if re.match(pattern, filename_lower, re.IGNORECASE):
+                return True, f"Matches excluded pattern: {pattern}"
+
+        # 6. Binary file extensions
+        if ext in self.BINARY_EXTENSIONS:
+            return True, f"Binary file extension: {ext}"
+
+        # 7. Hidden files (often system/config files)
+        if filename.startswith(".") and ext not in {".js", ".ts", ".py", ".java", ".cpp"}:
+            return True, "Hidden file (likely system/config)"
+
+        # 8. Very long filenames (often generated)
+        if len(filename) > 100:
+            return True, f"Filename too long: {len(filename)} characters"
+
+        # 9. Files with suspicious character patterns in name
+        if self._has_suspicious_filename_pattern(filename):
+            return True, "Suspicious filename pattern (likely generated)"
+
+        # 10. MIME type check (no content reading, just extension-based)
+        mime_type = mimetypes.guess_type(file_path)[0]
+        if mime_type and not self._is_likely_text_mime_type(mime_type):
+            return True, f"Non-text MIME type: {mime_type}"
+
+        # 11. Files with numeric-heavy names (often generated)
+        if self._is_numeric_heavy_filename(filename):
+            return True, "Numeric-heavy filename (likely generated)"
+
+        # 12. Test files (optional - you might want to analyze these)
+        if self._is_test_file_by_path(file_path):
+            return True, "Test file (excluded from main analysis)"
+
+        # 13. Documentation in non-code format
+        if self._is_non_code_documentation(filename_lower, ext):
+            return True, "Non-code documentation file"
+
+        return False, "File passed all filters"
+
+    def _has_suspicious_filename_pattern(self, filename: str) -> bool:
+        """Detect generated files by filename patterns."""
+        suspicious_patterns = [
+            # Hash-like patterns
+            r"[a-f0-9]{32,}",  # MD5/SHA hashes
+            r"[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}",  # UUIDs
+            # Build artifacts
+            r"chunk\.\w+\.",
+            r"vendor\.\w+\.",
+            r"runtime\.\w+\.",
+            # Multiple consecutive dots
+            r"\.{3,}",
+        ]
+
+        return any(re.search(pattern, filename, re.IGNORECASE) for pattern in suspicious_patterns)
+
+    def _is_numeric_heavy_filename(self, filename: str) -> bool:
+        """Check if filename is heavily numeric (likely generated)."""
+        name_without_ext = Path(filename).stem
+        if len(name_without_ext) == 0:
+            return False
+
+        numeric_chars = sum(1 for c in name_without_ext if c.isdigit())
+        return numeric_chars / len(name_without_ext) > 0.6  # >60% numeric
+
+    def _is_test_file_by_path(self, file_path: str) -> bool:
+        """Detect test files by path patterns."""
+        path_lower = file_path.lower()
+        filename = Path(file_path).name.lower()
+
+        # Directory-based detection
+        test_dirs = {"test", "tests", "__tests__", "spec", "specs", "testing"}
+        path_parts = set(Path(file_path).parts)
+        if any(test_dir in {p.lower() for p in path_parts} for test_dir in test_dirs):
+            return True
+
+        # Filename-based detection
+        test_patterns = [
+            r".*test.*\.(py|js|ts|java|cpp|c|cs|rb|go|rs)$",
+            r".*_test\.(py|js|ts|java|cpp|c|cs|rb|go|rs)$",
+            r"test_.*\.(py|js|ts|java|cpp|c|cs|rb|go|rs)$",
+            r".*\.test\.(js|ts)$",
+            r".*\.spec\.(js|ts|py|rb)$",
+        ]
+
+        return any(re.match(pattern, filename) for pattern in test_patterns)
+
+    def _is_non_code_documentation(self, filename_lower: str, ext: str) -> bool:
+        """Check if file is documentation that doesn't contain code."""
+        # Documentation files that typically don't contain analyzable code
+        doc_files = {
+            "readme",
+            "readme.txt",
+            "readme.md",
+            "readme.rst",
+            "license",
+            "license.txt",
+            "license.md",
+            "changelog",
+            "changelog.md",
+            "changelog.txt",
+            "authors",
+            "contributors",
+            "credits",
+            "thanks",
+            "install",
+            "install.txt",
+            "install.md",
+            "news",
+            "history",
+            "copying",
+            "notice",
+        }
+
+        base_name = Path(filename_lower).stem
+        return base_name in doc_files or filename_lower in doc_files
+
+    def _is_likely_text_mime_type(self, mime_type: str) -> bool:
+        """Check if MIME type indicates text content (no file reading)."""
+        text_mime_prefixes = [
+            "text/",
+            "application/json",
+            "application/xml",
+            "application/javascript",
+            "application/x-httpd-php",
+            "application/x-python",
+            "application/x-sh",
+        ]
+        return any(mime_type.startswith(prefix) for prefix in text_mime_prefixes)
+
+    def filter_files_with_budget(self, files: List[Dict]) -> List[Dict]:
+        """
+        Filter files with total size budget management (no content reading).
+        """
+        filtered_files = []
+        current_total_size = 0
+
+        # Sort by priority (code files first, then by size)
+        prioritized_files = sorted(files, key=self._get_file_priority)
+
+        for file in prioritized_files:
+            file_path = file.get("path", str(file))
+            file_size = file.get("size", 0)
+
+            should_skip, reason = self.should_skip_file(file_path, file_size)
+
+            if should_skip:
+                logger.debug(f"Skipping {file_path}: {reason}")
+                continue
+
+            if current_total_size + file_size > self.MAX_TOTAL_ANALYSIS_SIZE:
+                logger.warning(
+                    f"Reached size budget ({self.MAX_TOTAL_ANALYSIS_SIZE:,} bytes), "
+                    f"skipping remaining files including {file_path}"
+                )
+                break
+
+            filtered_files.append(file)
+            current_total_size += file_size
+
+        logger.info(
+            f"Filtered {len(files)} files to {len(filtered_files)} files "
+            f"({current_total_size:,} bytes total)"
+        )
+
+        return filtered_files
+
+    def _get_file_priority(self, file: Dict) -> tuple:
+        """Get priority score for file (lower = higher priority)."""
+        file_path = file.get("path", str(file)).lower()
+        ext = Path(file_path).suffix.lower()
+        size = file.get("size", 0)
+
+        # Priority 1: Main programming language files
+        if ext in {
+            ".py",
+            ".js",
+            ".ts",
+            ".java",
+            ".cpp",
+            ".c",
+            ".cs",
+            ".rb",
+            ".go",
+            ".rs",
+            ".swift",
+            ".kt",
+        }:
+            return (1, size)
+
+        # Priority 2: Web development files
+        if ext in {".html", ".css", ".scss", ".sass", ".vue", ".jsx", ".tsx", ".php"}:
+            return (2, size)
+
+        # Priority 3: Build/config files that contain logic
+        if ext in {".json", ".yaml", ".yml", ".toml", ".dockerfile"} and "package" not in file_path:
+            return (3, size)
+
+        # Priority 4: Database/query files
+        if ext in {".sql", ".graphql", ".gql"}:
+            return (4, size)
+
+        # Priority 5: Documentation with potential code
+        if ext in {".md", ".rst"} and any(word in file_path for word in ["api", "readme", "doc"]):
+            return (5, size)
+
+        # Priority 6: Everything else
+        return (6, size)
+
+
 class GitHubProfileImporter:
-    def __init__(self, github_username: str):
+    """TODO this class will be refactored to an agent."""
+
+    def __init__(self, github_username: str) -> None:
         self.github_username = github_username
         self.client = GoogleClient(model=settings.FAST_GOOGLE_MODEL)
-        # self.client_fast = GoogleClient()
+        self.filter_obj = CodeFileFilter()
         # Create a fresh temporary directory for this import session
         self.temp_dir: str = tempfile.mkdtemp(prefix="github_import_")
         self.repos = []  # Keep track of Git repo objects
@@ -57,6 +893,37 @@ class GitHubProfileImporter:
         else:
             logger.error("No GitHub token found in settings")
             raise ValueError("No GitHub token found in settings")
+
+    def _fetch_repo_tree(self, repo_name: str, default_branch: str) -> List[Dict]:
+        """Helper to fetch all file blobs from a repo's tree."""
+        try:
+            # First, get the SHA of the default branch's tree
+            branch_url = f"https://api.github.com/repos/{self.github_username}/{repo_name}/branches/{default_branch}"
+            branch_resp = requests.get(branch_url, headers=self.headers, timeout=15)
+            branch_resp.raise_for_status()
+            tree_sha = branch_resp.json()["commit"]["commit"]["tree"]["sha"]
+
+            # Then, get the recursive tree
+            tree_url = f"https://api.github.com/repos/{self.github_username}/{repo_name}/git/trees/{tree_sha}?recursive=1"
+            tree_resp = requests.get(tree_url, headers=self.headers, timeout=30)
+            tree_resp.raise_for_status()
+
+            all_tree_items = tree_resp.json().get("tree", [])
+            # Filter")
+            # Filter for blobs (files) and ensure 'path' and 'size' are present
+            file_items = [
+                item
+                for item in all_tree_items
+                if item.get("type") == "blob" and "path" in item and "size" in item
+            ]
+            return file_items
+        except requests.exceptions.RequestException as e:
+            logger.error(f"API error fetching tree for {repo_name} on branch {default_branch}: {e}")
+        except KeyError as e:
+            logger.error(f"Unexpected API response structure for {repo_name} tree (KeyError: {e}).")
+        except Exception as e:
+            logger.error(f"Generic error fetching tree for {repo_name}: {e}")
+        return []
 
     def __enter__(self):
         return self
@@ -79,78 +946,330 @@ class GitHubProfileImporter:
         except Exception:
             pass
 
-    def analyze_python_code(self, code: str) -> Dict:
-        """Analyze Python code and extract functions, classes, and imports."""
+    def analyze_coding_experience(self, uploaded_files: list[File]) -> Dict:
+        """
+        Comprehensive analysis of user's coding experience and abilities for job applications.
+        Extracts technical skills, programming patterns, complexity indicators, and professional readiness.
+        """
         try:
-            tree = ast.parse(code)
-            functions = [node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)]
-            classes = [node.name for node in ast.walk(tree) if isinstance(node, ast.ClassDef)]
-            imports = [
-                node.module
-                for node in ast.walk(tree)
-                if isinstance(node, ast.ImportFrom) and node.module
-            ]
-            return {
-                "functions": functions,
-                "classes": classes,
-                "imports": imports,
-            }
-        except SyntaxError:
-            logger.info(
-                f"AST parsing failed for code (likely not Python or syntax error). Attempting LLM analysis."
-            )
-            prompt: str = f"""Analyze the following code snippet. It may not be Python.
-                        Identify function definitions, class definitions (or equivalent structures like structs), and any import or include statements.
-                        Return the result as a JSON object with three keys: 'functions', 'classes', and 'imports'.
-                        Each key should have a list of strings as its value, representing the names found.
-                        If no items are found for a category, provide an empty list for that category.
+            prompt: str = """
+            Analyze the provided code files to assess the user's experience, skills, and abilities for job application purposes.
+            
+            Provide a comprehensive analysis covering:
+            
+            1. TECHNICAL PROFICIENCY:
+            - Programming languages used and proficiency level (beginner/intermediate/advanced)
+            - Frameworks, libraries, and tools demonstrated
+            - Database technologies and data handling approaches
+            - API usage and integration patterns
+            
+            2. CODE QUALITY & BEST PRACTICES:
+            - Code organization and structure quality
+            - Use of design patterns and architectural principles
+            - Error handling and edge case management
+            - Code documentation and commenting practices
+            - Testing approaches (unit tests, integration tests, etc.)
+            
+            3. PROBLEM-SOLVING & ALGORITHMS:
+            - Algorithm complexity and efficiency considerations
+            - Data structure usage and optimization
+            - Problem decomposition and solution approach
+            - Mathematical or computational thinking demonstrated
+            
+            4. SOFTWARE ENGINEERING PRACTICES:
+            - Object-oriented programming concepts usage
+            - Functional programming patterns
+            - Code reusability and modularity
+            - Version control practices (if evident)
+            - Configuration management
+            
+            5. DOMAIN EXPERTISE:
+            - Specific industry/domain knowledge shown
+            - Business logic implementation
+            - Integration with external systems
+            - Data processing and analysis capabilities
+            
+            6. EXPERIENCE INDICATORS:
+            - Project complexity level (simple scripts vs. full applications)
+            - Code maturity and sophistication
+            - Performance optimization techniques
+            - Security considerations implemented
+            
+            7. COLLABORATION & PROFESSIONALISM:
+            - Code readability for team environments
+            - Documentation quality for knowledge sharing
+            - Consistent coding style and conventions
+            - Professional development practices
+            
+            Return detailed analysis as JSON with specific examples and recommendations for job applications.
+            """
 
-                        Code:
-                        ```
-                        {code}
-                        ```
-
-                        Example of desired JSON Output:
-                        {{
-                        "functions": ["func_name1", "another_function"],
-                        "classes": ["ClassName1", "MyStruct"],
-                        "imports": ["module_a", "header.h", "library_x"]
-                        }}
-                        """
-            output_schema: Dict[str, str] = {
-                "functions": "list of strings, names of functions or equivalent callable units",
-                "classes": "list of strings, names of classes, structs, or equivalent data structures",
-                "imports": "list of strings, names of imported modules, included libraries/headers, or equivalent dependency statements",
+            output_schema: Dict[str, Dict[str, str]] = {
+                "technical_skills": {
+                    "languages": "dict with language names as keys and proficiency levels as values",
+                    "frameworks_libraries": "list of frameworks/libraries with usage context",
+                    "databases": "list of database technologies and usage patterns",
+                    "tools_technologies": "list of development tools and platforms used",
+                },
+                "code_quality": {
+                    "overall_rating": "string: excellent/good/fair/needs_improvement",
+                    "strengths": "list of code quality strengths demonstrated",
+                    "areas_for_improvement": "list of areas that could be enhanced",
+                    "best_practices_used": "list of software engineering best practices observed",
+                },
+                "problem_solving": {
+                    "algorithm_complexity": "assessment of algorithmic thinking and efficiency",
+                    "data_structures": "list of data structures used appropriately",
+                    "problem_approach": "description of problem-solving methodology",
+                    "optimization_techniques": "list of performance optimizations demonstrated",
+                },
+                "experience_level": {
+                    "overall_assessment": "string: junior/mid-level/senior/expert",
+                    "project_complexity": "description of project sophistication level",
+                    "years_equivalent": "estimated equivalent years of professional experience",
+                    "readiness_indicators": "list of indicators showing job readiness",
+                },
+                "domain_expertise": {
+                    "specialized_areas": "list of domain-specific knowledge areas",
+                    "business_logic": "assessment of business problem solving capability",
+                    "integration_skills": "evaluation of system integration abilities",
+                    "data_handling": "assessment of data processing and analysis skills",
+                },
+                "professional_skills": {
+                    "collaboration_readiness": "assessment of team-work code quality",
+                    "documentation_quality": "evaluation of code documentation practices",
+                    "maintainability": "assessment of code maintainability and scalability",
+                    "testing_approach": "evaluation of testing methodology and coverage",
+                },
+                "job_application_summary": {
+                    "key_strengths": "list of top 5 strengths to highlight in applications",
+                    "suitable_roles": "list of job roles/positions this experience suits",
+                    "competitive_advantages": "unique aspects that stand out to employers",
+                    "development_recommendations": "areas to focus on for career growth",
+                },
+                "portfolio_recommendations": {
+                    "highlight_projects": "specific code examples to showcase in portfolio",
+                    "skill_demonstrations": "how to present technical abilities effectively",
+                    "improvement_suggestions": "concrete steps to enhance job application materials",
+                },
             }
+
+            llm_input_contents: List[File | str] = [prompt] + uploaded_files
+
             try:
                 llm_analysis = self.client.generate_structured_output(
-                    prompt=prompt, output_schema=output_schema
+                    prompt=llm_input_contents, output_schema=output_schema
                 )
-                # Ensure the LLM output conforms to the expected structure, providing defaults
-                return {
-                    "functions": llm_analysis.get("functions", []),
-                    "classes": llm_analysis.get("classes", []),
-                    "imports": llm_analysis.get("imports", []),
-                    "analyzed_by": "llm",  # Optional: to indicate how it was analyzed
+
+                # Ensure comprehensive analysis structure with defaults
+                analysis_result = {
+                    "technical_skills": llm_analysis.get(
+                        "technical_skills",
+                        {
+                            "languages": {},
+                            "frameworks_libraries": [],
+                            "databases": [],
+                            "tools_technologies": [],
+                        },
+                    ),
+                    "code_quality": llm_analysis.get(
+                        "code_quality",
+                        {
+                            "overall_rating": "needs_assessment",
+                            "strengths": [],
+                            "areas_for_improvement": [],
+                            "best_practices_used": [],
+                        },
+                    ),
+                    "problem_solving": llm_analysis.get(
+                        "problem_solving",
+                        {
+                            "algorithm_complexity": "basic level demonstrated",
+                            "data_structures": [],
+                            "problem_approach": "standard approach",
+                            "optimization_techniques": [],
+                        },
+                    ),
+                    "experience_level": llm_analysis.get(
+                        "experience_level",
+                        {
+                            "overall_assessment": "junior",
+                            "project_complexity": "basic projects",
+                            "years_equivalent": "0-1 years",
+                            "readiness_indicators": [],
+                        },
+                    ),
+                    "domain_expertise": llm_analysis.get(
+                        "domain_expertise",
+                        {
+                            "specialized_areas": [],
+                            "business_logic": "basic understanding",
+                            "integration_skills": "limited experience",
+                            "data_handling": "basic data processing",
+                        },
+                    ),
+                    "professional_skills": llm_analysis.get(
+                        "professional_skills",
+                        {
+                            "collaboration_readiness": "needs development",
+                            "documentation_quality": "minimal documentation",
+                            "maintainability": "basic structure",
+                            "testing_approach": "limited testing",
+                        },
+                    ),
+                    "job_application_summary": llm_analysis.get(
+                        "job_application_summary",
+                        {
+                            "key_strengths": [],
+                            "suitable_roles": ["Entry-level Developer"],
+                            "competitive_advantages": [],
+                            "development_recommendations": [],
+                        },
+                    ),
+                    "portfolio_recommendations": llm_analysis.get(
+                        "portfolio_recommendations",
+                        {
+                            "highlight_projects": [],
+                            "skill_demonstrations": [],
+                            "improvement_suggestions": [],
+                        },
+                    ),
+                    "analyzed_by": "comprehensive_llm_analysis",
+                    "analysis_timestamp": self._get_current_timestamp(),
+                    "files_analyzed": len(uploaded_files),
                 }
+
+                return analysis_result
+
             except Exception as llm_error:
-                logger.error(
-                    f"LLM analysis failed after AST parsing error: {llm_error}. Snippet: {code[:200]}..."
-                )
+                logger.error(f"Comprehensive coding analysis failed: {llm_error}")
                 return {
-                    "error": f"LLM analysis failed: {str(llm_error)}",
-                    "functions": [],
-                    "classes": [],
-                    "imports": [],
+                    "error": f"Analysis failed: {str(llm_error)}",
+                    "technical_skills": {
+                        "languages": {},
+                        "frameworks_libraries": [],
+                        "databases": [],
+                        "tools_technologies": [],
+                    },
+                    "code_quality": {
+                        "overall_rating": "unable_to_assess",
+                        "strengths": [],
+                        "areas_for_improvement": [],
+                        "best_practices_used": [],
+                    },
+                    "problem_solving": {
+                        "algorithm_complexity": "unable_to_assess",
+                        "data_structures": [],
+                        "problem_approach": "unable_to_assess",
+                        "optimization_techniques": [],
+                    },
+                    "experience_level": {
+                        "overall_assessment": "unable_to_assess",
+                        "project_complexity": "unable_to_assess",
+                        "years_equivalent": "unknown",
+                        "readiness_indicators": [],
+                    },
+                    "domain_expertise": {
+                        "specialized_areas": [],
+                        "business_logic": "unable_to_assess",
+                        "integration_skills": "unable_to_assess",
+                        "data_handling": "unable_to_assess",
+                    },
+                    "professional_skills": {
+                        "collaboration_readiness": "unable_to_assess",
+                        "documentation_quality": "unable_to_assess",
+                        "maintainability": "unable_to_assess",
+                        "testing_approach": "unable_to_assess",
+                    },
+                    "job_application_summary": {
+                        "key_strengths": [],
+                        "suitable_roles": [],
+                        "competitive_advantages": [],
+                        "development_recommendations": [],
+                    },
+                    "portfolio_recommendations": {
+                        "highlight_projects": [],
+                        "skill_demonstrations": [],
+                        "improvement_suggestions": [],
+                    },
                 }
-        except Exception as e:  # Catch other unexpected errors from ast.walk or elsewhere
-            logger.error(f"Unexpected error analyzing code: {e}. Snippet: {code[:200]}...")
+
+        except Exception as e:
+            logger.error(f"Unexpected error in coding experience analysis: {e}")
             return {
-                "error": f"Failed to analyze code: {str(e)}",
-                "functions": [],
-                "classes": [],
-                "imports": [],
+                "error": f"Failed to analyze coding experience: {str(e)}",
+                "analysis_status": "failed",
             }
+
+    def _get_current_timestamp(self):
+        """Helper method to get current timestamp for analysis tracking."""
+        from datetime import datetime
+
+        return datetime.now().isoformat()
+
+    def generate_job_application_report(self, analysis_result: Dict) -> str:
+        """
+        Generate a formatted report suitable for job applications based on coding analysis.
+        """
+        if "error" in analysis_result:
+            return f"Analysis Error: {analysis_result['error']}"
+
+        report: str = f"""
+                # CODING EXPERIENCE ANALYSIS REPORT
+
+                ## Overall Assessment
+                **Experience Level:** {analysis_result['experience_level']['overall_assessment'].title()}
+                **Equivalent Experience:** {analysis_result['experience_level']['years_equivalent']}
+                **Code Quality Rating:** {analysis_result['code_quality']['overall_rating'].title()}
+
+                ## Key Technical Strengths
+                """
+
+        # Add key strengths
+        for strength in analysis_result["job_application_summary"]["key_strengths"]:
+            report += f"• {strength}\n"
+
+        report += """
+                    ## Technical Skills Profile
+                    **Programming Languages:**
+                    """
+        for lang, level in analysis_result["technical_skills"]["languages"].items():
+            report += f"• {lang}: {level}\n"
+
+        report += """
+                    **Frameworks & Libraries:**
+                    """
+        for framework in analysis_result["technical_skills"]["frameworks_libraries"]:
+            report += f"• {framework}\n"
+
+        report += """
+                    ## Suitable Job Roles
+                    """
+        for role in analysis_result["job_application_summary"]["suitable_roles"]:
+            report += f"• {role}\n"
+
+        report += """
+                ## Competitive Advantages
+                """
+        for advantage in analysis_result["job_application_summary"]["competitive_advantages"]:
+            report += f"• {advantage}\n"
+
+        report += """
+                    ## Portfolio Recommendations
+                    **Projects to Highlight:**
+                    """
+        for project in analysis_result["portfolio_recommendations"]["highlight_projects"]:
+            report += f"• {project}\n"
+
+        report += """
+                ## Development Recommendations
+                """
+        for recommendation in analysis_result["job_application_summary"][
+            "development_recommendations"
+        ]:
+            report += f"• {recommendation}\n"
+
+        return report
 
     def get_repository_info(self) -> List[Dict]:
         """Fetch and analyze all public repositories."""
@@ -165,62 +1284,73 @@ class GitHubProfileImporter:
             repo_analyses = []
             for repo in repos:
                 name = repo.get("name", "")
-                clone_url = repo.get("clone_url", "")
                 description = repo.get("description", "")
                 language = repo.get("language", "")
                 stars = repo.get("stargazers_count", 0)
                 forks = repo.get("forks_count", 0)
                 updated_at = repo.get("updated_at", "")
+                default_branch = repo.get("default_branch", "main")
 
-                repo_path = os.path.join(self.temp_dir, name)
+                repo_tree_items = self._fetch_repo_tree(name, default_branch)
+                # repo_path = os.path.join(self.temp_dir, name) # Not used if fetching via API
 
-                # Ensure the directory is clean before cloning
-                if os.path.exists(repo_path):
+                uploaded_files_for_analysis: list[File] = []
+                processed_file_paths: List[str] = []
+
+                for file_item in repo_tree_items:
+                    file_path_in_repo = file_item["path"]
+                    blob_api_url = file_item["url"]
+                    file_size = file_item.get("size", 0)
+
+                    should_skip, reason = self.filter_obj.should_skip_file(
+                        file_path_in_repo, file_size, name
+                    )
+
+                    if should_skip:
+                        logger.debug(f"Skipping {file_path_in_repo}: {reason}")
+                        continue
+
                     try:
-                        # On Windows, we might get access denied errors when trying to delete git objects
-                        # Just try to continue and let Git handle it or create a new path
-                        shutil.rmtree(repo_path, ignore_errors=True)
-                        if os.path.exists(repo_path):
-                            # If the directory still exists, create a new unique path
-                            repo_path = os.path.join(
-                                self.temp_dir,
-                                f"{name}_{tempfile.mktemp(prefix='', dir='', suffix='').replace('.', '')}",
+                        # Use self.headers for authenticated requests if token is present
+                        blob_response = httpx.get(blob_api_url, headers=self.headers, timeout=20)
+                        blob_response.raise_for_status()
+                        blob_data = blob_response.json()
+
+                        if blob_data.get("encoding") != "base64":
+                            logger.warning(
+                                f"File {file_path_in_repo} in {name} is not base64 encoded as expected. Encoding: {blob_data.get('encoding')}. Skipping."
                             )
-                    except Exception as e:
-                        # Log but continue with a new unique path
-                        logger.warning(
-                            f"Error cleaning up existing repo directory {repo_path}: {str(e)}"
-                        )
-                        repo_path = os.path.join(
-                            self.temp_dir,
-                            f"{name}_{tempfile.mktemp(prefix='', dir='', suffix='').replace('.', '')}",
-                        )
+                            continue
 
+                        file_content_base64 = blob_data.get("content")
+                        if not file_content_base64:
+                            logger.warning(
+                                f"No content found for file {file_path_in_repo} in {name}. Skipping."
+                            )
+                            continue
+
+                        decoded_content_bytes = base64.b64decode(file_content_base64)
+                        doc_io = io.BytesIO(decoded_content_bytes)
+
+                        mime_type, _ = mimetypes.guess_type(file_path_in_repo)
+                        if mime_type is None:
+                            mime_type = "application/octet-stream"  # Default if cannot guess
+
+                        uploaded_file_obj = self.client.client.files.upload(
+                            file=doc_io,
+                            config={"mime_type": mime_type},
+                        )
+                        uploaded_files_for_analysis.append(uploaded_file_obj)
+                        processed_file_paths.append(file_path_in_repo)
+
+                    except Exception as e:  # pylint: disable=broad-except
+                        logger.error(
+                            f"Error processing or uploading file {file_path_in_repo} from {name}: {e}"
+                        )
                 try:
-                    git_repo: git.Repo = git.Repo.clone_from(clone_url, repo_path)
-                    self.repos.append(git_repo)  # Track the repo for cleanup
-                except Exception as e:
-                    logger.error(f"Error cloning {name}: {str(e)}")
-                    continue
-
-                repo_summary = []
-                for filepath in Path(repo_path).rglob("*"):
-                    try:
-                        with open(filepath, "r", encoding="utf-8") as file:
-                            code = file.read()
-                        analysis = self.analyze_python_code(code)
-                        repo_summary.append((str(filepath.relative_to(repo_path)), analysis))
-                    except Exception as e:
-                        logger.error(f"Error reading {filepath}: {e}")
-
-                # Analyze repository structure
-                structure = self.analyze_repository_structure(repo_path)
-
-                # Analyze dependencies
-                dependencies = self.analyze_dependencies(repo_path)
-
-                # Analyze commit history
-                commit_history = self.analyze_commit_history(repo_path)
+                    analysis = self.analyze_coding_experience(uploaded_files_for_analysis)
+                except Exception as e:  # pylint: disable=broad-except
+                    logger.error(f"Error reading {name} repo: {e}")
 
                 repo_analyses.append(
                     {
@@ -230,10 +1360,7 @@ class GitHubProfileImporter:
                         "stars": stars,
                         "forks": forks,
                         "last_updated": updated_at,
-                        "code_analysis": repo_summary,
-                        "structure": structure,
-                        "dependencies": dependencies,
-                        "commit_history": commit_history,
+                        "code_analysis": analysis,
                     }
                 )
 
@@ -241,29 +1368,6 @@ class GitHubProfileImporter:
         except Exception as e:
             logger.error(f"Error fetching repository info: {e}")
             return []
-
-    def analyze_repository_structure(self, repo_path: str) -> Dict:
-        """Analyze repository structure and organization."""
-        try:
-            structure = {"total_files": 0, "file_types": {}, "directories": [], "main_files": []}
-
-            for root, dirs, files in os.walk(repo_path):
-                rel_path = os.path.relpath(root, repo_path)
-                if rel_path != ".":
-                    structure["directories"].append(rel_path)
-
-                for file in files:
-                    structure["total_files"] += 1
-                    ext = os.path.splitext(file)[1]
-                    structure["file_types"][ext] = structure["file_types"].get(ext, 0) + 1
-
-                    if file.lower() in ["readme.md", "requirements.txt", "setup.py", "main.py"]:
-                        structure["main_files"].append(os.path.join(rel_path, file))
-
-            return structure
-        except Exception as e:
-            logger.error(f"Error analyzing repository structure: {e}")
-            return {}
 
     def analyze_dependencies(self, repo_path: str) -> Dict:
         """Analyze project dependencies."""
@@ -332,31 +1436,6 @@ class GitHubProfileImporter:
                 except Exception as e:
                     logger.error(f"Error parsing {pyproject_path}: {e}")
 
-            # Collect all imports from Python files
-            for filepath in Path(repo_path).rglob("*.py"):
-                try:
-                    with open(filepath, "r", encoding="utf-8") as f:
-                        content = f.read()
-                        tree = ast.parse(content)
-                        for node in ast.walk(tree):
-                            if isinstance(node, ast.Import):
-                                for alias in node.names:
-                                    dependencies["imports"].add(alias.name.split(".")[0])
-                            elif isinstance(node, ast.ImportFrom):
-                                if (
-                                    node.module
-                                ):  # For ast.ImportFrom, node.module can be None for relative imports
-                                    dependencies["imports"].add(node.module.split(".")[0])
-                except SyntaxError as e:
-                    logger.warning(
-                        f"SyntaxError analyzing imports in {filepath}: {e}. Skipping this file for import analysis."
-                    )
-                except (
-                    Exception
-                ) as e:  # Catch other potential errors during file processing or AST walking
-                    logger.error(f"Error analyzing imports in {filepath}: {e}")
-
-            dependencies["imports"] = list(dependencies["imports"])
             dependencies["pyproject_toml"] = list(set(dependencies["pyproject_toml"]))
             return dependencies
         except Exception as e:
@@ -413,23 +1492,23 @@ class GitHubProfileImporter:
             )
 
             # Take only the top 5 most relevant repositories to reduce input size
-            top_repos = simplified_repos[:5]
+            top_repos = simplified_repos
 
             prompt = f"""Based on these GitHub repositories, extract technical skills:
 
-Repository Data:
-{json.dumps(top_repos, indent=2)}
+                            Repository Data:
+                            {json.dumps(top_repos, indent=2)}
 
-Format as JSON:
-{{
-    "skills": [
-        {{
-            "name": "string",
-            "category": "Programming Language/Framework/Tool",
-            "proficiency": 3
-        }}
-    ]
-}}"""
+                            Format as JSON:
+                            {{
+                                "skills": [
+                                    {{
+                                        "name": "string",
+                                        "category": "Programming Language/Framework/Tool",
+                                        "proficiency": 3
+                                    }}
+                                ]
+                            }}"""
 
             # Generate response with default parameters since Ollama client doesn't support max_tokens/timeout
             response = self.client.generate_text(prompt)
@@ -469,29 +1548,29 @@ Format as JSON:
 
         prompt = f"""Based on these GitHub repositories, extract professional experience:
 
-Repository Data:
-{json.dumps(top_repos, indent=2)}
+                        Repository Data:
+                        {json.dumps(top_repos, indent=2)}
 
-Format as JSON:
-{{
-    "work_experiences": [
-        {{
-            "company": "Personal/Open Source",
-            "position": "Software Developer",
-            "start_date": "YYYY-MM",
-            "end_date": "YYYY-MM",
-            "description": "string",
-            "technologies": ["string"]
-        }}
-    ],
-    "skills": [
-        {{
-            "name": "string",
-            "category": "Programming Language/Framework/Tool",
-            "proficiency": 3
-        }}
-    ]
-}}"""
+                        Format as JSON:
+                        {{
+                            "work_experiences": [
+                                {{
+                                    "company": "Personal/Open Source",
+                                    "position": "Software Developer",
+                                    "start_date": "YYYY-MM",
+                                    "end_date": "YYYY-MM",
+                                    "description": "string",
+                                    "technologies": ["string"]
+                                }}
+                            ],
+                            "skills": [
+                                {{
+                                    "name": "string",
+                                    "category": "Programming Language/Framework/Tool",
+                                    "proficiency": 3
+                                }}
+                            ]
+                        }}"""
 
         try:
             # Generate response with default parameters since Ollama client doesn't support max_tokens/timeout
@@ -598,25 +1677,29 @@ Format as JSON:
             logger.error(f"Error fetching GitHub contribution data: {str(e)}")
             return {"total_stars": 0, "total_commits": 0, "languages": {}}
 
-    def import_profile(self) -> str:
+    def import_profile(self) -> dict:
         """Import profile data from GitHub"""
         try:
             # Get user profile info
+            logger.debug("Fetching GitHub profile data...")
             profile_data = self.get_profile_info()
             if not profile_data:
                 return json.dumps({"error": "Failed to fetch GitHub profile data"})
 
             # Get repository info
+            logger.debug("Fetching GitHub repository data...")
             repo_data = self.get_repository_info()
             if not repo_data:
                 return json.dumps({"error": "Failed to fetch repository data"})
 
             # Get contribution data
+            logger.debug("Fetching GitHub contribution data...")
             contribution_data = self.get_contribution_data()
             if not contribution_data:
                 return json.dumps({"error": "Failed to fetch contribution data"})
 
             # Extract skills from repositories
+            logger.debug("Extracting skills from repositories...")
             skills = self.extract_skills(repo_data)
 
             # Combine all data
@@ -642,7 +1725,7 @@ Format as JSON:
                 "repositories": repo_data,
             }
 
-            return json.dumps(combined_data)
+            return combined_data
 
         except Exception as e:
             logger.error(f"Error in import_profile: {str(e)}")
@@ -676,21 +1759,8 @@ Format as JSON:
 
                 # Extract technologies from repo
                 technologies = []
-                if repo.get("language"):
-                    technologies.append(repo["language"])
-                if repo.get("dependencies"):
-                    # Add main dependencies
-                    if repo["dependencies"].get("requirements"):
-                        technologies.extend(
-                            [dep.split("==")[0] for dep in repo["dependencies"]["requirements"]]
-                        )
-                    if repo["dependencies"].get("setup_py"):
-                        technologies.extend(
-                            [dep.split("==")[0] for dep in repo["dependencies"]["setup_py"]]
-                        )
-
-                # Remove duplicates and join with commas
-                technologies = ", ".join(sorted(set(filter(None, technologies))))
+                if repo.get("code_analysis"):
+                    technologies = repo["code_analysis"]["technical_skills"]
 
                 project_data = {
                     "profile": user_profile,
@@ -819,6 +1889,245 @@ class ResumeImporter:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self._cleanup_temp_file()
 
+    def _parse_date_flexible(
+        self,
+        date_str: Optional[str],
+        field_name: str,
+        section_name: str,
+        item_identifier: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Parses date strings (YYYY-MM-DD, YYYY-MM, YYYY) into "YYYY-MM-DD" or None.
+        Defaults to day 01 / month 01 if not specified.
+        """
+        if not date_str or not isinstance(date_str, str):
+            return None
+
+        original_date_str = date_str
+        log_prefix = f"Validation for {section_name}"
+        if item_identifier:
+            log_prefix += f" (item: {item_identifier})"
+        log_prefix += f", field '{field_name}':"
+
+        try:
+            # Try YYYY-MM-DD
+            datetime.strptime(date_str, "%Y-%m-%d")
+            return date_str
+        except ValueError:
+            try:
+                # Try YYYY-MM
+                dt_obj = datetime.strptime(date_str, "%Y-%m")
+                parsed_date = dt_obj.strftime("%Y-%m-01")
+                logger.info(
+                    f"{log_prefix} Date '{original_date_str}' parsed as YYYY-MM, converted to '{parsed_date}'."
+                )
+                return parsed_date
+            except ValueError:
+                try:
+                    # Try YYYY
+                    dt_obj = datetime.strptime(date_str, "%Y")
+                    parsed_date = dt_obj.strftime("%Y-01-01")
+                    logger.info(
+                        f"{log_prefix} Date '{original_date_str}' parsed as YYYY, converted to '{parsed_date}'."
+                    )
+                    return parsed_date
+                except ValueError:
+                    logger.warning(
+                        f"{log_prefix} Could not parse date string '{original_date_str}'. Expected YYYY-MM-DD, YYYY-MM, or YYYY. Setting to None."
+                    )
+                    return None
+
+    def _truncate_string(
+        self,
+        value: Optional[Any],
+        max_length: int,
+        field_name: str,
+        section_name: str,
+        item_identifier: Optional[str] = None,
+    ) -> Optional[str]:
+        """Truncates string if it exceeds max_length. Converts non-strings to strings if possible."""
+        if value is None:
+            return None
+
+        log_prefix = f"Validation for {section_name}"
+        if item_identifier:
+            log_prefix += f" (item: {item_identifier})"
+        log_prefix += f", field '{field_name}':"
+
+        if not isinstance(value, str):
+            original_type = type(value).__name__
+            try:
+                value = str(value)
+                logger.warning(
+                    f"{log_prefix} Expected string, got {original_type}. Converted to string: '{value[:50]}...'"
+                )
+            except Exception:
+                logger.error(
+                    f"{log_prefix} Could not convert non-string value of type {original_type} to string. Setting to empty string."
+                )
+                return ""
+
+        if len(value) > max_length:
+            truncated_value = value[:max_length]
+            logger.warning(
+                f"{log_prefix} Value '{value[:30]}...' (len: {len(value)}) exceeded max_length {max_length}. Truncated to '{truncated_value[:30]}...'."
+            )
+            return truncated_value
+        return value
+
+    def _validate_and_clean_parsed_data(self, parsed_data: Dict) -> Dict:
+        """Validates and cleans data parsed by LLM against model schemas."""
+        cleaned_data = parsed_data.copy()
+
+        # --- Basic Info (UserProfile) ---
+        basic_info = cleaned_data.get("basic_info")
+        if isinstance(basic_info, dict):
+            model_cls = UserProfile
+            for field_name, value in basic_info.items():
+                try:
+                    field_obj = model_cls._meta.get_field(field_name)
+                    if isinstance(field_obj, django_models.CharField) and not isinstance(
+                        field_obj, django_models.TextField
+                    ):
+                        basic_info[field_name] = self._truncate_string(
+                            value, field_obj.max_length, field_name, "basic_info"
+                        )
+                except django_models.fields.FieldDoesNotExist:
+                    logger.debug(
+                        f"Field '{field_name}' in 'basic_info' from LLM not found in UserProfile model. Retaining."
+                    )
+                except AttributeError:  # e.g. field_obj.max_length might not exist
+                    pass
+        elif basic_info is not None:
+            logger.warning(
+                f"'basic_info' from LLM is not a dictionary: {type(basic_info)}. Defaulting to empty dict."
+            )
+            cleaned_data["basic_info"] = {}
+
+        # --- Helper function for list items ---
+        def validate_list_items(
+            data_list: Optional[List[Dict]],
+            section_name: str,
+            model_cls,
+            date_fields: List[str],
+            bool_fields: List[str],
+            float_fields: List[str] = [],
+            int_fields: List[str] = [],
+        ):
+            if not isinstance(data_list, list):
+                if (
+                    data_list is not None
+                ):  # If None, it's fine, will be defaulted by get_schema later if needed
+                    logger.warning(
+                        f"'{section_name}' from LLM is not a list: {type(data_list)}. Setting to empty list."
+                    )
+                return []
+
+            validated_list = []
+            for i, item in enumerate(data_list):
+                if not isinstance(item, dict):
+                    logger.warning(
+                        f"Item {i} in '{section_name}' is not a dictionary: {type(item)}. Skipping."
+                    )
+                    continue
+
+                cleaned_item = item.copy()
+                item_identifier = cleaned_item.get(
+                    "title", cleaned_item.get("name", cleaned_item.get("company", f"item {i}"))
+                )
+
+                for field_name, value in cleaned_item.items():
+                    try:
+                        field_obj = model_cls._meta.get_field(field_name)
+                        if isinstance(field_obj, django_models.CharField) and not isinstance(
+                            field_obj, django_models.TextField
+                        ):
+                            cleaned_item[field_name] = self._truncate_string(
+                                value,
+                                field_obj.max_length,
+                                field_name,
+                                section_name,
+                                item_identifier,
+                            )
+                        elif field_name in date_fields and isinstance(
+                            field_obj, django_models.DateField
+                        ):
+                            cleaned_item[field_name] = self._parse_date_flexible(
+                                value, field_name, section_name, item_identifier
+                            )
+                        elif field_name in bool_fields and isinstance(
+                            field_obj, django_models.BooleanField
+                        ):
+                            if not isinstance(value, bool) and value is not None:
+                                logger.debug(
+                                    f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Expected boolean, got {type(value)} ('{value}'). Converting."
+                                )
+                                cleaned_item[field_name] = str(value).lower() in [
+                                    "true",
+                                    "1",
+                                    "yes",
+                                    "present",
+                                ]
+                        elif field_name in float_fields and isinstance(
+                            field_obj, django_models.FloatField
+                        ):
+                            if value is not None:
+                                try:
+                                    cleaned_item[field_name] = float(value)
+                                except (ValueError, TypeError):
+                                    logger.warning(
+                                        f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Could not convert '{value}' to float. Setting to None."
+                                    )
+                                    cleaned_item[field_name] = None
+                        elif field_name in int_fields and isinstance(
+                            field_obj, django_models.IntegerField
+                        ):
+                            if value is not None:
+                                try:
+                                    cleaned_item[field_name] = int(value)
+                                except (ValueError, TypeError):
+                                    logger.warning(
+                                        f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Could not convert '{value}' to int. Setting to None."
+                                    )
+                                    cleaned_item[field_name] = None
+                    except django_models.fields.FieldDoesNotExist:
+                        logger.debug(
+                            f"Field '{field_name}' in '{section_name}' (item: {item_identifier}) from LLM not found in {model_cls.__name__} model. Retaining."
+                        )
+                    except AttributeError:  # e.g. field_obj.max_length might not exist
+                        pass
+                validated_list.append(cleaned_item)
+            return validated_list
+
+        # --- Validate sections ---
+        sections_config = {
+            "work_experiences": (WorkExperience, ["start_date", "end_date"], ["current"], [], []),
+            "education": (Education, ["start_date", "end_date"], ["current"], ["gpa"], []),
+            "projects": (Project, ["start_date", "end_date"], ["current"], [], []),
+            "certifications": (Certification, ["issue_date", "expiration_date"], [], [], []),
+            "skills": (Skill, [], [], [], ["proficiency"]),
+            "publications": (Publication, ["publication_date"], [], [], []),
+        }
+
+        for section_key, (
+            model_cls,
+            date_fields,
+            bool_fields,
+            float_fields,
+            int_fields,
+        ) in sections_config.items():
+            cleaned_data[section_key] = validate_list_items(
+                cleaned_data.get(section_key),
+                section_key,
+                model_cls,
+                date_fields,
+                bool_fields,
+                float_fields,
+                int_fields,
+            )
+
+        return cleaned_data
+
     def parse_with_llm(self, resume_file) -> Dict:
         """Parse resume text using ChatGPT to extract structured information."""
         try:
@@ -916,6 +2225,7 @@ class ResumeImporter:
                 if "```json" in response:
                     response = response.replace("```json", "").replace("```", "")
                 response: dict = json.loads(response)
+
             except Exception as e:
                 logger.error(f"Error parsing response: {str(e)}")
 
@@ -938,11 +2248,26 @@ class ResumeImporter:
             google_uploaded_file: File = self.google_client.upload_file(self.validated_resume_path)
 
             # Parse the text using ChatGPT
-            parsed_data = self.parse_with_llm(google_uploaded_file)
+            raw_parsed_data = self.parse_with_llm(google_uploaded_file)
 
-            return parsed_data
+            # Validate and clean the parsed data
+            if isinstance(raw_parsed_data, dict) and not raw_parsed_data.get("error"):
+                logger.debug("LLM parsing successful, proceeding to validation and cleaning.")
+                validated_data = self._validate_and_clean_parsed_data(raw_parsed_data)
+                return validated_data
+            else:
+                # If parsing failed, or returned an error structure, or not a dict, return as is or a generic error
+                logger.warning(
+                    f"LLM parsing did not return a clean dictionary for validation. Raw data: {str(raw_parsed_data)[:500]}"
+                )
+                return (
+                    raw_parsed_data
+                    if isinstance(raw_parsed_data, dict)
+                    else {"error": "LLM parsing failed to return a valid data structure."}
+                )
 
         except Exception as e:
+            logger.error(f"Error parsing resume: {str(e)}")
             raise Exception(f"Error parsing resume: {str(e)}")
 
 

@@ -3,6 +3,8 @@
 {% load i18n %}
 <!-- Load socialaccount -->
 {% load socialaccount %}
+<!-- Load widget_tweaks -->
+{% load widget_tweaks %}
 <!-- Start of Block -->
 {% block head_title %}
 <!-- loading sign up title -->
@@ -13,27 +15,37 @@
 {% block content %}
 <div class="container mt-5">
   <div class="row justify-content-center">
-    <div class="col-md-6">
-      <div class="card">
-        <div class="card-body">
-          <h1 class="text-center mb-4">{% trans "Sign Up" %}</h1>
+    <div class="col-md-6 col-lg-5">
+      <div class="card shadow-sm">
+        <div class="card-body p-4 p-md-5">
+          <div class="text-center mb-4">
+            <i class="fas fa-user-plus fa-3x text-primary mb-3"></i>
+            <h2 class="card-title mb-3">{% trans "Create Account" %}</h2>
+            <p>{% trans "Please fill in the form to create an account." %}</p>
+          </div>
 
           <div class="text-center mb-4">
+            <p class="small">{% trans "Sign up with" %}:</p>
+            <!-- Google Sign-up Button -->
             <a
               href="{% provider_login_url 'google' %}"
-              class="btn btn-outline-dark btn-lg btn-block"
+              class="btn btn-outline-light btn-lg w-100 mt-2"
             >
-              <img
-                src="https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg"
-                alt="Google Logo"
-                style="height: 24px; margin-right: 8px"
-              />
-              Sign up with Google
+              <i class="fab fa-google me-2"></i>
+              {% trans "Sign up with Google" %}
+            </a>
+            <!-- GitHub Sign-up Button -->
+            <a
+              href="{% provider_login_url 'github' %}"
+              class="btn btn-outline-light btn-lg w-100 mt-2"
+            >
+              <i class="fab fa-github me-2"></i>
+              {% trans "Sign up with GitHub" %}
             </a>
           </div>
 
           <div class="text-center mb-4">
-            <span class="text-muted">or</span>
+            <p>{% trans "or sign up with your email" %}</p>
           </div>
 
           <form
@@ -53,22 +65,45 @@
             {% endif %}
 
             <div class="form-group mb-3">
-              <label for="{{ form.email.id_for_label }}">Email address</label>
-              {{ form.email }}
-            </div>
-
-            <div class="form-group mb-3">
-              <label for="{{ form.password1.id_for_label }}">Password</label>
-              {{ form.password1 }}
-            </div>
-
-            <div class="form-group mb-3">
-              <label for="{{ form.password2.id_for_label }}"
-                >Confirm Password</label
+              <label for="{{ form.email.id_for_label }}" class="form-label"
+                >{% trans "Email address" %}</label
               >
-              {{ form.password2 }}
+              {{ form.email|add_class:"form-control form-control-lg" }}
             </div>
 
+            <div class="form-group mb-3">
+              <label for="{{ form.password1.id_for_label }}" class="form-label">
+                {% trans "Password" %}
+              </label>
+              <div class="password-field-wrapper">
+                {{ form.password1|add_class:"form-control form-control-lg" }}
+                <button
+                  type="button"
+                  class="password-toggle"
+                  data-target="{{ form.password1.id_for_label }}"
+                  onclick="togglePasswordField(this)"
+                >
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="form-group mb-3">
+              <label for="{{ form.password2.id_for_label }}" class="form-label">
+                {% trans "Confirm Password" %}
+              </label>
+              <div class="password-field-wrapper">
+                {{ form.password2|add_class:"form-control form-control-lg" }}
+                <button
+                  type="button"
+                  class="password-toggle"
+                  data-target="{{ form.password2.id_for_label }}"
+                  onclick="togglePasswordField(this)"
+                >
+                  <i class="fas fa-eye"></i>
+                </button>
+              </div>
+            </div>
             {% if redirect_field_value %}
             <input
               type="hidden"
@@ -87,8 +122,10 @@
 
           <div class="text-center mt-3">
             <p>
-              Already have an account?
-              <a href="{% url 'account_login' %}">Sign In</a>
+              {% trans "Already have an account?" %}
+              <a href="{% url 'account_login' %}" class="text-primary"
+                >{% trans "Sign In" %}</a
+              >
             </p>
           </div>
         </div>
