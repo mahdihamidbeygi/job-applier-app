@@ -164,11 +164,11 @@ SITE_ID = 1
 # AllAuth settings
 ACCOUNT_SIGNUP_FIELDS: list[str] = ["email*", "password1*", "password2*"]
 ACCOUNT_LOGIN_METHODS: set[str] = {"email"}
-ACCOUNT_EMAIL_VERIFICATION = "mandatory"
+ACCOUNT_EMAIL_VERIFICATION = "none"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Job Applier] "
-ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 1
 
 LOGIN_URL = "account_login"
 LOGIN_REDIRECT_URL = "core:profile"
@@ -203,7 +203,11 @@ GITHUB_CLIENT_ID = "Ov23li8zHEpBhxA22rFa"
 LINKEDIN_CLIENT_ID = "78tdz1i9cak3fw"
 
 # Email Configuration (non-sensitive parts)
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+# For development - prints emails to console instead of sending
+if DEBUG:
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+else:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
@@ -434,4 +438,11 @@ SOCIALACCOUNT_PROVIDERS = {
             "secret": os.getenv("CLIENT_SECRET_GITHUB"),
         },
     },
+}
+
+CACHES: dict[str, dict[str, str]] = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "verification_email_cache_table",
+    }
 }
