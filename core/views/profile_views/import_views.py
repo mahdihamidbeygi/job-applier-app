@@ -12,7 +12,8 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from core.models import Certification, Education, Project, Publication, Skill, WorkExperience
-from core.utils.profile_importers import GitHubProfileImporter, LinkedInImporter, ResumeImporter
+from core.utils.profile_importers import LinkedInImporter, ResumeImporter
+from core.tasks import process_github_profile_import
 
 logger = logging.getLogger(__name__)
 
@@ -66,58 +67,19 @@ def import_github_profile(request) -> JsonResponse:
         else:
             username = github_input
 
-        # Create importer and get data
-        importer = GitHubProfileImporter(username)
-        github_data_json = importer.import_profile()
-
-        if not github_data_json:
-            return JsonResponse({"error": "Failed to fetch GitHub profile"}, status=400)
-
         # Update user profile with GitHub data
         profile = request.user.userprofile
         profile.github_url = f"https://github.com/{username}"
-        profile.github_data = github_data_json
-        profile.last_github_refresh = timezone.now()
-
-        # Extract bio/profile info
-        if github_data_json.get("name") and not profile.name:
-            profile.name = github_data_json.get("name")
-
-        if github_data_json.get("bio") and not profile.professional_summary:
-            profile.professional_summary = github_data_json.get("bio")
-
-        if github_data_json.get("company") and not profile.company:
-            profile.company = github_data_json.get("company")
 
         # Save profile updates
         profile.save()
 
-        # Transform repositories into projects
-        projects = importer.transform_repos_to_projects(
-            github_data_json.get("repositories", []), profile
-        )
-
-        # Save projects
-        for project_data in projects:
-            # Check if project already exists (based on GitHub URL)
-            existing_project = Project.objects.filter(
-                profile=profile, github_url=project_data["github_url"]
-            ).first()
-
-            if existing_project:
-                # Update existing project
-                for key, value in project_data.items():
-                    if key != "profile":  # Skip updating the profile reference
-                        setattr(existing_project, key, value)
-                existing_project.save()
-            else:
-                # Create new project
-                Project.objects.create(**project_data)
+        process_github_profile_import.delay(request.user.id)
 
         return JsonResponse(
             {
                 "success": True,
-                "message": f"Successfully imported GitHub profile for {username}. Added {len(projects)} projects.",
+                "message": f"Successfully imported GitHub profile for {username}.",
             }
         )
 
@@ -217,33 +179,7 @@ def import_resume(request) -> JsonResponse:
 
         if profile.github_url:
             if not profile.github_data:
-                github_importer = GitHubProfileImporter(profile.github_url)
-                github_data: dict[str, Any] = github_importer.import_profile()
-                if github_data:
-                    profile.github_data = github_data
-                    profile_updated = True
-
-                    # Transform repositories into projects
-                    projects = github_importer.transform_repos_to_projects(
-                        github_data.get("repositories", []), profile
-                    )
-
-                    # Save projects
-                    for project_data in projects:
-                        # Check if project already exists (based on GitHub URL)
-                        existing_project = Project.objects.filter(
-                            profile=profile, github_url=project_data["github_url"]
-                        ).first()
-
-                        if existing_project:
-                            # Update existing project
-                            for key, value in project_data.items():
-                                if key != "profile":  # Skip updating the profile reference
-                                    setattr(existing_project, key, value)
-                            existing_project.save()
-                        else:
-                            # Create new project
-                            Project.objects.create(**project_data)
+                process_github_profile_import.delay(request.user.id)
 
         # Save profile
         if profile_updated:

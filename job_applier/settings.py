@@ -75,7 +75,7 @@ INSTALLED_APPS: list[str] = [
 
 MIDDLEWARE: list[str] = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",  # Should be early in the list
+    # "whitenoise.middleware.WhiteNoiseMiddleware",  # Should be early in the list
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -149,7 +149,7 @@ STATIC_ROOT: str = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS: list[str] = [
     os.path.join(BASE_DIR, "static"),
 ]
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files
 MEDIA_URL = "/media/"
@@ -258,7 +258,7 @@ STORAGES = {
         "OPTIONS": {},
     },
     "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
 
