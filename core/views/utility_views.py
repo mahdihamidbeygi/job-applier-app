@@ -17,15 +17,12 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.core.files.storage import default_storage
-from django.core.mail import send_mail
+
+from django.shortcuts import render
 from django.http import JsonResponse
-from django.shortcuts import redirect, render
-from django.template.loader import render_to_string
-from django.urls import reverse
-from django.utils import timezone
-from django.utils.encoding import force_bytes
-from django.utils.http import urlsafe_base64_encode
-from django.views.decorators.http import require_http_methods
+from django.db import connection
+from django.views.decorators.csrf import csrf_exempt
+import logging
 
 logger = logging.getLogger(__name__)
 
@@ -88,3 +85,18 @@ def load_user_background(user_id):
     except Exception as e:
         logger.error(f"Error loading user background: {str(e)}")
         return None
+
+
+@csrf_exempt
+def health_check(request):
+    """Health check endpoint for Fly.io"""
+    try:
+        # Check database connection
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT 1")
+
+        return JsonResponse({"status": "healthy", "database": "connected"}, status=200)
+
+    except Exception as e:
+        logger.error(f"Health check failed: {str(e)}")
+        return JsonResponse({"status": "unhealthy", "error": str(e)}, status=503)

@@ -20,21 +20,34 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+APP_NAME = "job-applier-app"
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR: Path = Path(__file__).resolve().parent.parent
-
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY: str = os.getenv("DJANGO_SECRET_KEY", "django-insecure-your-secret-key-here")
+SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG: bool = os.getenv("DJANGO_DEBUG", "False").lower() == "true"
+DEBUG = False
 
-ALLOWED_HOSTS: list[str] = ["*"]  # Configure this based on your domain
+# Detect if we're running in GitHub Codespaces
+IN_CODESPACES = os.environ.get("CODESPACES", "false").lower() == "true"
+CODESPACE_NAME = os.environ.get("CODESPACE_NAME", "")
+GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN = os.environ.get(
+    "GITHUB_CODESPACES_PORT_FORWARDING_DOMAIN", ""
+)
 
+# Configure ALLOWED_HOSTS
+ALLOWED_HOSTS = [
+    f"{APP_NAME}.fly.dev",
+    "localhost",
+    "127.0.0.1",
+]
 
 # Application definition
 INSTALLED_APPS: list[str] = [
@@ -57,12 +70,12 @@ INSTALLED_APPS: list[str] = [
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
     "allauth.socialaccount.providers.github",
-    "sslserver",
     "core.apps.CoreConfig",
 ]
 
 MIDDLEWARE: list[str] = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",  # Should be early in the list
     "django.contrib.sessions.middleware.SessionMiddleware",
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -70,7 +83,7 @@ MIDDLEWARE: list[str] = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "allauth.account.middleware.AccountMiddleware",
+    "allauth.account.middleware.AccountMiddleware",  # Required for django-allauth
 ]
 
 ROOT_URLCONF = "job_applier.urls"
@@ -96,10 +109,8 @@ TEMPLATES: list[dict[str, Any]] = [
 
 WSGI_APPLICATION = "job_applier.wsgi.application"
 
-
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
 DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL"),
@@ -107,10 +118,8 @@ DATABASES = {
     )
 }
 
-
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
-
 AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     {
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
@@ -126,7 +135,6 @@ AUTH_PASSWORD_VALIDATORS: list[dict[str, str]] = [
     },
 ]
 
-
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/
 LANGUAGE_CODE = "en-us"
@@ -134,15 +142,14 @@ TIME_ZONE = "UTC"
 USE_I18N = True
 USE_TZ = True
 
-
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
-
 STATIC_URL = "static/"
 STATIC_ROOT: str = os.path.join(BASE_DIR, "staticfiles")
 STATICFILES_DIRS: list[str] = [
     os.path.join(BASE_DIR, "static"),
 ]
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Media files
 MEDIA_URL = "/media/"
@@ -150,7 +157,6 @@ MEDIA_ROOT: str = os.path.join(BASE_DIR, "media")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
-
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Authentication settings
@@ -164,21 +170,23 @@ SITE_ID = 1
 # AllAuth settings
 ACCOUNT_SIGNUP_FIELDS: list[str] = ["email*", "password1*", "password2*"]
 ACCOUNT_LOGIN_METHODS: set[str] = {"email"}
-ACCOUNT_EMAIL_VERIFICATION = "none"
+ACCOUNT_EMAIL_VERIFICATION = "mandatory"
 ACCOUNT_UNIQUE_EMAIL = True
 ACCOUNT_SESSION_REMEMBER = True
 ACCOUNT_EMAIL_SUBJECT_PREFIX = "[Job Applier] "
-ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 1
+ACCOUNT_EMAIL_CONFIRMATION_EXPIRE_DAYS = 3
 
 LOGIN_URL = "account_login"
 LOGIN_REDIRECT_URL = "core:profile"
 LOGOUT_REDIRECT_URL = "core:home"
 
-# AWS S3 Settings
+# ===========================
+# NON-SENSITIVE CONFIGURATION
+# ===========================
+
+# AWS S3 Configuration (non-sensitive parts)
 AWS_S3_REGION_NAME = "us-east-1"
 AWS_STORAGE_BUCKET_NAME = "job-applier-files"
-AWS_ACCESS_KEY_ID: str | None = os.getenv("AWS_ACCESS_KEY_ID")
-AWS_SECRET_ACCESS_KEY: str | None = os.getenv("AWS_SECRET_ACCESS_KEY")
 AWS_S3_FILE_OVERWRITE = False
 AWS_DEFAULT_ACL = None
 AWS_S3_VERIFY = True
@@ -192,10 +200,9 @@ PINECONE_HOST = os.getenv(
 )
 
 # Model Configuration
-FAST_GOOGLE_MODEL = "gemini-2.5-flash-preview-04-17"
-PRO_GOOGLE_MODEL = "gemini-2.5-pro-preview-05-06"
-OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview")
-GROK_MODEL: str = os.getenv("GROK_MODEL", "grok-1")
+OPENAI_MODEL = "gpt-4-turbo-preview"
+GROK_MODEL = "grok-2-1212"
+GOOGLE_MODEL = "gemini-2.5-flash-preview-04-17"
 
 # OAuth Client IDs (these are public)
 GOOGLE_CLIENT_ID = "282027751559-r0ocro82n0n6ibftimraa331gogpa399.apps.googleusercontent.com"
@@ -203,11 +210,7 @@ GITHUB_CLIENT_ID = "Ov23li8zHEpBhxA22rFa"
 LINKEDIN_CLIENT_ID = "78tdz1i9cak3fw"
 
 # Email Configuration (non-sensitive parts)
-# For development - prints emails to console instead of sending
-if DEBUG:
-    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-else:
-    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
@@ -252,15 +255,10 @@ LANGSMITH_PROJECT: str = os.getenv("LANGSMITH_PROJECT", "job_applier_app")
 STORAGES = {
     "default": {
         "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
-        "OPTIONS": {
-            "bucket_name": AWS_STORAGE_BUCKET_NAME,
-            "region_name": AWS_S3_REGION_NAME,
-            "access_key": AWS_ACCESS_KEY_ID,  # If not using IAM roles
-            "secret_key": AWS_SECRET_ACCESS_KEY,  # If not using IAM roles
-        },
+        "OPTIONS": {},
     },
     "staticfiles": {
-        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
 
@@ -284,8 +282,8 @@ REST_FRAMEWORK: dict[str, Any] = {
 
 # JWT Settings
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(hours=24),  # Token valid for 24 hours
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),  # Refresh token valid for 7 days
+    "ACCESS_TOKEN_LIFETIME": timedelta(hours=24),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 }
@@ -308,110 +306,92 @@ SPECTACULAR_SETTINGS: dict[str, Any] = {
 TEMPERATURE = 0.0
 
 # Security Settings
-SECURE_SSL_REDIRECT: bool = not DEBUG  # Disable SSL redirect for development
-SESSION_COOKIE_SECURE: bool = not DEBUG  # Allow non-HTTPS cookies in development
-CSRF_COOKIE_SECURE = False  # Allow non-HTTPS CSRF cookies in development
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = "DENY"
 SECURE_HSTS_SECONDS = 31536000 if not DEBUG else 0
-SECURE_HSTS_INCLUDE_SUBDOMAINS: bool = not DEBUG
-SECURE_HSTS_PRELOAD: bool = not DEBUG
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS: bool = DEBUG  # Allow all origins in development, restrict in production
+CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
 
 # Update CORS and CSRF for production
-CORS_ALLOWED_ORIGINS: list[str] = [
+CORS_ALLOWED_ORIGINS = [
     "https://job-applier-app.fly.dev",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
 ]
+
+# Base CSRF origins
+CSRF_TRUSTED_ORIGINS = [
+    "https://job-applier-app.fly.dev",
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
+
 
 # CSRF settings
-CSRF_TRUSTED_ORIGINS: list[str] = [
-    "https://job-applier-app.fly.dev",
-    "chrome-extension://gjhaikeodndcnemkibilnmbplmicjnif",
-    "http://localhost:8000",
-    "http://127.0.0.1:8000",
-]
-
-# Disable CSRF for API endpoints
 CSRF_COOKIE_HTTPONLY = False
 CSRF_COOKIE_SAMESITE = "Lax"
 CSRF_USE_SESSIONS = False
 CSRF_COOKIE_NAME = "csrftoken"
 CSRF_HEADER_NAME = "HTTP_X_CSRFTOKEN"
 
-# Exempt all API endpoints from CSRF
-CSRF_EXEMPT_URLS: list[str] = [
-    "/api/",
-]
 
 # Celery Configuration
-CELERY_BROKER_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+CELERY_RESULT_BACKEND = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 USE_CELERY_FOR_RESUMES = True
 CELERY_ACCEPT_CONTENT: list[str] = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"
 CELERY_TIMEZONE = TIME_ZONE
 
-FORMS_URLFIELD_ASSUME_HTTPS = True  # Or False, depending on your preference
+# Flower Configuration
+FLOWER_BASIC_AUTH = os.getenv("FLOWER_BASIC_AUTH", "admin:flower123")
 
+# Google API Settings
+FAST_GOOGLE_MODEL: str | None = os.environ.get("FAST_GOOGLE_MODEL")
+PRO_GOOGLE_MODEL: str | None = os.environ.get("PRO_GOOGLE_MODEL")
+GOOGLE_API_KEY: str | None = os.environ.get("GOOGLE_API_KEY")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
+
+# URLField default scheme
+FORMS_URLFIELD_ASSUME_HTTPS = True
+
+# Logging for production
 LOGGING = {
     "version": 1,
-    "disable_existing_loggers": False,  # Keep existing loggers (like Django's)
+    "disable_existing_loggers": False,
     "formatters": {
         "verbose": {
             "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
             "style": "{",
         },
-        "simple": {
-            "format": "{levelname} {asctime} {module}: {message}",
-            "style": "{",
-        },
     },
     "handlers": {
         "console": {
-            "level": "DEBUG",  # <-- Set console handler level to DEBUG
+            "level": "INFO",
             "class": "logging.StreamHandler",
-            "formatter": "simple",  # Or 'verbose' for more detail
+            "formatter": "verbose",
         },
-        # Optional: Add a file handler if you want logs saved to a file
-        # 'file': {
-        #     'level': 'DEBUG',
-        #     'class': 'logging.FileHandler',
-        #     'filename': BASE_DIR / 'debug.log', # Or your preferred path
-        #     'formatter': 'verbose',
-        # },
+    },
+    "root": {
+        "handlers": ["console"],
+        "level": "INFO",
     },
     "loggers": {
         "django": {
             "handlers": ["console"],
-            "level": "INFO",  # Keep Django's core logs at INFO unless needed
-            "propagate": True,
-        },
-        "django.request": {
-            "handlers": ["console"],
-            "level": "WARNING",  # Reduce noise from request logs if desired
+            "level": "INFO",
             "propagate": False,
         },
-        # --- Add this logger for your 'core' app ---
-        "core": {
-            "handlers": ["console"],  # Send 'core' app logs to the console
-            "level": "DEBUG",  # <-- Set 'core' app level to DEBUG
-            "propagate": True,  # Allow propagation if needed
-        },
-        # --- OR configure the root logger for all apps ---
-        # '': { # Root logger
-        #     'handlers': ['console'],
-        #     'level': 'DEBUG', # Log DEBUG for everything (can be noisy)
-        # },
     },
 }
-
 
 # Social Account Providers
 SOCIALACCOUNT_PROVIDERS = {
@@ -440,14 +420,10 @@ SOCIALACCOUNT_PROVIDERS = {
     },
 }
 
-CACHES: dict[str, dict[str, str]] = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
-        "LOCATION": "verification_email_cache_table",
-    }
-}
+# Trust Fly.io's proxy headers
+USE_X_FORWARDED_HOST = True
+USE_X_FORWARDED_PORT = True
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
-    "allauth.account.auth_backends.AuthenticationBackend",
-]
+# Only redirect to HTTPS if not behind a proxy
+SECURE_SSL_REDIRECT = False  # Fly.io handles this
