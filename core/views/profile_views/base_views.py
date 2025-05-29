@@ -10,7 +10,6 @@ from django.contrib.auth.decorators import login_required
 from django.core.files.storage import default_storage
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
-from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from core.forms import (
@@ -22,9 +21,8 @@ from core.forms import (
     UserProfileForm,
     WorkExperienceForm,
 )
-from core.models import Project, UserProfile
-from core.utils.profile_importers import GitHubProfileImporter
 from core.views.utility_views import parse_pdf_resume
+from core.tasks import process_github_profile_import
 
 logger = logging.getLogger(__name__)
 
@@ -68,41 +66,7 @@ def profile(request):
     if request.user.userprofile.github_url:
         if not github_data:
             # Extract username from GitHub URL
-            github_url = request.user.userprofile.github_url
-            github_username = github_url.split("/")[-1]
-            if github_username == "github.com":
-                github_username = github_url.split("/")[-2]
-
-            # Import GitHub profile
-            importer = GitHubProfileImporter(github_username)
-            github_data = importer.import_profile()
-
-            # Transform repositories into projects
-            projects = importer.transform_repos_to_projects(
-                github_data.get("repositories", []), request.user.userprofile
-            )
-
-            # Save projects
-            for project_data in projects:
-                # Check if project already exists (based on GitHub URL)
-                existing_project = Project.objects.filter(
-                    profile=request.user.userprofile, github_url=project_data["github_url"]
-                ).first()
-
-                if existing_project:
-                    # Update existing project
-                    for key, value in project_data.items():
-                        if key != "profile":  # Skip updating the profile reference
-                            setattr(existing_project, key, value)
-                    existing_project.save()
-                else:
-                    # Create new project
-                    Project.objects.create(**project_data)
-
-            # Update last refresh time
-            request.user.userprofile.github_data = github_data
-            request.user.userprofile.last_github_refresh = timezone.now()
-            request.user.userprofile.save()
+            process_github_profile_import.delay(request.user.id)
 
     context = {
         "form": form,
