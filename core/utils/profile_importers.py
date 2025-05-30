@@ -879,7 +879,7 @@ class GitHubProfileImporter:
 
     def __init__(self, github_username: str) -> None:
         self.github_username = github_username
-        self.client = GoogleClient(model=settings.PRO_GOOGLE_MODEL)
+        self.client = GoogleClient(model=settings.FAST_GOOGLE_MODEL)
         self.filter_obj = CodeFileFilter()
         # Create a fresh temporary directory for this import session
         self.temp_dir: str = tempfile.mkdtemp(prefix="github_import_")
