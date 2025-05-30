@@ -11,7 +11,7 @@ primary_region = "iad"
   GIT_PYTHON_REFRESH = "quiet"
   CHROME_BIN = "/usr/bin/chromium"
   CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
-  DATABASE_URL = "postgres://postgres:PCNGrtxBVLaHNa0@job-applier-postgres.flycast:5432/job_applier_app"
+  DATABASE_URL = "postgres://postgres:PCNGrtxBVLaHNa0@job-applier-postgres.flycast:5432"
   FLY_APP_NAME = "job-applier-app"
   SITE_DOMAIN = "job-applier-app.fly.dev"
 
