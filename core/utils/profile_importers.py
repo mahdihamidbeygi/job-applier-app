@@ -2163,7 +2163,8 @@ class ResumeImporter:
                             # Skip date fields - they should remain None if not parsed
                             continue
                         else:
-                            default_value = "Not extracted"
+                            # Unknown fields it's better to skip them
+                            continue
 
                         logger.warning(
                             f"Validation for {section_name} (item: {item_identifier}): Missing required field '{field.name}'. Setting to '{default_value}'."
