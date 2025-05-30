@@ -33,7 +33,7 @@ primary_region = "iad"
   destination = "/data"
 
 [deploy]
-  release_command = "python -c \"import os, django; print('DATABASE_URL:', os.getenv('DATABASE_URL', 'NOT SET')); os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'job_applier.settings'); django.setup(); from django.conf import settings; print('Django DB config:', settings.DATABASES)\""
+  release_command = "python manage.py makemigrations --noinput; python manage.py migrate --noinput"
 
 [processes]
   app = "gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 job_applier.wsgi:application"
