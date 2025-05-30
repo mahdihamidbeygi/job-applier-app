@@ -33,7 +33,7 @@ primary_region = "iad"
   destination = "/data"
 
 [deploy]
-  release_command = "python manage.py makemigrations; python manage.py migrate --noinput"
+  release_command = "python manage.py migrate --noinput"
 
 [processes]
   app = "gunicorn --bind 0.0.0.0:8000 --workers 3 --timeout 120 job_applier.wsgi:application"
