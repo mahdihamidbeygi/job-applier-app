@@ -1992,6 +1992,14 @@ class ResumeImporter:
                         basic_info[field_name] = self._truncate_string(
                             value, field_obj.max_length, field_name, "basic_info"
                         )
+
+                    # Check for null values in required fields
+                    if not field_obj.null and (value is None or value == ""):
+                        logger.warning(
+                            f"Field '{field_name}' in 'basic_info' is required but null/empty. Setting to 'Not extracted'."
+                        )
+                        basic_info[field_name] = "Not extracted"
+
                 except django_models.fields.FieldDoesNotExist:
                     logger.debug(
                         f"Field '{field_name}' in 'basic_info' from LLM not found in UserProfile model. Retaining."
@@ -2039,6 +2047,8 @@ class ResumeImporter:
                 for field_name, value in cleaned_item.items():
                     try:
                         field_obj = model_cls._meta.get_field(field_name)
+
+                        # Handle string fields
                         if isinstance(field_obj, django_models.CharField) and not isinstance(
                             field_obj, django_models.TextField
                         ):
@@ -2049,12 +2059,14 @@ class ResumeImporter:
                                 section_name,
                                 item_identifier,
                             )
+                        # Handle date fields
                         elif field_name in date_fields and isinstance(
                             field_obj, django_models.DateField
                         ):
                             cleaned_item[field_name] = self._parse_date_flexible(
                                 value, field_name, section_name, item_identifier
                             )
+                        # Handle boolean fields
                         elif field_name in bool_fields and isinstance(
                             field_obj, django_models.BooleanField
                         ):
@@ -2068,6 +2080,7 @@ class ResumeImporter:
                                     "yes",
                                     "present",
                                 ]
+                        # Handle float fields
                         elif field_name in float_fields and isinstance(
                             field_obj, django_models.FloatField
                         ):
@@ -2079,6 +2092,7 @@ class ResumeImporter:
                                         f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Could not convert '{value}' to float. Setting to None."
                                     )
                                     cleaned_item[field_name] = None
+                        # Handle integer fields
                         elif field_name in int_fields and isinstance(
                             field_obj, django_models.IntegerField
                         ):
@@ -2090,12 +2104,73 @@ class ResumeImporter:
                                         f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Could not convert '{value}' to int. Setting to None."
                                     )
                                     cleaned_item[field_name] = None
+
+                        # Check for null values in required fields (after all type conversions)
+                        if not field_obj.null and (
+                            cleaned_item.get(field_name) is None
+                            or cleaned_item.get(field_name) == ""
+                        ):
+                            # Use appropriate default based on field type
+                            if isinstance(
+                                field_obj, (django_models.CharField, django_models.TextField)
+                            ):
+                                default_value = "Not extracted"
+                            elif isinstance(field_obj, django_models.BooleanField):
+                                default_value = False
+                            elif isinstance(field_obj, django_models.IntegerField):
+                                default_value = 0
+                            elif isinstance(field_obj, django_models.FloatField):
+                                default_value = 0.0
+                            elif isinstance(field_obj, django_models.DateField):
+                                # Skip date fields - they should remain None if not parsed
+                                continue
+                            else:
+                                default_value = "Not extracted"
+
+                            logger.warning(
+                                f"Validation for {section_name} (item: {item_identifier}), field '{field_name}': Required field is null/empty. Setting to '{default_value}'."
+                            )
+                            cleaned_item[field_name] = default_value
+
                     except django_models.fields.FieldDoesNotExist:
                         logger.debug(
                             f"Field '{field_name}' in '{section_name}' (item: {item_identifier}) from LLM not found in {model_cls.__name__} model. Retaining."
                         )
                     except AttributeError:  # e.g. field_obj.max_length might not exist
                         pass
+
+                # Check for missing required fields that weren't in the parsed data
+                for field in model_cls._meta.get_fields():
+                    if (
+                        not field.null
+                        and hasattr(field, "name")
+                        and field.name not in cleaned_item
+                        and not field.primary_key  # Skip primary key fields
+                        and not getattr(field, "auto_now", False)  # Skip auto fields
+                        and not getattr(field, "auto_now_add", False)
+                    ):
+
+                        # Use appropriate default based on field type
+                        if isinstance(field, (django_models.CharField, django_models.TextField)):
+                            default_value = "Not extracted"
+                        elif isinstance(field, django_models.BooleanField):
+                            default_value = False
+                        elif isinstance(field, django_models.IntegerField):
+                            default_value = 0
+                        elif isinstance(field, django_models.FloatField):
+                            default_value = 0.0
+                        elif isinstance(field, django_models.DateField):
+                            # Skip date fields - they should remain None if not parsed
+                            continue
+                        else:
+                            # Unknown fields it's better to skip them
+                            continue
+
+                        logger.warning(
+                            f"Validation for {section_name} (item: {item_identifier}): Missing required field '{field.name}'. Setting to '{default_value}'."
+                        )
+                        cleaned_item[field.name] = default_value
+
                 validated_list.append(cleaned_item)
             return validated_list
 

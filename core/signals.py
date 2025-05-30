@@ -13,7 +13,8 @@ from core.models import (
     JobListing,
     ChatMessage,  # Assuming ChatMessage changes might also warrant a refresh
 )
-from core.tasks import refresh_vector_store_async
+
+# from core.tasks import refresh_vector_store_async
 
 logger = logging.getLogger(__name__)
 
@@ -38,45 +39,36 @@ def get_user_id_from_instance(instance):
     return None
 
 
-@receiver([post_save, post_delete], sender=UserProfile)
-@receiver([post_save, post_delete], sender=WorkExperience)
-@receiver([post_save, post_delete], sender=Education)
-@receiver([post_save, post_delete], sender=Project)
-@receiver([post_save, post_delete], sender=Certification)
-@receiver([post_save, post_delete], sender=Publication)
-@receiver([post_save, post_delete], sender=Skill)
-@receiver([post_save, post_delete], sender=JobListing)
-@receiver([post_save, post_delete], sender=ChatMessage)
-def refresh_vector_store_on_update(sender, instance, **kwargs):
-    """
-    Signal handler to trigger vector store refresh when monitored models change.
-    """
-    user_id = get_user_id_from_instance(instance)
+# def refresh_vector_store_on_update(sender, instance, **kwargs):
+#     """
+#     Signal handler to trigger vector store refresh when monitored models change.
+#     """
+#     user_id = get_user_id_from_instance(instance)
 
-    if user_id:
-        try:
-            created = kwargs.get("created", False)  # For post_save
-            action = "created/updated" if kwargs.get("signal") == post_save else "deleted"
-            if (
-                kwargs.get("signal") == post_save
-                and not created
-                and not kwargs.get("update_fields")
-            ):
-                action = "updated (full save)"
+#     if user_id:
+#         try:
+#             created = kwargs.get("created", False)  # For post_save
+#             action = "created/updated" if kwargs.get("signal") == post_save else "deleted"
+#             if (
+#                 kwargs.get("signal") == post_save
+#                 and not created
+#                 and not kwargs.get("update_fields")
+#             ):
+#                 action = "updated (full save)"
 
-            logger.info(
-                f"Signal received: {sender.__name__} instance (ID: {instance.pk}) was {action}. "
-                f"Queueing vector store refresh for user_id: {user_id}."
-            )
-            refresh_vector_store_async.delay(user_id=user_id)
-        except Exception as e:
-            logger.error(
-                f"Error queueing vector store refresh for user_id {user_id} "
-                f"triggered by {sender.__name__} (ID: {instance.pk}): {e}",
-                exc_info=True,
-            )
-    else:
-        logger.warning(
-            f"Could not determine user_id from instance of {sender.__name__} (ID: {instance.pk}). "
-            f"Vector store refresh not queued."
-        )
+#             logger.info(
+#                 f"Signal received: {sender.__name__} instance (ID: {instance.pk}) was {action}. "
+#                 f"Queueing vector store refresh for user_id: {user_id}."
+#             )
+#             refresh_vector_store_async.delay(user_id=user_id)
+#         except Exception as e:
+#             logger.error(
+#                 f"Error queueing vector store refresh for user_id {user_id} "
+#                 f"triggered by {sender.__name__} (ID: {instance.pk}): {e}",
+#                 exc_info=True,
+#             )
+#     else:
+#         logger.warning(
+#             f"Could not determine user_id from instance of {sender.__name__} (ID: {instance.pk}). "
+#             f"Vector store refresh not queued."
+#         )
