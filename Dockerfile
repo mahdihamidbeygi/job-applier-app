@@ -36,6 +36,8 @@ ENV SECRET_KEY=$DJANGO_SECRET_KEY
 
 # Collect static files
 RUN python manage.py collectstatic --noinput
+RUN python manage.py makemigrations core
+RUN python manage.py migrate --noinput
 
 # Expose the port
 EXPOSE 7860
