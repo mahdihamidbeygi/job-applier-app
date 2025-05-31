@@ -98,11 +98,13 @@ def edit_profile(request):
         )
         if profile_form.is_valid():
             profile_form.save()
-            messages.success(request, "Profile updated successfully!")
-        else:
-            messages.error(request, "Error updating profile.")
 
-    return redirect("core:profile")
+            return JsonResponse({"success": True, "message": "Profile updated successfully!"})
+        else:
+            errors = {}
+            for field, field_errors in profile_form.errors.items():
+                errors[field] = [str(error) for error in field_errors]
+            return JsonResponse({"success": False, "errors": errors}, status=400)
 
 
 @login_required

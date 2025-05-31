@@ -1,4 +1,6 @@
 from django import template
+from django.template.defaultfilters import stringfilter
+
 
 register = template.Library()
 
@@ -21,3 +23,17 @@ def split_string(value, arg):
         # or delimiters at the start/end of the string after stripping.
         return [item.strip() for item in value.split(arg) if item.strip()]
     return []  # Return empty list if not a string or if value is None
+
+
+@register.filter
+@stringfilter
+def trim(value):
+    """Remove leading and trailing whitespace."""
+    return value.strip()
+
+
+@register.filter
+@stringfilter
+def split(value, delimiter=","):
+    """Split a string by delimiter and return a list."""
+    return [item.strip() for item in value.split(delimiter) if item.strip()]
