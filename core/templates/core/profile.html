@@ -534,7 +534,8 @@
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
-    backdrop-filter: blur(4px); /* Added to match base.html */
+    -webkit-backdrop-filter: blur(4px); /* Safari */
+    backdrop-filter: blur(4px);
     justify-content: center;
     align-items: center;
     z-index: 1000;
@@ -1478,13 +1479,13 @@
       <div class="experience-item" data-record-id="{{ experience.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('work_experience', {{ experience.id }})"
+            onclick="editRecord('experience', {{ experience.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('work_experience', {{ experience.id }})"
+            onclick="deleteRecord('experience', {{ experience.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1548,6 +1549,12 @@
           </button>
         </div>
         <h3>{{ project.title }}</h3>
+        {% if project.start_date %}
+        <div class="date-range">
+          {{ project.start_date|date:"M Y" }} - 
+          {% if project.current %}Present{% elif project.end_date %}{{ project.end_date|date:"M Y" }}{% else %}N/A{% endif %}
+        </div>
+        {% endif %}
         <p class="description">{{ project.description }}</p>
         {% if project.technologies %}
         <!-- Use repo-tech-stack for consistent styling with GitHub section -->
@@ -2288,7 +2295,7 @@
       // ========================================
       // WORK EXPERIENCE SECTION
       // ========================================
-      if (recordType === 'work_experience') {
+      if (recordType === 'experience') {
           const company = extractCompanyFromWorkExperience(recordElement);
           const position = extractPositionFromWorkExperience(recordElement);
           const description = getTextContent(recordElement, '.description');
@@ -2776,7 +2783,7 @@
 
     // Function to cancel editing
     function cancelEdit(recordType, recordId) {
-        const itemContainer = document.querySelector(`[data-record-id="${recordId}"]`);
+        const itemContainer = document.querySelector(`.${recordType}-item[data-record-id="${recordId}"]`);
         if (!itemContainer) return;
 
         const originalContent = itemContainer.getAttribute('data-original-content');
