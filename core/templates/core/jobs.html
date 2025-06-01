@@ -188,7 +188,7 @@ Applier{% endblock %} {% block content %}
             <div class="platform-chip" data-platform="linkedin">
               <i class="fab fa-linkedin"></i> LinkedIn
             </div>
-            <div class="platform-chip" data-platform="indeed">
+            <!-- <div class="platform-chip" data-platform="indeed">
               <i class="fas fa-briefcase"></i> Indeed
             </div>
             <div class="platform-chip" data-platform="glassdoor">
@@ -202,7 +202,7 @@ Applier{% endblock %} {% block content %}
             </div>
             <div class="platform-chip" data-platform="ziprecruiter">
               <i class="fas fa-file-archive"></i> ZipRecruiter
-            </div>
+            </div> -->
           </div>
           <select class="d-none" id="platforms" name="platforms" multiple>
             <option value="linkedin">LinkedIn</option>
@@ -423,11 +423,6 @@ Applier{% endblock %} {% block content %}
     }).join('');
   }
 
-  // Function to get the authentication token
-  function getAuthToken() {
-    return localStorage.getItem("authToken");
-  }
-
   // Helper function to get CSRF token
   function getCookie(name) {
     let cookieValue = null;
@@ -446,8 +441,8 @@ Applier{% endblock %} {% block content %}
 
   // Function to remove a job from results
   function removeJob(jobId) {
-    const authToken = getAuthToken();
-    if (!authToken) {
+    const isAuthenticated = "{{ user.is_authenticated }}" === "True";
+    if (!isAuthenticated) {
       alert("Please log in to remove jobs.");
       window.location.href = "{% url 'account_login' %}";
       return;
@@ -458,7 +453,6 @@ Applier{% endblock %} {% block content %}
       headers: {
         "Content-Type": "application/json",
         "X-CSRFToken": getCookie("csrftoken"),
-        Authorization: `Bearer ${authToken}`,
       },
       credentials: "include",
       body: JSON.stringify({
@@ -466,8 +460,8 @@ Applier{% endblock %} {% block content %}
       }),
     })
       .then((response) => {
-        if (response.status === 401) {
-          localStorage.removeItem("authToken");
+        if (response.status === 401 || response.status === 403) {
+          alert("Authentication failed. Please log in again.");
           window.location.href = "{% url 'account_login' %}";
           return Promise.reject("Authentication required");
         }
@@ -595,7 +589,6 @@ Applier{% endblock %} {% block content %}
         const selectedPlatforms = Array.from(
           platformsSelect.selectedOptions
         ).map((option) => option.value);
-        const authToken = getAuthToken();
 
         // Validate input
         if (!role) {
@@ -603,7 +596,9 @@ Applier{% endblock %} {% block content %}
           return;
         }
 
-        if (!authToken) {
+        // Check if user is authenticated via Django template
+        const isAuthenticated = "{{ user.is_authenticated }}" === "True";
+        if (!isAuthenticated) {
           alert("Please log in to search for jobs.");
           window.location.href = "{% url 'account_login' %}";
           return;
@@ -618,24 +613,24 @@ Applier{% endblock %} {% block content %}
         showLoadingState();
 
         try {
+          const headers = {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken"),
+          };
+      
           const response = await fetch("{% url 'core:online_jobsearch' %}", {
             method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRFToken": getCookie("csrftoken"),
-              Authorization: `Bearer ${authToken}`,
-            },
-            credentials: "include",
+            headers: headers,
+            credentials: "include", // This ensures cookies (including session) are sent
             body: JSON.stringify({
               role: role,
               location: location,
               platform: selectedPlatforms,
             }),
           });
-
+          console.log("response: ", response)
           if (!response.ok) {
-            if (response.status === 401) {
-              localStorage.removeItem("authToken");
+            if (response.status === 401 || response.status === 403) {
               alert("Session expired. Please log in again.");
               window.location.href = "{% url 'account_login' %}";
               return;
@@ -726,6 +721,6 @@ Applier{% endblock %} {% block content %}
           hideLoadingState();
         }
       });
-  });
+    });
 </script>
 {% endblock %}

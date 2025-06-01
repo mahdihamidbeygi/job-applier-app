@@ -2795,11 +2795,9 @@
     // Function to submit edits
     function submitEdit(recordType, recordId) {
         const form = document.getElementById(`edit-${recordType}-${recordId}-form`);
-        console.log("Form found:", form);
         if (!form) return;
 
         const formData = new FormData(form);
-        console.log("FormData entries:", [...formData.entries()]);
         saveChanges(recordType, recordId, formData);
     }
 
@@ -2846,7 +2844,6 @@
               return response.json();
           })
           .then(data => {
-              console.log('Profile stats data:', data);
 
               const workExperienceCount = document.getElementById('work-experience-count');
               if (workExperienceCount) {

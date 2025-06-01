@@ -9,7 +9,7 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 class JobKnowledgeBase:
     def __init__(self, persist_directory: str = "./job_vectors"):
         self.embeddings = GoogleGenerativeAIEmbeddings(
-            model="models/embedding-004",
+            model="models/embedding-001",
             google_api_key=os.environ.get("GOOGLE_API_KEY"),
         )
         self.vectorstore = Chroma(
