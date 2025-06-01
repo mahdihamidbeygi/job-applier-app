@@ -1494,8 +1494,7 @@
         <h3>{{ experience.position }} at {{ experience.company }}</h3>
         <div class="date-range">
           {{ experience.start_date|date:"M Y" }} - {% if experience.current %}
-          Present {% else %} {{ experience.end_date }}
-          <!-- Debug -->
+          Present {% else %} {{ experience.end_date|date:"M Y" }}
           {% endif %}
           <!-- Debug info: End Date: {{ experience.end_date }}, Current: {{ experience.current }} -->
         </div>
@@ -1605,7 +1604,7 @@
         <div class="degree">{{ edu.degree }}</div>
         <div class="location">{{ edu.institution }}</div>
         <div class="date-range">
-          {{ edu.start_date|date:"M Y" }} - {{ edu.end_date|date:"M Y" }}
+          {{ edu.start_date|date:"M Y" }} - {% if edu.current %}Present{% else %}{{ edu.end_date|date:"M Y" }}{% endif %}
         </div>
         <p class="description">{{ edu.field_of_study }}</p>
         {% if edu.gpa %}
@@ -1657,11 +1656,11 @@
             <i class="fas fa-trash"></i>
           </button>
         </div>
-        <h3>{{ cert.name }}</h3>
-        <div class="location">{{ cert.issuer }}</div>
-        <div class="date-range">Issued: {{ cert.issue_date|date:"M Y" }}</div>
+        <h3 class="cert-name">{{ cert.name }}</h3>
+        <div class="cert-issuer">{{ cert.issuer }}</div>
+        <div class="date-range issue-date">Issued: {{ cert.issue_date|date:"M Y" }}</div>
         {% if cert.expiry_date %}
-        <div class="date-range">Expires: {{ cert.expiry_date|date:"M Y" }}</div>
+        <div class="date-range expiry-date">Expires: {{ cert.expiry_date|date:"M Y" }}</div>
         {% endif %} {% if cert.credential_id %}
         <p class="description">Credential ID: {{ cert.credential_id }}</p>
         {% endif %} {% if cert.credential_url %}
@@ -2271,7 +2270,7 @@
     }
 
     function editRecord(recordType, recordId) {
-      const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
+      const recordElement = document.querySelector(`.${recordType}-item[data-record-id="${recordId}"]`);
       if (!recordElement) {
           console.error(`Record element not found for ID: ${recordId}`);
           return;
@@ -2374,22 +2373,23 @@
                           <input type="date" name="end_date" value="${endDate}" 
                                  ${isCurrent ? 'disabled class="field-disabled-icon"' : ''} 
                                  id="graduation-date-${recordId}">
+                          <div class="current-education-container ${isCurrent ? 'current-education-active' : ''}" 
+                               id="current-education-container-${recordId}" style="margin-top: 8px; margin-bottom: 8px;">
+                              <div class="toggle-wrapper">
+                                  <input type="checkbox" name="current" 
+                                         class="current-education-checkbox" 
+                                         ${isCurrent ? 'checked' : ''} 
+                                         onchange="toggleCurrentState('education', this, ${recordId})"
+                                         id="current-education-checkbox-${recordId}">
+                                  <label class="current-education-label" for="current-education-checkbox-${recordId}">
+                                      🎓 I am currently pursuing this degree
+                                  </label>
+                              </div>
+                          </div>                                 
                           <div class="field-status current-education ${isCurrent ? 'show' : ''}" id="graduation-status-${recordId}">
                               ${isCurrent ? 'Currently pursuing this degree' : ''}
                           </div>
                       </div>
-                  </div>
-                  
-                  <div class="current-education-container ${isCurrent ? 'current-education-active' : ''}" 
-                       id="current-education-container-${recordId}">
-                      <input type="checkbox" name="current" 
-                             class="current-education-checkbox" 
-                             ${isCurrent ? 'checked' : ''} 
-                             onchange="toggleCurrentState('education', this, ${recordId})"
-                             id="current-education-checkbox-${recordId}">
-                      <label class="current-education-label" for="current-education-checkbox-${recordId}">
-                          🎓 I am currently pursuing this degree
-                      </label>
                   </div>
                   
                   <label>GPA:</label>
@@ -2464,9 +2464,13 @@
       // CERTIFICATION SECTION
       // ========================================
       } else if (recordType === 'certification') {
-          const name = getTextContent(recordElement, 'h3');
-          const issuer = getTextContent(recordElement, '.location');
-          
+          const name = getTextContent(recordElement, '.cert-name');
+          const issuer = getTextContent(recordElement, '.cert-issuer');
+          const issueDateTextContent = getTextContent(recordElement, '.issue-date');
+          const issueDateValue = issueDateTextContent ? formatDateForInput(issueDateTextContent.replace('Issued:', '').trim()) : '';
+
+          const expiryDateTextContent = getTextContent(recordElement, '.expiry-date');
+          const expiryDateValue = expiryDateTextContent ? formatDateForInput(expiryDateTextContent.replace('Expires:', '').trim()) : '';
           formHTML += `
               <div class="certification-edit-form">
                   <label>Certification Name:</label>
@@ -2478,11 +2482,11 @@
                   <div class="date-fields-container">
                       <div class="date-field">
                           <label>Issue Date:</label>
-                          <input type="date" name="issue_date" value="${extractCertificationDate(recordElement, 'issue')}">
+                          <input type="date" name="issue_date" value="${issueDateValue}">
                       </div>
                       <div class="date-field">
                           <label>Expiry Date:</label>
-                          <input type="date" name="expiry_date" value="${extractCertificationDate(recordElement, 'expiry')}">
+                          <input type="date" name="expiry_date" value="${expiryDateValue}">
                       </div>
                   </div>
                   
@@ -2590,6 +2594,14 @@
       recordElement.innerHTML = '';
       recordElement.appendChild(editForm);
   }  
+  function extractGPA(container) {
+    const gpaElement = container.querySelector('.gpa');
+    if (gpaElement) {
+        const text = gpaElement.textContent.trim();
+        return text.replace('GPA:', '').trim();
+    }
+    return '';
+}
     function isCurrentEducation(container) {
       // Check if education is current by looking for specific indicators
       const dateRangeElement = container.querySelector('.date-range');
@@ -2615,22 +2627,7 @@
             }
         }
         return '';
-    }
-      function extractCertificationDate(container, type) {
-        const dateElements = container.querySelectorAll('.date-range');
-        for (const element of dateElements) {
-            const text = element.textContent.trim();
-            if (type === 'issue' && text.startsWith('Issued:')) {
-                const dateStr = text.replace('Issued:', '').trim();
-                return formatDateForInput(dateStr);
-            } else if (type === 'expiry' && text.startsWith('Expires:')) {
-                const dateStr = text.replace('Expires:', '').trim();
-                return formatDateForInput(dateStr);
-            }
-        }
-        return '';
-    }
-    
+      }    
     function extractAuthors(container) {
         const descriptions = container.querySelectorAll('.description');
         // First description after h3 is usually authors
@@ -2684,8 +2681,12 @@
     function formatDateForInput(dateStr) {
         try {
             const date = new Date(dateStr);
-            return date.toISOString().substring(0, 10);
-        } catch (e) {
+            if (isNaN(date.getTime())) { // Check if the parsed date is valid
+              console.warn(`formatDateForInput: Could not parse date string: '${dateStr}' to a valid date.`);
+              return ''; // Return empty for invalid dates
+          }
+          return date.toISOString().substring(0, 10); // Format to YYYY-MM-DD
+          } catch (e) {
             return '';
         }
     }   
@@ -2708,31 +2709,33 @@
 
     // Helper function to extract date from date range
     function extractDate(container, type) {
-        const dateRangeElement = container.querySelector('.date-range');
-        if (!dateRangeElement) return '';
+      const dateElement = container.querySelector('.date-range'); 
+      if (!dateElement) {
+          console.warn(`extractDate: .date-range element not found for type '${type}' in container:`, container);
+          return '';
+      }
 
-        const dateRange = dateRangeElement.textContent.trim();
-        const dates = dateRange.split('-').map(d => d.trim());
+      const dateText = dateElement.textContent.trim();
+      if (type === 'publication') {
+        // Publication date is a single date string like "M Y", e.g., "Jan 2023"
+        return formatDateForInput(dateText);
+    }
 
-        if (type === 'start') {
-            // Try to parse the start date
-            if (dates[0]) {
-                try {
-                    const date = new Date(dates[0]);
-                    return date.toISOString().substring(0, 10);
-                } catch (e) {
-                    return '';
-                }
-            }
-        } else if (type === 'end' && dates[1] && dates[1] !== 'Present') {
-            try {
-                const date = new Date(dates[1]);
-                return date.toISOString().substring(0, 10);
-            } catch (e) {
-                return '';
-            }
+    // For types 'start' and 'end', expect a date range "Date1 - Date2" or "Date1 - Present"
+    const dates = dateText.split('-').map(d => d.trim());
+
+    if (type === 'start' && dates[0]) {
+        return formatDateForInput(dates[0]);
+    } else if (type === 'end' && dates.length > 1 && dates[1] && dates[1].toLowerCase() !== 'present') {
+        // Ensure there is a second part and it's not "Present"
+      try {
+        return formatDateForInput(dates[1]);
+
+      } catch (e) {
+        console.error(`Error parsing end date: ${dates[1]}`, e);
+        return '';
+      }
         }
-
         return '';
     }
     function extractCompanyFromWorkExperience(container) {

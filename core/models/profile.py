@@ -35,9 +35,9 @@ class UserProfile(TimestampMixin):
     postal_code = models.CharField(max_length=20, blank=True)
 
     # Online Presence (consolidated)
-    website = models.URLField(blank=True, help_text="Personal website URL")
-    github_url = models.URLField(blank=True, help_text="GitHub profile URL")
-    linkedin_url = models.URLField(blank=True, help_text="LinkedIn profile URL")
+    website = models.URLField(blank=True, null=True, help_text="Personal website URL")
+    github_url = models.URLField(blank=True, null=True, help_text="GitHub profile URL")
+    linkedin_url = models.URLField(blank=True, null=True, help_text="LinkedIn profile URL")
 
     # Professional Information
     headline = models.CharField(max_length=100, blank=True, help_text="Professional headline")
