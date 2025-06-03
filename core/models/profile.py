@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 from django.db import models
 from django.db.models.signals import post_save
 from django.dispatch import receiver
+from django.utils import timezone
 
 from .base import TimestampMixin
 
@@ -35,14 +36,13 @@ class UserProfile(TimestampMixin):
     postal_code = models.CharField(max_length=20, blank=True)
 
     # Online Presence (consolidated)
-    website = models.URLField(blank=True, help_text="Personal website URL")
-    github_url = models.URLField(blank=True, help_text="GitHub profile URL")
-    linkedin_url = models.URLField(blank=True, help_text="LinkedIn profile URL")
+    website = models.URLField(blank=True, null=True, help_text="Personal website URL")
+    github_url = models.URLField(blank=True, null=True, help_text="GitHub profile URL")
+    linkedin_url = models.URLField(blank=True, null=True, help_text="LinkedIn profile URL")
 
     # Professional Information
     headline = models.CharField(max_length=100, blank=True, help_text="Professional headline")
     professional_summary = models.TextField(blank=True, help_text="Professional summary or bio")
-    current_position = models.CharField(max_length=100, blank=True)
     company = models.CharField(max_length=100, blank=True)
 
     # Resume
@@ -152,7 +152,11 @@ class UserProfile(TimestampMixin):
             # Professional info
             "headline": self.headline,
             "professional_summary": self.professional_summary,
-            "current_position": self.current_position,
+            "current_position": (
+                self.work_experiences.filter(end_date__isnull=True).first().position.title
+                if self.work_experiences.filter(end_date__isnull=True).exists()
+                else None
+            ),
             "company": self.company,
             "years_of_experience": self.years_of_experience,
             # Timestamps
@@ -181,7 +185,6 @@ class UserProfile(TimestampMixin):
                         "location": exp.location,
                         "start_date": exp.start_date.isoformat() if exp.start_date else None,
                         "end_date": exp.end_date.isoformat() if exp.end_date else None,
-                        "current": exp.current,
                         "description": exp.description,
                         "achievements": exp.achievements,
                         "technologies": exp.technologies,
@@ -203,7 +206,6 @@ class UserProfile(TimestampMixin):
                         "field_of_study": edu.field_of_study,
                         "start_date": edu.start_date.isoformat() if edu.start_date else None,
                         "end_date": edu.end_date.isoformat() if edu.end_date else None,
-                        "current": edu.current,
                         "gpa": float(edu.gpa) if edu.gpa else None,
                         "achievements": edu.achievements,
                         "order": edu.order,
@@ -223,7 +225,6 @@ class UserProfile(TimestampMixin):
                         "description": proj.description,
                         "start_date": proj.start_date.isoformat() if proj.start_date else None,
                         "end_date": proj.end_date.isoformat() if proj.end_date else None,
-                        "current": proj.current,
                         "technologies": proj.technologies,
                         "github_url": proj.github_url,
                         "live_url": proj.live_url,
@@ -331,20 +332,15 @@ class UserProfile(TimestampMixin):
         additional_sections.append(f"Full Name: {self.full_name}")
 
         # Add professional information
-        if self.headline or self.professional_summary or self.current_position or self.company:
+        if self.headline or self.professional_summary or self.company:
             additional_sections.append("\nPROFESSIONAL DETAILS")
             additional_sections.append("-" * 19)
             if self.headline:
                 additional_sections.append(f"Headline: {self.headline}")
             if self.professional_summary:
                 additional_sections.append(f"Summary: {self.professional_summary}")
-            if self.current_position or self.company:
-                position_info = []
-                if self.current_position:
-                    position_info.append(self.current_position)
-                if self.company:
-                    position_info.append(f"at {self.company}")
-                additional_sections.append(f"Current Position: {' '.join(position_info)}")
+            if self.company:
+                additional_sections.append(f"Company: {self.company}")
             if hasattr(self, "work_experiences") and self.work_experiences.exists():
                 additional_sections.append(f"Years of Experience: {self.years_of_experience}")
 
@@ -414,13 +410,8 @@ class UserProfile(TimestampMixin):
             lines.append(f"Headline: {info['headline']}")
         if info["professional_summary"]:
             lines.append(f"Summary: {info['professional_summary']}")
-        if info["current_position"] or info["company"]:
-            position_text = ""
-            if info["current_position"]:
-                position_text += info["current_position"]
-            if info["company"]:
-                position_text += f" at {info['company']}"
-            lines.append(f"Current Position: {position_text}")
+        if info["company"]:
+            lines.append(f"Company: {info['company']}")
         lines.append(f"Years of Experience: {info['years_of_experience']}")
         lines.append("")
 
@@ -432,7 +423,7 @@ class UserProfile(TimestampMixin):
                 date_range = ""
                 if exp["start_date"]:
                     date_range = f"{exp['start_date'][:7]}"  # Just the YYYY-MM part
-                    if exp["current"]:
+                    if exp["end_date"] and exp["end_date"] > timezone.now().date():
                         date_range += " - Present"
                     elif exp["end_date"]:
                         date_range += f" - {exp['end_date'][:7]}"
@@ -455,7 +446,7 @@ class UserProfile(TimestampMixin):
                 date_range = ""
                 if edu["start_date"]:
                     date_range = f"{edu['start_date'][:7]}"
-                    if edu["current"]:
+                    if edu["end_date"] and edu["end_date"] > timezone.now().date():
                         date_range += " - Present"
                     elif edu["end_date"]:
                         date_range += f" - {edu['end_date'][:7]}"
@@ -476,7 +467,7 @@ class UserProfile(TimestampMixin):
                 date_range = ""
                 if proj["start_date"]:
                     date_range = f"{proj['start_date'][:7]}"
-                    if proj["current"]:
+                    if proj["end_date"] and proj["end_date"] > timezone.now().date():
                         date_range += " - Present"
                     elif proj["end_date"]:
                         date_range += f" - {proj['end_date'][:7]}"
@@ -564,14 +555,20 @@ class WorkExperience(TimestampMixin):
     location = models.CharField(max_length=200, blank=True, null=True)
     start_date = models.DateField(null=True)
     end_date = models.DateField(null=True, blank=True)
-    current = models.BooleanField(default=False)
-    description = models.TextField(null=True)
+    description = models.TextField()
     achievements = models.TextField(blank=True, null=True)
     technologies = models.TextField(blank=True, null=True)
     order = models.IntegerField(default=0)
 
     class Meta:
         ordering = ["-start_date", "-order"]
+
+    @property
+    def is_current(self):
+        """
+        Determines if the work experience is current based on the end_date.
+        """
+        return self.end_date is None or self.end_date > timezone.now().date()
 
     def __str__(self):
         return f"{self.position} at {self.company}"
@@ -583,8 +580,7 @@ class Project(TimestampMixin):
     description = models.TextField(null=True, blank=True)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
-    current = models.BooleanField(default=False)
-    technologies = models.TextField(null=True, blank=True)
+    technologies = models.JSONField(null=True, blank=True)
     github_url = models.URLField(null=True, blank=True)
     live_url = models.URLField(null=True, blank=True)
     order = models.IntegerField(default=0)
@@ -595,6 +591,52 @@ class Project(TimestampMixin):
     def __str__(self):
         return str(self.title)
 
+    @property
+    def is_current(self) -> bool:
+        """
+        Determines if the experience is current.
+        Returns True if end_date is None, False otherwise.
+        """
+        return self.end_date is None
+
+    @property
+    def status(self) -> str:
+        """
+        Returns the status of the experience as 'current' or 'finished'.
+        """
+        if self.is_current:  # You can also use `self.end_date is None` directly here
+            return "current"
+        else:
+            return "finished"
+
+    def save(self, *args, **kwargs):
+        """Convert technologies to proper JSON format if needed."""
+        if self.technologies:
+            if isinstance(self.technologies, str):
+                # Convert comma-separated string to list
+                self.technologies = [
+                    tech.strip() for tech in self.technologies.split(",") if tech.strip()
+                ]
+        super().save(*args, **kwargs)
+
+    @property
+    def technologies_display(self):
+        """Return technologies as a comma-separated string for display."""
+        if isinstance(self.technologies, list):
+            return ", ".join(self.technologies)
+        elif isinstance(self.technologies, str):
+            return self.technologies
+        return ""
+
+    @property
+    def technologies_list(self):
+        """Return technologies as a list."""
+        if isinstance(self.technologies, list):
+            return self.technologies
+        elif isinstance(self.technologies, str):
+            return [tech.strip() for tech in self.technologies.split(",") if tech.strip()]
+        return []
+
 
 class Education(TimestampMixin):
     profile = models.ForeignKey(UserProfile, on_delete=models.CASCADE, related_name="education")
@@ -603,7 +645,6 @@ class Education(TimestampMixin):
     field_of_study = models.CharField(max_length=200)
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
-    current = models.BooleanField(default=False, null=True, blank=True)
     gpa = models.DecimalField(max_digits=3, decimal_places=2, null=True, blank=True)
     achievements = models.TextField(null=True, blank=True)
     order = models.IntegerField(default=0)
@@ -613,6 +654,24 @@ class Education(TimestampMixin):
 
     def __str__(self):
         return f"{self.degree} in {self.field_of_study}"
+
+    @property
+    def is_current(self) -> bool:
+        """
+        Determines if the experience is current.
+        Returns True if end_date is None, False otherwise.
+        """
+        return self.end_date is None
+
+    @property
+    def status(self) -> str:
+        """
+        Returns the status of the experience as 'current' or 'finished'.
+        """
+        if self.is_current:  # You can also use `self.end_date is None` directly here
+            return "current"
+        else:
+            return "finished"
 
 
 class Certification(TimestampMixin):

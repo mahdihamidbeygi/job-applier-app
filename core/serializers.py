@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from drf_spectacular.utils import extend_schema_field
 from typing import Union
+from datetime import date
 
 from .models import (
     Certification,
@@ -26,7 +27,6 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
         # Calculate from work experiences if not directly available
         if hasattr(obj, "work_experiences"):
-            from datetime import date
 
             total_years = 0
             for exp in obj.work_experiences.all():
@@ -45,6 +45,9 @@ class UserProfileSerializer(serializers.ModelSerializer):
 
 
 class WorkExperienceSerializer(serializers.ModelSerializer):
+
+    is_current = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = WorkExperience
         fields = [
@@ -54,16 +57,19 @@ class WorkExperienceSerializer(serializers.ModelSerializer):
             "location",
             "start_date",
             "end_date",
-            "current",
             "description",
             "achievements",
             "technologies",
             "order",
+            "is_current",
         ]
         read_only_fields = ["id", "order"]
 
 
 class ProjectSerializer(serializers.ModelSerializer):
+
+    is_current = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = Project
         fields = [
@@ -76,11 +82,15 @@ class ProjectSerializer(serializers.ModelSerializer):
             "github_url",
             "live_url",
             "order",
+            "is_current",
         ]
         read_only_fields = ["id", "order"]
 
 
 class EducationSerializer(serializers.ModelSerializer):
+
+    is_current = serializers.BooleanField(read_only=True)
+
     class Meta:
         model = Education
         fields = [
@@ -90,10 +100,10 @@ class EducationSerializer(serializers.ModelSerializer):
             "field_of_study",
             "start_date",
             "end_date",
-            "current",
             "gpa",
             "achievements",
             "order",
+            "is_current",
         ]
         read_only_fields = ["id", "order"]
 

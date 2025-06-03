@@ -286,3 +286,13 @@ class TimestampMixin(models.Model):
             app_label=app_label, exclude_models=exclude_models, include_abstract=include_abstract
         )
         return json.dumps(schemas, indent=indent)
+
+    def get_model_name(self):
+        return self._meta.model_name
+
+    def get_verbose_name(self):
+        return self._meta.verbose_name
+
+    @property
+    def model_name(self):
+        return self._meta.model_name

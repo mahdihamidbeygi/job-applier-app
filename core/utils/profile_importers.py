@@ -1203,7 +1203,6 @@ class GitHubProfileImporter:
 
     def _get_current_timestamp(self):
         """Helper method to get current timestamp for analysis tracking."""
-        from datetime import datetime
 
         return datetime.now().isoformat()
 
@@ -1779,7 +1778,6 @@ class GitHubProfileImporter:
                         else updated_at
                     ),
                     "end_date": None,  # Since it's a GitHub repo, we'll consider it ongoing
-                    "current": True,  # Mark as current since it's from GitHub
                     # Use stars as a proxy for order (more stars = higher priority)
                     "order": repo.get("stars", 0),
                 }
@@ -2176,9 +2174,9 @@ class ResumeImporter:
 
         # --- Validate sections ---
         sections_config = {
-            "work_experiences": (WorkExperience, ["start_date", "end_date"], ["current"], [], []),
-            "education": (Education, ["start_date", "end_date"], ["current"], ["gpa"], []),
-            "projects": (Project, ["start_date", "end_date"], ["current"], [], []),
+            "work_experiences": (WorkExperience, ["start_date", "end_date"], [], [], []),
+            "education": (Education, ["start_date", "end_date"], [], ["gpa"], []),
+            "projects": (Project, ["start_date", "end_date"], [], [], []),
             "certifications": (Certification, ["issue_date", "expiration_date"], [], [], []),
             "skills": (Skill, [], [], [], ["proficiency"]),
             "publications": (Publication, ["publication_date"], [], [], []),
@@ -2287,7 +2285,7 @@ class ResumeImporter:
                         *   If the full date is available, format it as "YYYY-MM-DD".
                         *   If only year and month are available, use "YYYY-MM".
                         *   If only year is available, use "YYYY".
-                        *   If a date is ongoing (e.g., "Present" for an end date), represent the `end_date` as `null`. If the schema includes a "current" boolean field (like in WorkExperience or Education), ensure it is set to `true`.
+                        *   If a date is ongoing (e.g., "Present" for an end date), represent the `end_date` as `null`.
                     *   Ensure all string values are properly escaped within the JSON.
 
                     The resume text will be provided next. Begin your JSON output immediately.
