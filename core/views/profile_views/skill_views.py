@@ -5,11 +5,10 @@ Skill management views.
 import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
+from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.views.decorators.http import require_POST
 
 from core.forms import SkillForm
 from core.models import Skill
@@ -78,29 +77,31 @@ def delete_skill(request, skill_id):
 def deduplicate_skills(request):
     """Remove duplicate skills from user profile"""
     profile = request.user.userprofile
-
-    # Find duplicate skills (case-insensitive match)
-    duplicate_skills = (
-        Skill.objects.filter(profile=profile)
-        .values("name__lower")
-        .annotate(name_lower=Count("name__lower"))
-        .filter(name_lower__gt=1)
-    )
-
     removed_count = 0
 
-    # For each group of duplicates, keep the highest proficiency one
-    for dup in duplicate_skills:
-        skill_name = dup["name__lower"]
-        skills = Skill.objects.filter(profile=profile, name__iexact=skill_name).order_by(
-            "-proficiency"
-        )
+    # Get all skills for this profile with lowercase names
+    skills_with_lower = (
+        Skill.objects.filter(profile=profile)
+        .annotate(name_lower=Lower("name"))
+        .order_by("name_lower", "-proficiency", "id")
+    )
 
-        # Keep the first one (highest proficiency), delete the rest
-        if skills.count() > 1:
-            to_delete = skills[1:]
-            removed_count += to_delete.count()
-            to_delete.delete()
+    # Group by lowercase name and keep track of what we've seen
+    seen_names = set()
+    skills_to_delete = []
+
+    for skill in skills_with_lower:
+        if skill.name_lower in seen_names:
+            # This is a duplicate, mark for deletion
+            skills_to_delete.append(skill.id)
+        else:
+            # First occurrence, keep it
+            seen_names.add(skill.name_lower)
+
+    # Delete duplicates in one query
+    if skills_to_delete:
+        removed_count = len(skills_to_delete)
+        Skill.objects.filter(id__in=skills_to_delete).delete()
 
     data = {
         "success": True,
@@ -110,9 +111,7 @@ def deduplicate_skills(request):
 
     messages.success(request, data["message"])
 
-    # If this is an AJAX request, return JSON
     if request.headers.get("X-Requested-With") == "XMLHttpRequest":
         return JsonResponse(data)
 
-    # Otherwise redirect to profile
     return redirect(reverse("core:profile") + "#skills")

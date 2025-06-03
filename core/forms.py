@@ -43,7 +43,6 @@ def validate_date_range(
     cleaned_data,
     start_date_field="start_date",
     end_date_field="end_date",
-    current_field=None,
     entity_name="position",
 ):
     """Validate that start date comes before end date and handle 'current' checkbox logic.
@@ -52,7 +51,6 @@ def validate_date_range(
         cleaned_data: The form's cleaned_data dictionary
         start_date_field: The name of the start date field
         end_date_field: The name of the end date field
-        current_field: The name of the current/ongoing field, if any
         entity_name: Name of the entity for error messages (e.g., "position", "education")
 
     Returns:
@@ -60,15 +58,15 @@ def validate_date_range(
     """
     start_date = cleaned_data.get(start_date_field)
     end_date = cleaned_data.get(end_date_field)
-    current = cleaned_data.get(current_field) if current_field else None
+    current = True if end_date and end_date > timezone.now().date() else False
 
-    if current_field and not current and not end_date:
+    if not current and not end_date:
         raise forms.ValidationError(f"Please provide an end date or mark as current {entity_name}")
 
     if end_date and start_date and end_date < start_date:
         raise forms.ValidationError("End date cannot be earlier than start date")
 
-    if current_field and current and end_date:
+    if current and end_date:
         raise forms.ValidationError(f"Cannot have both current {entity_name} and end date")
 
     return cleaned_data
@@ -101,7 +99,6 @@ class UserProfileForm(forms.ModelForm):
             "linkedin_url",
             "headline",
             "professional_summary",
-            "current_position",
             "company",
             "resume",
         ]
@@ -156,7 +153,6 @@ class WorkExperienceForm(forms.ModelForm):
             "location",
             "start_date",
             "end_date",
-            "current",
             "description",
             "achievements",
             "technologies",
@@ -173,7 +169,7 @@ class WorkExperienceForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        return validate_date_range(cleaned_data, current_field="current", entity_name="position")
+        return validate_date_range(cleaned_data, entity_name="position")
 
 
 class ProjectForm(forms.ModelForm):
@@ -215,7 +211,6 @@ class EducationForm(forms.ModelForm):
             "field_of_study",
             "start_date",
             "end_date",
-            "current",
             "gpa",
             "achievements",
         ]
@@ -227,7 +222,7 @@ class EducationForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        return validate_date_range(cleaned_data, current_field="current", entity_name="education")
+        return validate_date_range(cleaned_data, entity_name="education")
 
     def clean_gpa(self):
         gpa = self.cleaned_data.get("gpa")

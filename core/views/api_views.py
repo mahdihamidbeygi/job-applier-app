@@ -130,7 +130,7 @@ class WorkExperienceViewSet(viewsets.ModelViewSet):
     serializer_class = WorkExperienceSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ["company", "position", "location", "current"]
+    filterset_fields = ["company", "position", "location"]
     search_fields = ["company", "position", "description", "technologies"]
     ordering_fields = ["start_date", "end_date", "created_at"]
 
@@ -150,7 +150,7 @@ class WorkExperienceViewSet(viewsets.ModelViewSet):
         Get the current work position
         """
         current_position: WorkExperience | None = WorkExperience.objects.filter(
-            profile__user=request.user, current=True
+            profile__user=request.user, end_date__isnull=True
         ).first()
         if current_position:
             serializer = self.get_serializer(current_position)
@@ -220,7 +220,7 @@ class EducationViewSet(viewsets.ModelViewSet):
     serializer_class = EducationSerializer
     permission_classes = [permissions.IsAuthenticated, IsOwnerOrReadOnly]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields: list[str] = ["institution", "degree", "field_of_study", "current"]
+    filterset_fields: list[str] = ["institution", "degree", "field_of_study"]
     search_fields: list[str] = ["institution", "degree", "field_of_study", "achievements"]
     ordering_fields: list[str] = ["start_date", "end_date", "gpa", "created_at"]
 

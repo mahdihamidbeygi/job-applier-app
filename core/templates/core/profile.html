@@ -183,7 +183,7 @@
   }
 
   .action-btn:hover {
-    background: var(--primary-color-dark);
+    background: var(--secondary-color);
     transform: translateY(-2px);
   }
 
@@ -202,7 +202,7 @@
   }
 
   .add-record-btn:hover {
-    background: var(--primary-color-dark);
+    background: var(--secondary-color);
     transform: translateY(-2px);
   }
 
@@ -453,9 +453,7 @@
 
   .inline-action-btn:hover {
     background: var(
-      --secondary-color,
-      var(--primary-color-dark)
-    ); /* Fallback for hover color */
+      --secondary-color    ); /* Fallback for hover color */
     transform: translateY(-2px);
     color: var(--text-primary); /* Ensure text color consistency on hover */
   }
@@ -536,6 +534,8 @@
     width: 100%;
     height: 100%;
     background: rgba(0, 0, 0, 0.8);
+    -webkit-backdrop-filter: blur(4px); /* Safari */
+    backdrop-filter: blur(4px);
     justify-content: center;
     align-items: center;
     z-index: 1000;
@@ -877,7 +877,6 @@
   }
 
   .tech-tag {
-    background: var(--primary-color);
     color: var(--text-primary);
     padding: 0.2rem 0.5rem;
     border-radius: 15px;
@@ -981,7 +980,7 @@
   }
 
   .github-import-btn:hover {
-    background: var(--primary-color-dark);
+    background: var(--secondary-color);
     transform: translateY(-2px);
   }
 
@@ -1100,7 +1099,7 @@
   }
 
   .github-profile-link:hover {
-    background: var(--primary-color-dark);
+    background: var(--secondary-color);
     transform: translateY(-2px);
   }
 
@@ -1118,7 +1117,7 @@
 
   /* Edit form styles */
   .edit-record-form {
-    background-color: var(--bg-secondary);
+    background-color: var(--card-bg);
     border-radius: 8px;
     padding: 20px;
     margin: 10px 0;
@@ -1133,7 +1132,7 @@
     margin-bottom: 15px;
     border: 1px solid var(--border-color);
     border-radius: 4px;
-    background-color: var(--bg-primary);
+    background-color: var(--darker-bg);
     color: var(--text-primary);
   }
 
@@ -1169,21 +1168,19 @@
   }
 
   .edit-record-form .save-btn:hover {
-    background-color: var(--primary-color-dark);
+    background-color: var(--secondary-color);
   }
 
   .edit-record-form .cancel-btn:hover {
-    background-color: var(--bg-secondary);
+    background-color: var(--card-bg);
   }
 
   /* Notification styles */
-  .notification {
+  .profile-notification-toast {
     position: fixed;
     top: 20px;
     right: 20px;
-    padding: 15px 20px;
-    border-radius: 5px;
-    color: white;
+    min-width: 250px; 
     font-weight: 500;
     z-index: 1000;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
@@ -1191,28 +1188,51 @@
     opacity: 0;
     transition: transform 0.3s, opacity 0.3s;
   }
+  /* Styles for the "Current position/education/project" toggle */
+  .edit-record-form .toggle-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* Space between checkbox and label */
+  }
 
-  .notification.show {
+  .edit-record-form .current-position-checkbox,
+  .edit-record-form .current-education-checkbox,
+  .edit-record-form .current-project-checkbox {
+    width: auto !important; /* Override 100% width from .edit-record-form input */
+    margin-bottom: 0 !important; /* Override margin from .edit-record-form input */
+    flex-shrink: 0;
+  }
+
+  .edit-record-form .current-position-label,
+  .edit-record-form .current-education-label,
+  .edit-record-form .current-project-label { /* Specific to work experience toggle label */
+    margin-bottom: 0 !important; /* Override margin from .edit-record-form label */
+    font-weight: normal;
+    color: var(--text-primary);
+  }
+
+  /* Style for disabled date inputs */
+  .edit-record-form input.field-disabled-icon {
+    background-color: var(--dark-bg); /* Slightly different background for disabled */
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  /* Style for status messages within date fields */
+  .edit-record-form .date-field .field-status {
+    font-size: 0.85em;
+    color: var(--text-muted);
+    margin-top: 4px;
+    display: none; /* Hidden by default */
+  }
+  .edit-record-form .date-field .field-status.show {
+    display: block; /* Shown when .show class is present */
+  }
+  .profile-notification-toast.show {
     transform: translateY(0);
     opacity: 1;
   }
 
-  .notification.success {
-    background-color: #4caf50;
-  }
-
-  .notification.error {
-    background-color: #f44336;
-  }
-
-  .notification.warning {
-    background-color: #ffc107;
-    color: #333;
-  }
-
-  .notification.info {
-    background-color: #2196f3;
-  }
 </style>
 
 <div class="profile-container">
@@ -1444,7 +1464,7 @@
         </button>
       </div>
       <form
-        id="experience-form"
+        id="{{ work_experiences | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_work_experience' %}"
@@ -1455,16 +1475,16 @@
       </form>
 
       {% for experience in work_experiences %}
-      <div class="experience-item" data-record-id="{{ experience.id }}">
+      <div class="{{ experience.model_name }}-item experience-item" data-record-id="{{ experience.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('work_experience', {{ experience.id }})"
+            onclick="editRecord('{{ experience.model_name }}', {{ experience.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('work_experience', {{ experience.id }})"
+            onclick="deleteRecord('{{ experience.model_name }}', {{ experience.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1473,11 +1493,7 @@
         </div>
         <h3>{{ experience.position }} at {{ experience.company }}</h3>
         <div class="date-range">
-          {{ experience.start_date|date:"M Y" }} - {% if experience.current %}
-          Present {% else %} {{ experience.end_date }}
-          <!-- Debug -->
-          {% endif %}
-          <!-- Debug info: End Date: {{ experience.end_date }}, Current: {{ experience.current }} -->
+          {{ experience.start_date|date:"M Y" }} - {% if experience.is_current %}Present{% else %}{{ experience.end_date|date:"M Y" }}{% endif %}
         </div>
         <p class="description">{{ experience.description }}</p>
         {% if experience.achievements %}
@@ -1502,7 +1518,7 @@
         </button>
       </div>
       <form
-        id="project-form"
+        id="{{ projects | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_project' %}"
@@ -1512,16 +1528,16 @@
       </form>
 
       {% for project in projects %}
-      <div class="project-item" data-record-id="{{ project.id }}">
+      <div class="{{ project.model_name }}-item" data-record-id="{{ project.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('project', {{ project.id }})"
+            onclick="editRecord('{{ project.model_name }}', {{ project.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('project', {{ project.id }})"
+            onclick="deleteRecord('{{ project.model_name }}', {{ project.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1529,6 +1545,12 @@
           </button>
         </div>
         <h3>{{ project.title }}</h3>
+        {% if project.start_date %}
+        <div class="date-range">
+          {{ project.start_date|date:"M Y" }} - 
+          {% if project.is_current %}Present{% else %}{{ project.end_date|date:"M Y" }}{% endif %}
+        </div>
+        {% endif %}
         <p class="description">{{ project.description }}</p>
         {% if project.technologies %}
         <!-- Use repo-tech-stack for consistent styling with GitHub section -->
@@ -1536,11 +1558,13 @@
             {% for tech_item in project.technologies|split:"," %}
             <span class="tech-tag">{{ tech_item }}</span>
             {% endfor %}
-        </div>        {% endif %}
+        </div>
+        {% endif %}
         <div class="project-links">
           {% if project.github_url %}
           <a href="{{ project.github_url }}" target="_blank">GitHub</a>
-          {% endif %} {% if project.live_url %}
+          {% endif %}
+          {% if project.live_url %}
           <a href="{{ project.live_url }}" target="_blank">Live Demo</a>
           {% endif %}
         </div>
@@ -1559,7 +1583,7 @@
         </button>
       </div>
       <form
-        id="education-form"
+        id="{{ education | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_education' %}"
@@ -1569,13 +1593,13 @@
       </form>
 
       {% for edu in education %}
-      <div class="education-item" data-record-id="{{ edu.id }}">
+      <div class="{{ edu.model_name }}-item" data-record-id="{{ edu.id }}">
         <div class="record-actions">
-          <button onclick="editRecord('education', {{ edu.id }})" title="Edit">
+          <button onclick="editRecord('{{ edu.model_name }}', {{ edu.id }})" title="Edit">
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('education', {{ edu.id }})"
+            onclick="deleteRecord('{{ edu.model_name }}', {{ edu.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1585,7 +1609,7 @@
         <div class="degree">{{ edu.degree }}</div>
         <div class="location">{{ edu.institution }}</div>
         <div class="date-range">
-          {{ edu.start_date|date:"M Y" }} - {{ edu.end_date|date:"M Y" }}
+          {{ edu.start_date|date:"M Y" }} - {% if edu.is_current %}Present{% else %}{{ edu.end_date|date:"M Y" }}{% endif %}
         </div>
         <p class="description">{{ edu.field_of_study }}</p>
         {% if edu.gpa %}
@@ -1611,7 +1635,7 @@
         </button>
       </div>
       <form
-        id="certification-form"
+        id="{{ certifications | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_certification' %}"
@@ -1621,27 +1645,27 @@
       </form>
 
       {% for cert in certifications %}
-      <div class="certification-item" data-record-id="{{ cert.id }}">
+      <div class="{{ cert.model_name }}-item" data-record-id="{{ cert.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('certification', {{ cert.id }})"
+            onclick="editRecord('{{ cert.model_name }}', {{ cert.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('certification', {{ cert.id }})"
+            onclick="deleteRecord('{{ cert.model_name }}', {{ cert.id }})"
             class="delete-btn"
             title="Delete"
           >
             <i class="fas fa-trash"></i>
           </button>
         </div>
-        <h3>{{ cert.name }}</h3>
-        <div class="location">{{ cert.issuer }}</div>
-        <div class="date-range">Issued: {{ cert.issue_date|date:"M Y" }}</div>
+        <h3 class="cert-name">{{ cert.name }}</h3>
+        <div class="cert-issuer">{{ cert.issuer }}</div>
+        <div class="date-range issue-date">Issued: {{ cert.issue_date|date:"M Y" }}</div>
         {% if cert.expiry_date %}
-        <div class="date-range">Expires: {{ cert.expiry_date|date:"M Y" }}</div>
+        <div class="date-range expiry-date">Expires: {{ cert.expiry_date|date:"M Y" }}</div>
         {% endif %} {% if cert.credential_id %}
         <p class="description">Credential ID: {{ cert.credential_id }}</p>
         {% endif %} {% if cert.credential_url %}
@@ -1662,7 +1686,7 @@
         </button>
       </div>
       <form
-        id="publication-form"
+        id="{{ publications | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_publication' %}"
@@ -1672,16 +1696,16 @@
       </form>
 
       {% for pub in publications %}
-      <div class="publication-item" data-record-id="{{ pub.id }}">
+      <div class="{{ pub.model_name }}-item" data-record-id="{{ pub.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('publication', {{ pub.id }})"
+            onclick="editRecord('{{ pub.model_name }}', {{ pub.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('publication', {{ pub.id }})"
+            onclick="deleteRecord('{{ pub.model_name }}', {{ pub.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1728,7 +1752,7 @@
         </div>
       </div>
       <form
-        id="skill-form"
+        id="{{ skills | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_skill' %}"
@@ -1739,7 +1763,7 @@
 
       <div class="skills-grid">
         {% for skill in skills %}
-        <div class="skill-item" data-record-id="{{ skill.id }}">
+        <div class="{{ skill.model_name }}-item" data-record-id="{{ skill.id }}">
           <div class="skill-item-content">
             <h3>{{ skill.name }}</h3>
             <p class="skill-category-label">Category: {{ skill.category }}</p>
@@ -1748,11 +1772,11 @@
             </p>
           </div>
           <div class="record-actions">
-            <button onclick="editRecord('skill', {{ skill.id }})" title="Edit">
+            <button onclick="editRecord('{{ skill.model_name }}', {{ skill.id }})" title="Edit">
               <i class="fas fa-edit"></i>
             </button>
             <button
-              onclick="deleteRecord('skill', {{ skill.id }})"
+              onclick="deleteRecord('{{ skill.model_name }}', {{ skill.id }})"
               class="delete-btn"
               title="Delete"
             >
@@ -1986,6 +2010,14 @@
 </div>
 
 <script>
+  const MODEL_NAMES = {
+    work_experience: '{{ work_experiences |model_name|default:"workexperience" }}',
+    education: '{{ education |model_name|default:"education" }}', 
+    project: '{{ projects |model_name|default:"project" }}',
+    certification: '{{ certifications |model_name|default:"certification" }}',
+    publication: '{{ publications |model_name|default:"publication" }}',
+    skill: '{{ skills |model_name|default:"skill" }}'
+};
     function showSection(sectionId) {
         // Hide all sections
         document.querySelectorAll('.section').forEach(section => {
@@ -2231,11 +2263,14 @@
             const response = await fetch(`/profile/delete/${recordType}/${recordId}/`, {
                 method: 'POST',
                 headers: {
-                    'X-CSRFToken': getCookie('csrftoken')
+                  'X-Requested-With': 'XMLHttpRequest',
+                  'X-CSRFToken': getCookie('csrftoken')
                 }
             });
 
-            if (response.ok) {
+            const data = await response.json()
+
+            if (data.success) {
                 const element = document.querySelector(`[data-record-id="${recordId}"]`);
                 if (element) element.remove();
                 showNotification('success', 'Record deleted successfully');
@@ -2248,109 +2283,426 @@
     }
 
     function editRecord(recordType, recordId) {
-        const recordElement = document.querySelector(`[data-record-id="${recordId}"]`);
-        const recordContent = recordElement.innerHTML;
+      const recordElement = document.querySelector(`.${recordType}-item[data-record-id="${recordId}"]`);
+      if (!recordElement) {
+          console.error(`Record element not found for ID: ${recordId}`);
+          return;
+      }
+  
+      const recordContent = recordElement.innerHTML;
+      const editForm = document.createElement('form');
+      editForm.className = 'edit-record-form';
+      editForm.id = `edit-${recordType}-${recordId}-form`;
+      editForm.setAttribute('onsubmit', 'event.preventDefault();');
+  
+      let formHTML = '';
+      formHTML += `<input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">`;
+  
+      // ========================================
+      // WORK EXPERIENCE SECTION
+      // ========================================
+      if (recordType === MODEL_NAMES.work_experience) {
+          const company = extractCompanyFromWorkExperience(recordElement);
+          const position = extractPositionFromWorkExperience(recordElement);
+          const description = getTextContent(recordElement, '.description');
+          const technologies = getTextContent(recordElement, '.technologies');
+          const isCurrent = isCurrentPosition(recordElement);
+          const startDate = extractDate(recordElement, 'start');
+          const endDate = isCurrent ? '' : extractDate(recordElement, 'end');
 
-        // Create edit form
-        const editForm = document.createElement('form');
-        editForm.className = 'edit-record-form';
-        editForm.id = `edit-${recordType}-${recordId}-form`;
-        editForm.setAttribute('onsubmit', 'event.preventDefault();');
+          formHTML += `
+              <div class="work-experience-edit-form">
+                  <label>Company:</label>
+                  <input type="text" name="company" placeholder="Company" value="${company}">
+                  
+                  <label>Position:</label>
+                  <input type="text" name="position" placeholder="Position" value="${position}">
+                  
+                  <div class="date-fields-container">
+                      <div class="date-field">
+                          <label>Start Date:</label>
+                          <input type="date" name="start_date" value="${startDate}">
+                      </div>
+                      <div class="date-field">
+                          <label>End Date:</label>
+                          <input type="date" name="end_date" value="${endDate}" 
+                                 ${isCurrent ? 'disabled class="field-disabled-icon"' : ''} 
+                                 id="end-date-${recordId}">
+                    <div class="current-position-container ${isCurrent ? 'current-position-active' : ''}"
+                      id="current-container-${recordId}" style="margin-top: 8px; margin-bottom: 8px;">
+                      <div class="toggle-wrapper">
+                        <input type="checkbox" 
+                              name="current" 
+                              class="current-position-checkbox" 
+                              ${isCurrent ? 'checked' : ''} 
+                              onchange="toggleCurrentState('position', this, ${recordId})"
+                              id="current-checkbox-${recordId}">
+                        <label class="current-position-label" for="current-checkbox-${recordId}">
+                            💼 Current position
+                        </label>
+                      </div>
+                    </div>
+                    <div class="field-status current-position ${isCurrent ? 'show' : ''}" id="end-date-status-${recordId}">${isCurrent ? 'Not applicable (current position)' : ''}</div>
 
-        // Create form fields based on record type
-        let formHTML = '';
+                  </div>
+                  </div>
+                  <label>Description:</label>
+                  <textarea name="description" placeholder="Description" rows="4">${description}</textarea>
+                  
+                  <label>Technologies:</label>
+                  <textarea name="technologies" placeholder="Technologies (comma separated)" rows="3">${technologies}</textarea>
+              </div>
+          `;
+  
+      // ========================================
+      // EDUCATION SECTION
+      // ========================================
+      } else if (recordType === MODEL_NAMES.education) {
+          const institution = getTextContent(recordElement, '.location');
+          const degree = getTextContent(recordElement, '.degree');
+          const fieldOfStudy = getTextContent(recordElement, '.description');
+          const isCurrent = isCurrentEducation(recordElement);
+          const startDate = extractDate(recordElement, 'start');
+          const endDate = isCurrent ? '' : extractDate(recordElement, 'end');
 
-        // Add CSRF token
-        formHTML += `<input type="hidden" name="csrfmiddlewaretoken" value="${getCookie('csrftoken')}">`;
+          formHTML += `
+              <div class="education-edit-form">
+                  <label>Institution:</label>
+                  <input type="text" name="institution" placeholder="Institution" value="${institution}">
+                  
+                  <label>Degree:</label>
+                  <input type="text" name="degree" placeholder="Degree" value="${degree}">
+                  
+                  <label>Field of Study:</label>
+                  <input type="text" name="field_of_study" placeholder="Field of Study" value="${fieldOfStudy}">
+                  
+                  <div class="date-fields-container">
+                      <div class="date-field">
+                          <label>Start Date:</label>
+                          <input type="date" name="start_date" value="${startDate}">
+                      </div>
+                      <div class="date-field">
+                          <label>Graduation Date:</label>
+                          <input type="date" name="end_date" value="${endDate}" 
+                                 ${isCurrent ? 'disabled class="field-disabled-icon"' : ''} 
+                                 id="graduation-date-${recordId}">
+                          <div class="current-education-container ${isCurrent ? 'current-education-active' : ''}" 
+                               id="current-education-container-${recordId}" style="margin-top: 8px; margin-bottom: 8px;">
+                              <div class="toggle-wrapper">
+                                  <input type="checkbox" name="current" 
+                                         class="current-education-checkbox" 
+                                         ${isCurrent ? 'checked' : ''} 
+                                         onchange="toggleCurrentState('education', this, ${recordId})"
+                                         id="current-education-checkbox-${recordId}">
+                                  <label class="current-education-label" for="current-education-checkbox-${recordId}">
+                                      🎓 I am currently pursuing this degree
+                                  </label>
+                              </div>
+                          </div>                                 
+                          <div class="field-status current-education ${isCurrent ? 'show' : ''}" id="graduation-status-${recordId}">
+                              ${isCurrent ? 'Currently pursuing this degree' : ''}
+                          </div>
+                      </div>
+                  </div>
+                  
+                  <label>GPA:</label>
+                  <input type="number" name="gpa" step="0.01" min="0" max="4.0" placeholder="GPA" value="${extractGPA(recordElement)}">
+                  
+                  <label>Achievements:</label>
+                  <textarea name="achievements" placeholder="Achievements" rows="3">${getTextContent(recordElement, '.achievements')}</textarea>
+              </div>
+          `;
+  
+      // ========================================
+      // PROJECT SECTION
+      // ========================================
+      } else if (recordType === MODEL_NAMES.project) {
+          const title = getTextContent(recordElement, 'h3');
+          const description = getTextContent(recordElement, '.description');
+          const techTags = recordElement.querySelectorAll('.tech-tag');
+          const technologies = Array.from(techTags).map(tag => tag.textContent.trim()).join(', ');
+          const isCurrent = isCurrentProject(recordElement);
+          const startDate = extractProjectDate(recordElement, 'start');
+          const endDate = isCurrent ? '' : extractProjectDate(recordElement, 'end');
+          
+          formHTML += `
+              <div class="project-edit-form">
+                  <label>Project Title:</label>
+                  <input type="text" name="title" placeholder="Project Title" value="${title}">
+                  
+                  <label>Description:</label>
+                  <textarea name="description" placeholder="Project Description" rows="4">${description}</textarea>
+                  
+                  <div class="date-fields-container">
+                      <div class="date-field">
+                          <label>Start Date:</label>
+                          <input type="date" name="start_date" value="${startDate}">
+                      </div>
+                      <div class="date-field">
+                          <label>Completion Date:</label>
+                          <input type="date" name="end_date" value="${endDate}" 
+                                 ${isCurrent ? 'disabled class="field-disabled-icon"' : ''} 
+                                 id="completion-date-${recordId}">
+                          <div class="field-status current-project ${isCurrent ? 'show' : ''}" id="completion-status-${recordId}">
+                              ${isCurrent ? 'Project is ongoing' : ''}
+                          </div>
+                          <div class="current-project-container ${isCurrent ? 'current-project-active' : ''}" 
+                               id="current-project-container-${recordId}" style="margin-top: 8px; margin-bottom: 8px;">
+                              <div class="toggle-wrapper">
+                                  <input type="checkbox" name="current" 
+                                         class="current-project-checkbox" 
+                                         ${isCurrent ? 'checked' : ''} 
+                                         onchange="toggleCurrentState('project', this, ${recordId})"
+                                         id="current-project-checkbox-${recordId}">
+                                  <label class="current-project-label" for="current-project-checkbox-${recordId}">
+                                      🚀 This project is ongoing
+                                  </label>
+                              </div>
+                          </div>
+                        </div>
+                  </div>
+                                    
+                  <label>Technologies:</label>
+                  <textarea name="technologies" placeholder="Technologies (comma separated)" rows="3">${technologies}</textarea>
+                  
+                  <label>GitHub URL:</label>
+                  <input type="url" name="github_url" placeholder="GitHub Repository URL" value="${getLinkHref(recordElement, 'GitHub')}">
+                  
+                  <label>Live URL:</label>
+                  <input type="url" name="live_url" placeholder="Live Demo URL" value="${getLinkHref(recordElement, 'Live Demo')}">
+              </div>
+          `;
+  
+      // ========================================
+      // CERTIFICATION SECTION
+      // ========================================
+      } else if (recordType === MODEL_NAMES.certification) {
+          const name = getTextContent(recordElement, '.cert-name');
+          const issuer = getTextContent(recordElement, '.cert-issuer');
+          const issueDateTextContent = getTextContent(recordElement, '.issue-date');
+          const issueDateValue = issueDateTextContent ? formatDateForInput(issueDateTextContent.replace('Issued:', '').trim()) : '';
 
-        if (recordType === 'work_experience') {
-            formHTML += `
-                <input type="text" name="company" placeholder="Company" value="${getTextContent(recordElement, '.location')}">
-                <input type="text" name="position" placeholder="Position" value="${getTextContent(recordElement, 'h3')}">
-                <input type="date" name="start_date" value="${extractDate(recordElement, 'start')}">
-                <input type="date" name="end_date" value="${extractDate(recordElement, 'end')}">
-                <label><input type="checkbox" name="current" ${isCurrentPosition(recordElement) ? 'checked' : ''}> Current Position</label>
-                <textarea name="description" placeholder="Description">${getTextContent(recordElement, '.description')}</textarea>
-                <textarea name="technologies" placeholder="Technologies (comma separated)">${getTextContent(recordElement, '.technologies')}</textarea>
-            `;
-        } else if (recordType === 'project') {
-            formHTML += `
-                <input type="text" name="title" placeholder="Title" value="${getTextContent(recordElement, 'h3')}">
-                <textarea name="description" placeholder="Description">${getTextContent(recordElement, '.description')}</textarea>
-                <textarea name="technologies" placeholder="Technologies (comma separated)">${getTextContent(recordElement, '.technologies')}</textarea>
-                <input type="text" name="github_url" placeholder="GitHub URL" value="${getLinkHref(recordElement, 'GitHub')}">
-                <input type="text" name="live_url" placeholder="Live URL" value="${getLinkHref(recordElement, 'Live Demo')}">
-            `;
-        } else if (recordType === 'education') {
-            formHTML += `
-                <input type="text" name="institution" placeholder="Institution" value="${getTextContent(recordElement, '.institution')}">
-                <input type="text" name="degree" placeholder="Degree" value="${getTextContent(recordElement, '.degree')}">
-                <input type="text" name="field_of_study" placeholder="Field of Study" value="${getTextContent(recordElement, '.field-of-study')}">
-                <input type="date" name="start_date" value="${extractDate(recordElement, 'start')}">
-                <input type="date" name="end_date" value="${extractDate(recordElement, 'end')}">
-                <label><input type="checkbox" name="current" ${isCurrentPosition(recordElement) ? 'checked' : ''}> Current Education</label>
-                <input type="number" name="gpa" step="0.01" min="0" max="4.0" placeholder="GPA" value="${getTextContent(recordElement, '.gpa')}">
-                <textarea name="achievements" placeholder="Achievements">${getTextContent(recordElement, '.achievements')}</textarea>
-            `;
-        } else if (recordType === 'certification') {
-            formHTML += `
-                <input type="text" name="name" placeholder="Name" value="${getTextContent(recordElement, 'h3')}">
-                <input type="text" name="issuer" placeholder="Issuer" value="${getTextContent(recordElement, '.issuer')}">
-                <input type="date" name="issue_date" value="${extractDate(recordElement, 'issue')}">
-                <input type="date" name="expiry_date" value="${extractDate(recordElement, 'expiry')}">
-                <input type="text" name="credential_id" placeholder="Credential ID" value="${getTextContent(recordElement, '.credential-id')}">
-                <input type="text" name="credential_url" placeholder="Credential URL" value="${getTextContent(recordElement, '.credential-url')}">
-            `;
-        } else if (recordType === 'publication') {
-            formHTML += `
-                <input type="text" name="title" placeholder="Title" value="${getTextContent(recordElement, 'h3')}">
-                <input type="text" name="authors" placeholder="Authors" value="${getTextContent(recordElement, '.authors')}">
-                <input type="date" name="publication_date" value="${extractDate(recordElement, 'publication')}">
-                <input type="text" name="publisher" placeholder="Publisher" value="${getTextContent(recordElement, '.publisher')}">
-                <input type="text" name="journal" placeholder="Journal" value="${getTextContent(recordElement, '.journal')}">
-                <input type="text" name="doi" placeholder="DOI" value="${getTextContent(recordElement, '.doi')}">
-                <textarea name="abstract" placeholder="Abstract">${getTextContent(recordElement, '.abstract')}</textarea>
-                <input type="text" name="url" placeholder="URL" value="${getLinkHref(recordElement, 'View Publication')}">
-            `;
-        } else if (recordType === 'skill') {
-            formHTML += `
-                <input type="text" name="name" placeholder="Name" value="${getTextContent(recordElement, '.skill-name')}">
-                <select name="category">
-                    <option value="programming" ${getCategoryValue(recordElement) === 'programming' ? 'selected' : ''}>Programming</option>
-                    <option value="framework" ${getCategoryValue(recordElement) === 'framework' ? 'selected' : ''}>Framework</option>
-                    <option value="database" ${getCategoryValue(recordElement) === 'database' ? 'selected' : ''}>Database</option>
-                    <option value="tool" ${getCategoryValue(recordElement) === 'tool' ? 'selected' : ''}>Tool</option>
-                    <option value="soft_skill" ${getCategoryValue(recordElement) === 'soft_skill' ? 'selected' : ''}>Soft Skill</option>
-                    <option value="language" ${getCategoryValue(recordElement) === 'language' ? 'selected' : ''}>Language</option>
-                    <option value="other" ${getCategoryValue(recordElement) === 'other' ? 'selected' : ''}>Other</option>
-                </select>
-                <select name="proficiency">
-                    <option value="1" ${getProficiencyValue(recordElement) === '1' ? 'selected' : ''}>Beginner</option>
-                    <option value="2" ${getProficiencyValue(recordElement) === '2' ? 'selected' : ''}>Elementary</option>
-                    <option value="3" ${getProficiencyValue(recordElement) === '3' ? 'selected' : ''}>Intermediate</option>
-                    <option value="4" ${getProficiencyValue(recordElement) === '4' ? 'selected' : ''}>Advanced</option>
-                    <option value="5" ${getProficiencyValue(recordElement) === '5' ? 'selected' : ''}>Expert</option>
-                </select>
-            `;
-        }
-
-        // Add submission buttons
-        formHTML += `
-            <div class="form-actions">
-                <button type="button" class="cancel-btn" onclick="cancelEdit('${recordType}', ${recordId})">Cancel</button>
-                <button type="button" class="save-btn" onclick="submitEdit('${recordType}', ${recordId})">Save Changes</button>
-            </div>
-        `;
-
-        editForm.innerHTML = formHTML;
-
-        // Hide the content and show the form
-        const content = recordElement.innerHTML;
-        recordElement.setAttribute('data-original-content', content);
-        recordElement.innerHTML = '';
-        recordElement.appendChild(editForm);
+          const expiryDateTextContent = getTextContent(recordElement, '.expiry-date');
+          const expiryDateValue = expiryDateTextContent ? formatDateForInput(expiryDateTextContent.replace('Expires:', '').trim()) : '';
+          formHTML += `
+              <div class="certification-edit-form">
+                  <label>Certification Name:</label>
+                  <input type="text" name="name" placeholder="Certification Name" value="${name}">
+                  
+                  <label>Issuing Organization:</label>
+                  <input type="text" name="issuer" placeholder="Issuing Organization" value="${issuer}">
+                  
+                  <div class="date-fields-container">
+                      <div class="date-field">
+                          <label>Issue Date:</label>
+                          <input type="date" name="issue_date" value="${issueDateValue}">
+                      </div>
+                      <div class="date-field">
+                          <label>Expiry Date:</label>
+                          <input type="date" name="expiry_date" value="${expiryDateValue}">
+                      </div>
+                  </div>
+                  
+                  <label>Credential ID:</label>
+                  <input type="text" name="credential_id" placeholder="Credential ID" value="${extractCredentialId(recordElement)}">
+                  
+                  <label>Credential URL:</label>
+                  <input type="url" name="credential_url" placeholder="Credential URL" value="${getLinkHref(recordElement, 'View Credential')}">
+              </div>
+          `;
+  
+      // ========================================
+      // PUBLICATION SECTION
+      // ========================================
+      } else if (recordType === MODEL_NAMES.publication) {
+          const title = getTextContent(recordElement, 'h3');
+          
+          formHTML += `
+              <div class="publication-edit-form">
+                  <label>Publication Title:</label>
+                  <input type="text" name="title" placeholder="Publication Title" value="${title}">
+                  
+                  <label>Authors:</label>
+                  <input type="text" name="authors" placeholder="Authors" value="${extractAuthors(recordElement)}">
+                  
+                  <label>Publication Date:</label>
+                  <input type="date" name="publication_date" value="${extractDate(recordElement, 'publication')}">
+                  
+                  <div class="date-fields-container">
+                      <div class="date-field">
+                          <label>Publisher:</label>
+                          <input type="text" name="publisher" placeholder="Publisher" value="${extractPublisher(recordElement)}">
+                      </div>
+                      <div class="date-field">
+                          <label>Journal:</label>
+                          <input type="text" name="journal" placeholder="Journal" value="${extractJournal(recordElement)}">
+                      </div>
+                  </div>
+                  
+                  <label>DOI:</label>
+                  <input type="text" name="doi" placeholder="DOI" value="${extractDOI(recordElement)}">
+                  
+                  <label>Abstract:</label>
+                  <textarea name="abstract" placeholder="Abstract" rows="5">${getTextContent(recordElement, '.abstract')}</textarea>
+                  
+                  <label>Publication URL:</label>
+                  <input type="url" name="url" placeholder="Publication URL" value="${getLinkHref(recordElement, 'View Publication')}">
+              </div>
+          `;
+  
+      // ========================================
+      // SKILL SECTION
+      // ========================================
+      } else if (recordType === MODEL_NAMES.skill) {
+          const skillName = getTextContent(recordElement, 'h3');
+          const categoryText = getTextContent(recordElement, '.skill-category-label');
+          const proficiencyText = getTextContent(recordElement, '.skill-proficiency-label');
+          const category = categoryText.replace('Category: ', '').trim();
+          const proficiencyDisplay = proficiencyText.replace('Proficiency: ', '').trim();
+          const proficiencyValue = getProficiencyValueFromDisplay(proficiencyDisplay);
+          
+          formHTML += `
+              <div class="skill-edit-form">
+                  <label>Skill Name:</label>
+                  <input type="text" name="name" placeholder="Skill Name" value="${skillName}">
+                  
+                  <div class="date-fields-container">
+                      <div class="date-field">
+                          <label>Category:</label>
+                          <select name="category">
+                              <option value="programming" ${category === 'programming' ? 'selected' : ''}>Programming Languages</option>
+                              <option value="frameworks" ${category === 'frameworks' ? 'selected' : ''}>Frameworks & Libraries</option>
+                              <option value="databases" ${category === 'databases' ? 'selected' : ''}>Databases</option>
+                              <option value="tools" ${category === 'tools' ? 'selected' : ''}>Tools & Technologies</option>
+                              <option value="soft_skills" ${category === 'soft_skills' ? 'selected' : ''}>Soft Skills</option>
+                              <option value="languages" ${category === 'languages' ? 'selected' : ''}>Languages</option>
+                              <option value="other" ${category === 'other' ? 'selected' : ''}>Other</option>
+                          </select>
+                      </div>
+                      <div class="date-field">
+                          <label>Proficiency Level:</label>
+                          <select name="proficiency">
+                              <option value="1" ${proficiencyValue === '1' ? 'selected' : ''}>Beginner</option>
+                              <option value="2" ${proficiencyValue === '2' ? 'selected' : ''}>Elementary</option>
+                              <option value="3" ${proficiencyValue === '3' ? 'selected' : ''}>Intermediate</option>
+                              <option value="4" ${proficiencyValue === '4' ? 'selected' : ''}>Advanced</option>
+                              <option value="5" ${proficiencyValue === '5' ? 'selected' : ''}>Expert</option>
+                          </select>
+                      </div>
+                  </div>
+              </div>
+          `;
+      }
+  
+      // Add universal form actions
+      formHTML += `
+          <div class="form-actions">
+              <button type="button" class="cancel-btn" onclick="cancelEdit('${recordType}', ${recordId})">Cancel</button>
+              <button type="button" class="save-btn" onclick="submitEdit('${recordType}', ${recordId})">Save Changes</button>
+          </div>
+      `;
+  
+      editForm.innerHTML = formHTML;
+      recordElement.setAttribute('data-original-content', recordContent);
+      recordElement.innerHTML = '';
+      recordElement.appendChild(editForm);
+  }  
+  function extractGPA(container) {
+    const gpaElement = container.querySelector('.gpa');
+    if (gpaElement) {
+        const text = gpaElement.textContent.trim();
+        return text.replace('GPA:', '').trim();
     }
-
+    return '';
+}
+    function isCurrentEducation(container) {
+      // Check if education is current by looking for specific indicators
+      const dateRangeElement = container.querySelector('.date-range');
+      return dateRangeElement && dateRangeElement.textContent.includes('Present');
+  }
+  
+  function isCurrentProject(container) {
+      // Check if project is current/ongoing
+      const dateRangeElement = container.querySelector('.date-range');
+      return dateRangeElement && dateRangeElement.textContent.includes('Present');
+  }
+  
+  function extractProjectDate(container, type) {
+      // Similar to extractDate but for projects
+      return extractDate(container, type);
+  }    
+    function extractCredentialId(container) {
+        const descriptions = container.querySelectorAll('.description');
+        for (const desc of descriptions) {
+            const text = desc.textContent.trim();
+            if (text.startsWith('Credential ID:')) {
+                return text.replace('Credential ID:', '').trim();
+            }
+        }
+        return '';
+      }    
+    function extractAuthors(container) {
+        const descriptions = container.querySelectorAll('.description');
+        // First description after h3 is usually authors
+        return descriptions.length > 0 ? descriptions[0].textContent.trim() : '';
+    }
+    
+    function extractPublisher(container) {
+        const descriptions = container.querySelectorAll('.description');
+        for (const desc of descriptions) {
+            const text = desc.textContent.trim();
+            if (text.startsWith('Publisher:')) {
+                return text.replace('Publisher:', '').trim();
+            }
+        }
+        return '';
+    }
+    
+    function extractJournal(container) {
+        const descriptions = container.querySelectorAll('.description');
+        for (const desc of descriptions) {
+            const text = desc.textContent.trim();
+            if (text.startsWith('Journal:')) {
+                return text.replace('Journal:', '').trim();
+            }
+        }
+        return '';
+    }
+    
+    function extractDOI(container) {
+        const descriptions = container.querySelectorAll('.description');
+        for (const desc of descriptions) {
+            const text = desc.textContent.trim();
+            if (text.startsWith('DOI:')) {
+                return text.replace('DOI:', '').trim();
+            }
+        }
+        return '';
+    }
+    
+    function getProficiencyValueFromDisplay(display) {
+        const mapping = {
+            'Beginner': '1',
+            'Elementary': '2', 
+            'Intermediate': '3',
+            'Advanced': '4',
+            'Expert': '5'
+        };
+        return mapping[display] || '3';
+    }
+    
+    function formatDateForInput(dateStr) {
+        try {
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) { // Check if the parsed date is valid
+              console.warn(`formatDateForInput: Could not parse date string: '${dateStr}' to a valid date.`);
+              return ''; // Return empty for invalid dates
+          }
+          return date.toISOString().substring(0, 10); // Format to YYYY-MM-DD
+          } catch (e) {
+            return '';
+        }
+    }   
     // Helper function to get text content from an element
     function getTextContent(container, selector) {
         const element = container.querySelector(selector);
@@ -2370,34 +2722,54 @@
 
     // Helper function to extract date from date range
     function extractDate(container, type) {
-        const dateRangeElement = container.querySelector('.date-range');
-        if (!dateRangeElement) return '';
+      const dateElement = container.querySelector('.date-range'); 
+      if (!dateElement) {
+          console.warn(`extractDate: .date-range element not found for type '${type}' in container:`, container);
+          return '';
+      }
 
-        const dateRange = dateRangeElement.textContent.trim();
-        const dates = dateRange.split('-').map(d => d.trim());
-
-        if (type === 'start') {
-            // Try to parse the start date
-            if (dates[0]) {
-                try {
-                    const date = new Date(dates[0]);
-                    return date.toISOString().substring(0, 10);
-                } catch (e) {
-                    return '';
-                }
-            }
-        } else if (type === 'end' && dates[1] && dates[1] !== 'Present') {
-            try {
-                const date = new Date(dates[1]);
-                return date.toISOString().substring(0, 10);
-            } catch (e) {
-                return '';
-            }
-        }
-
-        return '';
+      const dateText = dateElement.textContent.trim();
+      if (type === 'publication') {
+        // Publication date is a single date string like "M Y", e.g., "Jan 2023"
+        return formatDateForInput(dateText);
     }
 
+    // For types 'start' and 'end', expect a date range "Date1 - Date2" or "Date1 - Present"
+    const dates = dateText.split('-').map(d => d.trim());
+
+    if (type === 'start' && dates[0]) {
+        return formatDateForInput(dates[0]);
+    } else if (type === 'end' && dates.length > 1 && dates[1] && dates[1].toLowerCase() !== 'present') {
+        // Ensure there is a second part and it's not "Present"
+      try {
+        return formatDateForInput(dates[1]);
+
+      } catch (e) {
+        console.error(`Error parsing end date: ${dates[1]}`, e);
+        return '';
+      }
+        }
+        return '';
+    }
+    function extractCompanyFromWorkExperience(container) {
+      const h3Element = container.querySelector('h3');
+      if (!h3Element) return '';
+      
+      // Text format: "Position at Company"
+      const text = h3Element.textContent.trim();
+      const atIndex = text.lastIndexOf(' at ');
+      return atIndex !== -1 ? text.substring(atIndex + 4) : '';
+  }
+
+  function extractPositionFromWorkExperience(container) {
+    const h3Element = container.querySelector('h3');
+    if (!h3Element) return '';
+    
+    // Text format: "Position at Company"
+    const text = h3Element.textContent.trim();
+    const atIndex = text.lastIndexOf(' at ');
+    return atIndex !== -1 ? text.substring(0, atIndex) : text;
+}
     // Helper function to check if position is current
     function isCurrentPosition(container) {
         const dateRangeElement = container.querySelector('.date-range');
@@ -2417,7 +2789,7 @@
 
     // Function to cancel editing
     function cancelEdit(recordType, recordId) {
-        const itemContainer = document.querySelector(`[data-record-id="${recordId}"]`);
+        const itemContainer = document.querySelector(`.${recordType}-item[data-record-id="${recordId}"]`);
         if (!itemContainer) return;
 
         const originalContent = itemContainer.getAttribute('data-original-content');
@@ -2429,11 +2801,9 @@
     // Function to submit edits
     function submitEdit(recordType, recordId) {
         const form = document.getElementById(`edit-${recordType}-${recordId}-form`);
-        console.log("Form found:", form);
         if (!form) return;
 
         const formData = new FormData(form);
-        console.log("FormData entries:", [...formData.entries()]);
         saveChanges(recordType, recordId, formData);
     }
 
@@ -2461,7 +2831,7 @@
                 // Reload the page to show updated data
                 location.reload();
             } else {
-                alert('Error: ' + (data.error || 'Failed to save changes'));
+                alert(data.error || 'Error: Failed to save changes');
             }
         } catch (error) {
             alert('Error saving changes: ' + error.message);
@@ -2480,7 +2850,6 @@
               return response.json();
           })
           .then(data => {
-              console.log('Profile stats data:', data);
 
               const workExperienceCount = document.getElementById('work-experience-count');
               if (workExperienceCount) {
@@ -2560,10 +2929,14 @@
     }
 
     // Function to show notifications to the user
-    function showNotification(type, message) {
+    function showNotification(alertType, message) { // e.g., alertType = 'success', 'danger', 'warning', 'info'
         // Create the notification element
         const notification = document.createElement('div');
-        notification.className = `notification ${type}`;
+        let bootstrapAlertClass = alertType;
+        if (alertType === 'error') {
+            bootstrapAlertClass = 'danger';
+        }
+        notification.className = `alert alert-${bootstrapAlertClass} profile-notification-toast`;
         notification.textContent = message;
 
         // Add notification to the body
@@ -2589,7 +2962,6 @@
         try {
             const form = document.getElementById('profile-basic-form');
             const formData = new FormData(form);
-
             const csrftoken = getCookie('csrftoken');
 
             const response = await fetch("{% url 'core:edit_profile' %}", {
@@ -2605,7 +2977,6 @@
 
             if (data.success) {
                 showNotification('success', 'Profile updated successfully!');
-                // No need to reload the page as we're just updating the profile
             } else {
                 let errorMsg = 'Failed to update profile';
                 if (data.errors) {
@@ -2621,6 +2992,62 @@
             hideLoading();
         }
     }
+    function toggleForm(formId) {
+      const form = document.getElementById(formId);
+      if (form) {
+          const isActive = form.classList.contains('active');
+          form.classList.toggle('active', !isActive);
+      }
+    }
+    function toggleCurrentState(type, currentCheckbox, recordId) {
+      const containers = {
+          'position': {
+              endField: `end-date-${recordId}`,
+              statusField: `end-date-status-${recordId}`,
+              container: `current-container-${recordId}`,
+              activeClass: 'current-position-active',
+              message: 'Not applicable (current position)'
+          },
+          'education': {
+              endField: `graduation-date-${recordId}`,
+              statusField: `graduation-status-${recordId}`,
+              container: `current-education-container-${recordId}`,
+              activeClass: 'current-education-active',
+              message: 'Currently pursuing this degree'
+          },
+          'project': {
+              endField: `completion-date-${recordId}`,
+              statusField: `completion-status-${recordId}`,
+              container: `current-project-container-${recordId}`,
+              activeClass: 'current-project-active',
+              message: 'Project is ongoing'
+          }
+      };
+  
+      const config = containers[type];
+      if (!config) return;
+  
+      const endDateInput = document.getElementById(config.endField);
+      const statusElement = document.getElementById(config.statusField);
+      const container = document.getElementById(config.container);
+  
+      if (endDateInput && statusElement && container) {
+          if (currentCheckbox.checked) {
+              endDateInput.disabled = true;
+              endDateInput.value = '';
+              endDateInput.classList.add('field-disabled-icon');
+              statusElement.textContent = config.message;
+              statusElement.classList.add('show');
+              container.classList.add(config.activeClass);
+          } else {
+              endDateInput.disabled = false;
+              endDateInput.classList.remove('field-disabled-icon');
+              statusElement.textContent = '';
+              statusElement.classList.remove('show');
+              container.classList.remove(config.activeClass);
+          }
+      }
+  }    
     document.addEventListener('DOMContentLoaded', function() {
       const generateBioButton = document.getElementById('generate-bio-btn');
       const professionalSummaryTextarea = document.getElementById('id_professional_summary');

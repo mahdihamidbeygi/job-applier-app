@@ -48,20 +48,24 @@ def delete_item(request, model_name, item_id):
     }
 
     if model_name not in models:
-        messages.error(request, f"Invalid model type: {model_name}")
-        return redirect("core:profile")
+        return JsonResponse(
+            {"success": False, "error": f"Invalid model type: {model_name}"}, status=400
+        )
 
     model = models[model_name]
     item = get_object_or_404(model, id=item_id, profile=request.user.userprofile)
 
     try:
         item.delete()
-        messages.success(request, f"{model_name.replace('_', ' ').title()} deleted successfully!")
+        return JsonResponse(
+            {
+                "success": True,
+                "message": f"{model_name.replace('_', ' ').title()} deleted successfully!",
+            }
+        )
     except Exception as e:
         logger.error(f"Error deleting {model_name}: {str(e)}")
-        messages.error(request, f"Error deleting {model_name}")
-
-    return redirect("core:profile")
+        return JsonResponse({"success": False, "message": "Error deleting {model_name}: {str(e)}"})
 
 
 @require_http_methods(["POST"])
@@ -120,32 +124,45 @@ def bulk_delete_records(request):
 def edit_record(request, record_type, record_id):
     """Edit a specific record"""
     models = {
-        "work_experience": (WorkExperience, WorkExperienceForm),
-        "project": (Project, ProjectForm),
-        "education": (Education, EducationForm),
-        "certification": (Certification, CertificationForm),
-        "publication": (Publication, PublicationForm),
-        "skill": (Skill, SkillForm),
+        WorkExperience().model_name: (WorkExperience, WorkExperienceForm),
+        Project().model_name: (Project, ProjectForm),
+        Education().model_name: (Education, EducationForm),
+        Certification().model_name: (Certification, CertificationForm),
+        Publication().model_name: (Publication, PublicationForm),
+        Skill().model_name: (Skill, SkillForm),
     }
 
     if record_type not in models:
-        messages.error(request, f"Invalid record type: {record_type}")
-        return redirect("core:profile")
+        return JsonResponse(
+            {"success": False, "error": f"Invalid record type: {record_type}"}, status=400
+        )
 
     model_class, form_class = models[record_type]
-    item = get_object_or_404(model_class, id=record_id, profile=request.user.userprofile)
+    try:
+        item = get_object_or_404(model_class, id=record_id, profile=request.user.userprofile)
+        form = form_class(request.POST, instance=item)
+        print(request.POST.get("end_date"))
+        if form.is_valid():
+            form.save()
+            return JsonResponse(
+                {
+                    "success": True,
+                    "message": f"{record_type.replace('_', ' ').title()} updated successfully!",
+                }
+            )
+        else:
+            errors = ""
+            for field, field_errors in form.errors.items():
+                errors += (
+                    f"{field.capitalize()}: "
+                    + ", ".join(str(error) for error in field_errors)
+                    + "\n"
+                )
+            return JsonResponse({"success": False, "error": errors}, status=400)
 
-    form = form_class(request.POST, instance=item)
-    if form.is_valid():
-        form.save()
-        messages.success(request, f"{record_type.replace('_', ' ').title()} updated successfully!")
-    else:
-        for field, errors in form.errors.items():
-            for error in errors:
-                messages.error(request, f"{field}: {error}")
-        messages.error(request, f"Error updating {record_type}")
-
-    return redirect("core:profile")
+    except Exception as e:
+        logger.error(f"Error editing {record_type}: {str(e)}")
+        return JsonResponse({"success": False, "error": "An unexpected error occurred"}, status=500)
 
 
 @require_POST

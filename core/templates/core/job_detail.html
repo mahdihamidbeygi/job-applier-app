@@ -1,7 +1,7 @@
 {% extends 'core/base.html' %} {% load static %} {% block content %}
 <div class="container mt-4">
   <div class="row">
-    <div class="col-md-12">
+    <div class="col-md-8">
       <!-- Job Details -->
       <div class="card mb-4">
         <div class="card-body">
@@ -17,13 +17,14 @@
               {{ job.description|linebreaks }}
             </div>
           </div>
-
+          {% if job.requirements %}
           <div class="job-requirements mt-4">
             <h4>Requirements</h4>
             <div class="requirements-content">
               {{ job.requirements|linebreaks }}
             </div>
           </div>
+          {% endif %}
         </div>
       </div>
     </div>
@@ -83,18 +84,15 @@
 
           <!-- Apply Button -->
           <div class="mt-3">
-            {% if not job.applied %}
+            {% if job.source_url %}
             <button
               class="btn btn-success w-100"
               onclick="applyToJob({{ job.id }})"
+              href="{{ job.source_url }}"
+              target="_blank"
             >
               Apply to Job
             </button>
-            {% else %}
-            <div class="alert alert-success">
-              <i class="fas fa-check-circle"></i> Applied on {{ job.applied_date
-              }}
-            </div>
             {% endif %}
           </div>
         </div>
@@ -105,12 +103,12 @@
         <div class="card-body">
           <h5 class="card-title">Job Details</h5>
           <ul class="list-unstyled">
-            <li><strong>Posted:</strong> {{ job.posted_date }}</li>
+            <li class="text-primary"><strong class="text-secondary">Posted:</strong> {{ job.posted_date | default:"" }}</li>
             <li>
-              <strong>Source:</strong>
-              <a href="{{ job.source_url }}" target="_blank">LinkedIn</a>
+              <strong class="text-secondary">Source:</strong>
+              <a href="{{ job.source_url | default:'' }}" target="{% if job.source_url %}_blank{% else %}_self{% endif %}" class="text-primary"> {{ job.source | default:"LinkedIn" }} </a>
             </li>
-            <li><strong>Match Score:</strong> {{ job.match_score }}%</li>
+            <li class="text-primary"><strong class="text-secondary">Match Score:</strong> {{ job.match_score }}%</li>
           </ul>
         </div>
       </div>
@@ -120,6 +118,9 @@
 
 {% endblock %} {% block extra_js %}
 <script>
+  // Pass authentication status from Django to JavaScript
+  const USER_IS_AUTHENTICATED = {{ request.user.is_authenticated|yesno:"true,false" }};
+  
   // Define functions in the global scope immediately
   window.generateDocuments = async function (jobId) {
     const statusDiv = document.getElementById("documentStatus");
@@ -128,15 +129,31 @@
     const documentButtons = document.getElementById("documentButtons");
 
     try {
+      if (!USER_IS_AUTHENTICATED) {
+        console.log("User not authenticated by server. Redirecting to login.");
+        window.location.href = "{% url 'account_login' %}";
+        return;
+      }      
       // Show status and disable button
       statusDiv.textContent = "Generating documents... Please wait.";
       statusDiv.classList.remove("d-none");
       errorDiv.classList.add("d-none");
       generateBtn.disabled = true;
 
-      const authToken = localStorage.getItem("authToken");
-      if (!authToken) {
-        window.location.href = "{% url 'account_login' %}";
+      let authToken;
+      try {
+        authToken = localStorage.getItem("authToken");
+        if (!authToken) {
+          // User is authenticated by session, but API token is missing.
+          console.warn("User authenticated by server, but no authToken in localStorage. Redirecting to login.");
+          window.location.href = "{% url 'account_login' %}";
+          return;
+        }
+      } catch (e) {
+        console.error("Error accessing localStorage:", e);
+        errorDiv.textContent = "Error accessing local storage. Please try logging in again.";
+        errorDiv.classList.remove("d-none");
+        window.location.href = "{% url 'account_login' %}"; // Fallback redirect
         return;
       }
 
@@ -215,9 +232,25 @@
 
   window.applyToJob = async function (jobId) {
     try {
-      const authToken = localStorage.getItem("authToken");
-      if (!authToken) {
+      if (!USER_IS_AUTHENTICATED) {
+        console.log("User not authenticated by server. Redirecting to login.");
         window.location.href = "{% url 'account_login' %}";
+        return;
+      }
+
+      let authToken;
+      try {
+        authToken = localStorage.getItem("authToken");
+        if (!authToken) {
+          // User is authenticated by session, but API token is missing.
+          console.warn("User authenticated by server, but no authToken in localStorage. Redirecting to login.");
+          window.location.href = "{% url 'account_login' %}";
+          return;
+        }
+      } catch (e) {
+        console.error("Error accessing localStorage:", e);
+        alert("Error accessing local storage. Please try logging in again.");
+        window.location.href = "{% url 'account_login' %}"; // Fallback redirect
         return;
       }
 
