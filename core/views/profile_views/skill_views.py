@@ -5,12 +5,10 @@ Skill management views.
 import logging
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
 from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.shortcuts import redirect
 from django.urls import reverse
-from django.views.decorators.http import require_POST
 
 from core.forms import SkillForm
 from core.models import Skill
