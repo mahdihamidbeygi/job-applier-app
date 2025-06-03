@@ -124,12 +124,12 @@ def bulk_delete_records(request):
 def edit_record(request, record_type, record_id):
     """Edit a specific record"""
     models = {
-        "work_experience": (WorkExperience, WorkExperienceForm),
-        "project": (Project, ProjectForm),
-        "education": (Education, EducationForm),
-        "certification": (Certification, CertificationForm),
-        "publication": (Publication, PublicationForm),
-        "skill": (Skill, SkillForm),
+        WorkExperience().model_name: (WorkExperience, WorkExperienceForm),
+        Project().model_name: (Project, ProjectForm),
+        Education().model_name: (Education, EducationForm),
+        Certification().model_name: (Certification, CertificationForm),
+        Publication().model_name: (Publication, PublicationForm),
+        Skill().model_name: (Skill, SkillForm),
     }
 
     if record_type not in models:
@@ -141,7 +141,7 @@ def edit_record(request, record_type, record_id):
     try:
         item = get_object_or_404(model_class, id=record_id, profile=request.user.userprofile)
         form = form_class(request.POST, instance=item)
-        print(form)
+        print(request.POST.get("end_date"))
         if form.is_valid():
             form.save()
             return JsonResponse(

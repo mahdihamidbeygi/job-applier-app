@@ -51,7 +51,7 @@ class LinkedInJobScraper:
             self.driver.get(job_url)
 
             # 2. Handle Dynamic Content (Wait for elements to load)
-            wait = WebDriverWait(self.driver, 10)
+            wait = WebDriverWait(self.driver, 5)
 
             # Wait for the job title to be present
             job_title_element = wait.until(
@@ -160,7 +160,7 @@ class LinkedInJobScraper:
             encoded_location = urllib.parse.quote(location)
             # Remove filters to get more general results
             search_url = f"https://www.linkedin.com/jobs/search/?keywords={encoded_role}&location={encoded_location}&position=1&pageNum=0"
-            print(f"Searching for jobs at {search_url}")
+
             self.driver.get(search_url)
             time.sleep(3)  # Wait for initial load
 
@@ -171,14 +171,13 @@ class LinkedInJobScraper:
 
             page = 0
             while page <= max_pages:
-                print(f"Scraping page {page}...")
                 job_links = self.scrape_job_links()
 
                 # Scrape details for each job on this page
                 for link in job_links:
                     if link in urls_done:
                         continue
-                    # print(f"Scraping job details for {link}...")
+
                     job_details = self._extract_job_details(link)
                     if job_details:
                         # Check if we have tailored documents for this job

@@ -628,7 +628,7 @@ Applier{% endblock %} {% block content %}
               platform: selectedPlatforms,
             }),
           });
-          console.log("response: ", response)
+
           if (!response.ok) {
             if (response.status === 401 || response.status === 403) {
               alert("Session expired. Please log in again.");
@@ -643,7 +643,6 @@ Applier{% endblock %} {% block content %}
           }
 
           const data = await response.json();
-          console.log("Search results:", data);
 
           // Clear previous search results but keep database jobs
           const jobListingsDiv = document.getElementById("jobListings");

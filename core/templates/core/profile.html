@@ -877,7 +877,6 @@
   }
 
   .tech-tag {
-    background: var(--primary-color);
     color: var(--text-primary);
     padding: 0.2rem 0.5rem;
     border-radius: 15px;
@@ -1465,7 +1464,7 @@
         </button>
       </div>
       <form
-        id="experience-form"
+        id="{{ work_experiences | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_work_experience' %}"
@@ -1476,16 +1475,16 @@
       </form>
 
       {% for experience in work_experiences %}
-      <div class="experience-item" data-record-id="{{ experience.id }}">
+      <div class="{{ experience.model_name }}-item experience-item" data-record-id="{{ experience.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('experience', {{ experience.id }})"
+            onclick="editRecord('{{ experience.model_name }}', {{ experience.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('experience', {{ experience.id }})"
+            onclick="deleteRecord('{{ experience.model_name }}', {{ experience.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1494,10 +1493,7 @@
         </div>
         <h3>{{ experience.position }} at {{ experience.company }}</h3>
         <div class="date-range">
-          {{ experience.start_date|date:"M Y" }} - {% if experience.current %}
-          Present {% else %} {{ experience.end_date|date:"M Y" }}
-          {% endif %}
-          <!-- Debug info: End Date: {{ experience.end_date }}, Current: {{ experience.current }} -->
+          {{ experience.start_date|date:"M Y" }} - {% if experience.is_current %}Present{% else %}{{ experience.end_date|date:"M Y" }}{% endif %}
         </div>
         <p class="description">{{ experience.description }}</p>
         {% if experience.achievements %}
@@ -1522,7 +1518,7 @@
         </button>
       </div>
       <form
-        id="project-form"
+        id="{{ projects | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_project' %}"
@@ -1532,16 +1528,16 @@
       </form>
 
       {% for project in projects %}
-      <div class="project-item" data-record-id="{{ project.id }}">
+      <div class="{{ project.model_name }}-item" data-record-id="{{ project.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('project', {{ project.id }})"
+            onclick="editRecord('{{ project.model_name }}', {{ project.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('project', {{ project.id }})"
+            onclick="deleteRecord('{{ project.model_name }}', {{ project.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1552,7 +1548,7 @@
         {% if project.start_date %}
         <div class="date-range">
           {{ project.start_date|date:"M Y" }} - 
-          {% if project.current %}Present{% elif project.end_date %}{{ project.end_date|date:"M Y" }}{% else %}N/A{% endif %}
+          {% if project.is_current %}Present{% else %}{{ project.end_date|date:"M Y" }}{% endif %}
         </div>
         {% endif %}
         <p class="description">{{ project.description }}</p>
@@ -1562,11 +1558,13 @@
             {% for tech_item in project.technologies|split:"," %}
             <span class="tech-tag">{{ tech_item }}</span>
             {% endfor %}
-        </div>        {% endif %}
+        </div>
+        {% endif %}
         <div class="project-links">
           {% if project.github_url %}
           <a href="{{ project.github_url }}" target="_blank">GitHub</a>
-          {% endif %} {% if project.live_url %}
+          {% endif %}
+          {% if project.live_url %}
           <a href="{{ project.live_url }}" target="_blank">Live Demo</a>
           {% endif %}
         </div>
@@ -1585,7 +1583,7 @@
         </button>
       </div>
       <form
-        id="education-form"
+        id="{{ education | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_education' %}"
@@ -1595,13 +1593,13 @@
       </form>
 
       {% for edu in education %}
-      <div class="education-item" data-record-id="{{ edu.id }}">
+      <div class="{{ edu.model_name }}-item" data-record-id="{{ edu.id }}">
         <div class="record-actions">
-          <button onclick="editRecord('education', {{ edu.id }})" title="Edit">
+          <button onclick="editRecord('{{ edu.model_name }}', {{ edu.id }})" title="Edit">
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('education', {{ edu.id }})"
+            onclick="deleteRecord('{{ edu.model_name }}', {{ edu.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1611,7 +1609,7 @@
         <div class="degree">{{ edu.degree }}</div>
         <div class="location">{{ edu.institution }}</div>
         <div class="date-range">
-          {{ edu.start_date|date:"M Y" }} - {% if edu.current %}Present{% else %}{{ edu.end_date|date:"M Y" }}{% endif %}
+          {{ edu.start_date|date:"M Y" }} - {% if edu.is_current %}Present{% else %}{{ edu.end_date|date:"M Y" }}{% endif %}
         </div>
         <p class="description">{{ edu.field_of_study }}</p>
         {% if edu.gpa %}
@@ -1637,7 +1635,7 @@
         </button>
       </div>
       <form
-        id="certification-form"
+        id="{{ certifications | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_certification' %}"
@@ -1647,16 +1645,16 @@
       </form>
 
       {% for cert in certifications %}
-      <div class="certification-item" data-record-id="{{ cert.id }}">
+      <div class="{{ cert.model_name }}-item" data-record-id="{{ cert.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('certification', {{ cert.id }})"
+            onclick="editRecord('{{ cert.model_name }}', {{ cert.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('certification', {{ cert.id }})"
+            onclick="deleteRecord('{{ cert.model_name }}', {{ cert.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1688,7 +1686,7 @@
         </button>
       </div>
       <form
-        id="publication-form"
+        id="{{ publications | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_publication' %}"
@@ -1698,16 +1696,16 @@
       </form>
 
       {% for pub in publications %}
-      <div class="publication-item" data-record-id="{{ pub.id }}">
+      <div class="{{ pub.model_name }}-item" data-record-id="{{ pub.id }}">
         <div class="record-actions">
           <button
-            onclick="editRecord('publication', {{ pub.id }})"
+            onclick="editRecord('{{ pub.model_name }}', {{ pub.id }})"
             title="Edit"
           >
             <i class="fas fa-edit"></i>
           </button>
           <button
-            onclick="deleteRecord('publication', {{ pub.id }})"
+            onclick="deleteRecord('{{ pub.model_name }}', {{ pub.id }})"
             class="delete-btn"
             title="Delete"
           >
@@ -1754,7 +1752,7 @@
         </div>
       </div>
       <form
-        id="skill-form"
+        id="{{ skills | model_name }}-form"
         class="add-record-form"
         method="post"
         action="{% url 'core:add_skill' %}"
@@ -1765,7 +1763,7 @@
 
       <div class="skills-grid">
         {% for skill in skills %}
-        <div class="skill-item" data-record-id="{{ skill.id }}">
+        <div class="{{ skill.model_name }}-item" data-record-id="{{ skill.id }}">
           <div class="skill-item-content">
             <h3>{{ skill.name }}</h3>
             <p class="skill-category-label">Category: {{ skill.category }}</p>
@@ -1774,11 +1772,11 @@
             </p>
           </div>
           <div class="record-actions">
-            <button onclick="editRecord('skill', {{ skill.id }})" title="Edit">
+            <button onclick="editRecord('{{ skill.model_name }}', {{ skill.id }})" title="Edit">
               <i class="fas fa-edit"></i>
             </button>
             <button
-              onclick="deleteRecord('skill', {{ skill.id }})"
+              onclick="deleteRecord('{{ skill.model_name }}', {{ skill.id }})"
               class="delete-btn"
               title="Delete"
             >
@@ -2012,6 +2010,14 @@
 </div>
 
 <script>
+  const MODEL_NAMES = {
+    work_experience: '{{ work_experiences |model_name|default:"workexperience" }}',
+    education: '{{ education |model_name|default:"education" }}', 
+    project: '{{ projects |model_name|default:"project" }}',
+    certification: '{{ certifications |model_name|default:"certification" }}',
+    publication: '{{ publications |model_name|default:"publication" }}',
+    skill: '{{ skills |model_name|default:"skill" }}'
+};
     function showSection(sectionId) {
         // Hide all sections
         document.querySelectorAll('.section').forEach(section => {
@@ -2295,7 +2301,7 @@
       // ========================================
       // WORK EXPERIENCE SECTION
       // ========================================
-      if (recordType === 'experience') {
+      if (recordType === MODEL_NAMES.work_experience) {
           const company = extractCompanyFromWorkExperience(recordElement);
           const position = extractPositionFromWorkExperience(recordElement);
           const description = getTextContent(recordElement, '.description');
@@ -2303,7 +2309,7 @@
           const isCurrent = isCurrentPosition(recordElement);
           const startDate = extractDate(recordElement, 'start');
           const endDate = isCurrent ? '' : extractDate(recordElement, 'end');
-          
+
           formHTML += `
               <div class="work-experience-edit-form">
                   <label>Company:</label>
@@ -2351,14 +2357,14 @@
       // ========================================
       // EDUCATION SECTION
       // ========================================
-      } else if (recordType === 'education') {
+      } else if (recordType === MODEL_NAMES.education) {
           const institution = getTextContent(recordElement, '.location');
           const degree = getTextContent(recordElement, '.degree');
           const fieldOfStudy = getTextContent(recordElement, '.description');
           const isCurrent = isCurrentEducation(recordElement);
           const startDate = extractDate(recordElement, 'start');
           const endDate = isCurrent ? '' : extractDate(recordElement, 'end');
-          
+
           formHTML += `
               <div class="education-edit-form">
                   <label>Institution:</label>
@@ -2410,7 +2416,7 @@
       // ========================================
       // PROJECT SECTION
       // ========================================
-      } else if (recordType === 'project') {
+      } else if (recordType === MODEL_NAMES.project) {
           const title = getTextContent(recordElement, 'h3');
           const description = getTextContent(recordElement, '.description');
           const techTags = recordElement.querySelectorAll('.tech-tag');
@@ -2470,7 +2476,7 @@
       // ========================================
       // CERTIFICATION SECTION
       // ========================================
-      } else if (recordType === 'certification') {
+      } else if (recordType === MODEL_NAMES.certification) {
           const name = getTextContent(recordElement, '.cert-name');
           const issuer = getTextContent(recordElement, '.cert-issuer');
           const issueDateTextContent = getTextContent(recordElement, '.issue-date');
@@ -2508,7 +2514,7 @@
       // ========================================
       // PUBLICATION SECTION
       // ========================================
-      } else if (recordType === 'publication') {
+      } else if (recordType === MODEL_NAMES.publication) {
           const title = getTextContent(recordElement, 'h3');
           
           formHTML += `
@@ -2547,7 +2553,7 @@
       // ========================================
       // SKILL SECTION
       // ========================================
-      } else if (recordType === 'skill') {
+      } else if (recordType === MODEL_NAMES.skill) {
           const skillName = getTextContent(recordElement, 'h3');
           const categoryText = getTextContent(recordElement, '.skill-category-label');
           const proficiencyText = getTextContent(recordElement, '.skill-proficiency-label');

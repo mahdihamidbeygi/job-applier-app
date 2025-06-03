@@ -213,7 +213,6 @@ def import_resume(request) -> JsonResponse:
                     location=exp_data.get("location", None),
                     start_date=start_date,
                     end_date=end_date,
-                    current=exp_data.get("current", False),
                     description=exp_data.get("description", None),
                     achievements=exp_data.get("achievements", None),
                     technologies=exp_data.get("technologies", None),
@@ -243,7 +242,6 @@ def import_resume(request) -> JsonResponse:
                     field_of_study=edu_data.get("field_of_study", None),
                     start_date=start_date,
                     end_date=end_date,
-                    current=edu_data.get("current", False),
                 )
                 education_added += 1
 
@@ -273,7 +271,6 @@ def import_resume(request) -> JsonResponse:
                     technologies=project_data.get("technologies", None),
                     start_date=start_date,
                     end_date=end_date,
-                    current=project_data.get("current", False),
                     github_url=project_data.get("github_url", None),
                     live_url=project_data.get("live_url", None),
                 )
@@ -561,7 +558,6 @@ def import_linkedin_profile(request):
                         location=position.get("location", "").strip(),
                         start_date=start_date,
                         end_date=end_date,
-                        current=position.get("current", False),
                         description=position.get("description", "").strip(),
                     )
                     experiences_added += 1
@@ -641,7 +637,6 @@ def import_linkedin_profile(request):
                             field_of_study=edu.get("fieldOfStudy", "").strip(),
                             start_date=start_date,
                             end_date=end_date,
-                            current=edu.get("current", False),
                             description=edu.get("description", "").strip(),
                         )
                         education_added += 1
