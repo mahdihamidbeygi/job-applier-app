@@ -362,7 +362,7 @@ class ResumeComposition:
             return 0.0
 
     def _create_projects_section(self, job_description=None, max_projects=10):
-        if not self.personal_agent.user_profile.projects:
+        if self.personal_agent.user_profile.projects.count() < 1:
             return
 
         # Score and sort projects by relevance
@@ -695,7 +695,7 @@ class ResumeComposition:
                 )
             )
 
-            for project in relevant_project_objects:
+            for project in relevant_project_objects[:3]:
                 # (Keep the existing project table generation logic from _create_projects_section)
                 title_text = f"<b>{project.title}</b>"  # Use project.title
                 start_date: str = self._format_date(project.start_date)  # Use project.start_date
