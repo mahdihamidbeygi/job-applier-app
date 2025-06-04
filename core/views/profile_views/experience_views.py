@@ -26,7 +26,7 @@ def add_work_experience(request):
         request=request,
         form_class=WorkExperienceForm,
         template_name="core/experience/add.html",
-        success_url=reverse("profile:experience_list"),
+        success_url=reverse("core:profile") + "#experience",
         success_message="Work experience added successfully!",
         pre_save_callback=pre_save_callback,
     )
@@ -43,7 +43,7 @@ def edit_work_experience(request, experience_id):
         request=request,
         form_class=WorkExperienceForm,
         template_name="core/experience/edit.html",
-        success_url=reverse("profile:experience_list"),
+        success_url=reverse("core:profile") + "#experience",
         instance=experience,
         success_message="Work experience updated successfully!",
         extra_context={"experience": experience},
@@ -62,7 +62,7 @@ def delete_work_experience(request, experience_id):
         request=request,
         model_class=WorkExperience,
         object_id=experience_id,
-        success_url=reverse("profile:experience_list"),
+        success_url=reverse("core:profile") + "#experience",
         success_message="Work experience deleted successfully!",
         permission_check=permission_check,
     )
