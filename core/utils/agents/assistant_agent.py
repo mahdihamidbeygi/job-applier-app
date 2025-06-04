@@ -250,118 +250,118 @@ class AssistantAgent:
             exclude_conversations: If True, conversation history will not be
                 loaded into the vector store. Defaults to False.
         """
+        # try:
+        documents: list[Document] = []
         try:
-            documents: list[Document] = []
+            profile: UserProfile = UserProfile.objects.get(user_id=self.user_id)
             try:
-                profile: UserProfile = UserProfile.objects.get(user_id=self.user_id)
-                try:
-                    profile_content = profile.get_all_user_info_formatted()
-                except AttributeError:
-                    # Fallback if the method doesn't exist
-                    profile_content = (
-                        f"User Profile Summary: \n\n"
-                        + f"Title: {profile.title}\n"
-                        + f"Summary: {profile.professional_summary}\n"
-                        + f"Years of Experience: {profile.years_of_experience}"
-                    )
-
-                profile_doc: Document = Document(
-                    page_content=profile_content,  # Use the comprehensive content
-                    metadata={"type": "profile", "user_id": self.user_id},
+                profile_content = profile.get_all_user_info_formatted()
+            except AttributeError:
+                # Fallback if the method doesn't exist
+                profile_content = (
+                    f"User Profile Summary: \n\n"
+                    + f"Title: {profile.title}\n"
+                    + f"Summary: {profile.professional_summary}\n"
+                    + f"Years of Experience: {profile.years_of_experience}"
                 )
 
-                documents.append(profile_doc)
+            profile_doc: Document = Document(
+                page_content=profile_content,  # Use the comprehensive content
+                metadata={"type": "profile", "user_id": self.user_id},
+            )
 
-                # Add work experiences
-                for exp in profile.work_experiences.all():
-                    exp_doc = Document(
-                        page_content=f"Work Experience: {exp.position} at {exp.company}\n\n"
-                        + f"Duration: {exp.start_date.strftime('%b %Y')} - "
-                        + f"{exp.end_date.strftime('%b %Y') if exp.end_date else 'Present'}\n"
-                        + f"Description: {exp.description}\n"
-                        + f"Achievements: {exp.achievements}\n"
-                        + f"Technologies: {exp.technologies}",
-                        metadata={"type": "work_experience", "user_id": self.user_id, "id": exp.id},
-                    )
-                    documents.append(exp_doc)
+            documents.append(profile_doc)
 
-                # Add education
-                for edu in profile.education.all():
-                    edu_doc = Document(
-                        page_content=f"Education: {edu.degree} in {edu.field_of_study} from {edu.institution}\n\n"
-                        + f"Duration: {edu.start_date.strftime('%b %Y') if edu.start_date else ''} - "
-                        + f"{edu.end_date.strftime('%b %Y') if edu.end_date else 'Present'}\n"
-                        + f"Achievements: {edu.achievements}",
-                        metadata={"type": "education", "user_id": self.user_id, "id": edu.id},
-                    )
-                    documents.append(edu_doc)
-
-                # Add skills
-                skills_text = "Skills:\n"
-                for skill in profile.skills.all():
-                    skills_text += (
-                        f"- {skill.name} ({skill.get_category_display()}, "
-                        + f"Proficiency: {skill.get_proficiency_display()})\n"
-                    )
-                skills_doc = Document(
-                    page_content=skills_text, metadata={"type": "skills", "user_id": self.user_id}
+            # Add work experiences
+            for exp in profile.work_experiences.all():
+                exp_doc = Document(
+                    page_content=f"Work Experience: {exp.position} at {exp.company}\n\n"
+                    + f"Duration: {exp.start_date.strftime('%b %Y')} - "
+                    + f"{exp.end_date.strftime('%b %Y') if exp.end_date else 'Present'}\n"
+                    + f"Description: {exp.description}\n"
+                    + f"Achievements: {exp.achievements}\n"
+                    + f"Technologies: {exp.technologies}",
+                    metadata={"type": "work_experience", "user_id": self.user_id, "id": exp.id},
                 )
-                documents.append(skills_doc)
+                documents.append(exp_doc)
 
-                # Add projects
-                for proj in profile.projects.all():
-                    proj_doc = Document(
-                        page_content=f"Project: {proj.title}\n\n"
-                        + f"Duration: {proj.start_date.strftime('%b %Y')} - "
-                        + f"{proj.end_date.strftime('%b %Y') if proj.end_date else 'Present'}\n"
-                        + f"Description: {proj.description}\n"
-                        + f"Technologies: {proj.technologies}",
-                        metadata={"type": "project", "user_id": self.user_id, "id": proj.id},
+            # Add education
+            for edu in profile.education.all():
+                edu_doc = Document(
+                    page_content=f"Education: {edu.degree} in {edu.field_of_study} from {edu.institution}\n\n"
+                    + f"Duration: {edu.start_date.strftime('%b %Y') if edu.start_date else ''} - "
+                    + f"{edu.end_date.strftime('%b %Y') if edu.end_date else 'Present'}\n"
+                    + f"Achievements: {edu.achievements}",
+                    metadata={"type": "education", "user_id": self.user_id, "id": edu.id},
+                )
+                documents.append(edu_doc)
+
+            # Add skills
+            skills_text = "Skills:\n"
+            for skill in profile.skills.all():
+                skills_text += (
+                    f"- {skill.name} ({skill.get_category_display()}, "
+                    + f"Proficiency: {skill.get_proficiency_display()})\n"
+                )
+            skills_doc = Document(
+                page_content=skills_text, metadata={"type": "skills", "user_id": self.user_id}
+            )
+            documents.append(skills_doc)
+
+            # Add projects
+            for proj in profile.projects.all():
+                proj_doc = Document(
+                    page_content=f"Project: {proj.title}\n\n"
+                    + f"Duration: {proj.start_date.strftime('%b %Y')} - "
+                    + f"{proj.end_date.strftime('%b %Y') if proj.end_date else 'Present'}\n"
+                    + f"Description: {proj.description}\n"
+                    + f"Technologies: {proj.technologies}",
+                    metadata={"type": "project", "user_id": self.user_id, "id": proj.id},
+                )
+                documents.append(proj_doc)
+
+        except UserProfile.DoesNotExist:
+            logger.warning(f"User profile not found for user_id={self.user_id}")
+
+        # --- Load Job Listings ---
+        # (Copy the logic from RAGProcessor.populate_vectorstore here)
+        job_listings: BaseManager[JobListing] = JobListing.objects.filter(user_id=self.user_id)
+        for job in job_listings:
+            job_doc = Document(
+                page_content=f"Job Listing: {job.get_formatted_info()}",
+                metadata={"type": "job_listing", "user_id": self.user_id, "id": job.id},
+            )
+            documents.append(job_doc)
+
+        # --- Conditionally Load Conversations ---
+        if not exclude_conversations:
+            conversations: BaseManager[ChatConversation] = ChatConversation.objects.filter(
+                user_id=self.user_id
+            )
+            for conv in conversations:
+                messages: BaseManager[ChatMessage] = conv.messages.order_by("-created_at")[:10]
+                if messages:
+                    conv_text: str = f"Previous Conversation (ID: {conv.id}):\n\n"
+                    for msg in reversed(messages):
+                        conv_text += f"{msg.role.capitalize()}: {msg.content}\n\n"
+                    conv_doc = Document(
+                        page_content=conv_text,
+                        metadata={
+                            "type": "conversation",
+                            "user_id": self.user_id,
+                            "id": conv.id,
+                        },
                     )
-                    documents.append(proj_doc)
+                    documents.append(conv_doc)
 
-            except UserProfile.DoesNotExist:
-                logger.warning(f"User profile not found for user_id={self.user_id}")
+        # Add documents to the vectorstore
+        if documents:
+            vectorstore.add_documents(documents)
+        else:
+            logger.warning(f"No documents found to add to vector store for user {self.user_id}")
 
-            # --- Load Job Listings ---
-            # (Copy the logic from RAGProcessor.populate_vectorstore here)
-            job_listings: BaseManager[JobListing] = JobListing.objects.filter(user_id=self.user_id)
-            for job in job_listings:
-                job_doc = Document(
-                    page_content=f"Job Listing: {job.get_formatted_info()}",
-                    metadata={"type": "job_listing", "user_id": self.user_id, "id": job.id},
-                )
-                documents.append(job_doc)
-
-            # --- Conditionally Load Conversations ---
-            if not exclude_conversations:
-                conversations: BaseManager[ChatConversation] = ChatConversation.objects.filter(
-                    user_id=self.user_id
-                )
-                for conv in conversations:
-                    messages: BaseManager[ChatMessage] = conv.messages.order_by("-created_at")[:10]
-                    if messages:
-                        conv_text: str = f"Previous Conversation (ID: {conv.id}):\n\n"
-                        for msg in reversed(messages):
-                            conv_text += f"{msg.role.capitalize()}: {msg.content}\n\n"
-                        conv_doc = Document(
-                            page_content=conv_text,
-                            metadata={
-                                "type": "conversation",
-                                "user_id": self.user_id,
-                                "id": conv.id,
-                            },
-                        )
-                        documents.append(conv_doc)
-
-            # Add documents to the vectorstore
-            if documents:
-                vectorstore.add_documents(documents)
-            else:
-                logger.warning(f"No documents found to add to vector store for user {self.user_id}")
-
-        except Exception as e:
-            logger.error(f"Error populating vector store for user {self.user_id}: {str(e)}")
+        # except Exception as e:
+        #     logger.error(f"Error populating vector store for user {self.user_id}: {str(e)}")
 
     # --- Tool Definitions (Keep the actual functions as they are) ---
 
