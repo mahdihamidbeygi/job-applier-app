@@ -1,5 +1,5 @@
 """
-Utility views for profile management.
+Enhanced utility views for profile management with automatic date conversion.
 """
 
 import json
@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.views.decorators.http import require_http_methods, require_POST
+from django.views.decorators.csrf import csrf_exempt
 
 from core.forms import (
     CertificationForm,
@@ -65,7 +66,7 @@ def delete_item(request, model_name, item_id):
         )
     except Exception as e:
         logger.error(f"Error deleting {model_name}: {str(e)}")
-        return JsonResponse({"success": False, "message": "Error deleting {model_name}: {str(e)}"})
+        return JsonResponse({"success": False, "message": f"Error deleting {model_name}: {str(e)}"})
 
 
 @require_http_methods(["POST"])
@@ -122,7 +123,10 @@ def bulk_delete_records(request):
 @require_http_methods(["POST"])
 @login_required
 def edit_record(request, record_type, record_id):
-    """Edit a specific record"""
+    """
+    Enhanced edit record function with automatic date conversion support.
+    Now works with both form submissions and direct model updates.
+    """
     models = {
         WorkExperience().model_name: (WorkExperience, WorkExperienceForm),
         Project().model_name: (Project, ProjectForm),
@@ -138,18 +142,34 @@ def edit_record(request, record_type, record_id):
         )
 
     model_class, form_class = models[record_type]
+
     try:
         item = get_object_or_404(model_class, id=record_id, profile=request.user.userprofile)
+
+        # Method 1: Using Django Forms (existing approach - now with smart date fields)
         form = form_class(request.POST, instance=item)
-        print(request.POST.get("end_date"))
         if form.is_valid():
-            form.save()
-            return JsonResponse(
-                {
-                    "success": True,
-                    "message": f"{record_type.replace('_', ' ').title()} updated successfully!",
-                }
-            )
+            form.save()  # The enhanced models will handle date conversion automatically
+
+            # Return the updated item data with properly formatted dates
+            updated_data = {
+                "success": True,
+                "message": f"{record_type.replace('_', ' ').title()} updated successfully!",
+                "updated_item": {
+                    "id": item.id,
+                },
+            }
+
+            # Add date fields if they exist
+            date_fields = item.get_date_fields() if hasattr(item, "get_date_fields") else []
+            for field_name in date_fields:
+                if hasattr(item, field_name):
+                    field_value = getattr(item, field_name)
+                    updated_data["updated_item"][field_name] = (
+                        field_value.isoformat() if field_value else None
+                    )
+
+            return JsonResponse(updated_data)
         else:
             errors = ""
             for field, field_errors in form.errors.items():
@@ -165,6 +185,219 @@ def edit_record(request, record_type, record_id):
         return JsonResponse({"success": False, "error": "An unexpected error occurred"}, status=500)
 
 
+@require_http_methods(["POST"])
+@login_required
+@csrf_exempt
+def edit_record_direct(request, record_type, record_id):
+    """
+    Alternative edit method using direct model update with automatic date conversion.
+    Useful for API-style updates or when you want to bypass form validation.
+    """
+    models = {
+        "work_experience": WorkExperience,
+        "project": Project,
+        "education": Education,
+        "certification": Certification,
+        "publication": Publication,
+        "skill": Skill,
+    }
+
+    if record_type not in models:
+        return JsonResponse(
+            {"success": False, "error": f"Invalid record type: {record_type}"}, status=400
+        )
+
+    model_class = models[record_type]
+
+    try:
+        item = get_object_or_404(model_class, id=record_id, profile=request.user.userprofile)
+
+        # Handle both JSON and form data
+        if request.content_type == "application/json":
+            update_data = json.loads(request.body)
+        else:
+            update_data = request.POST.dict()
+            update_data.pop("csrfmiddlewaretoken", None)
+
+        # Method 2: Using the enhanced model's update method with date conversion
+        updated_item = model_class.update_from_form_data(item, update_data)
+
+        # Return success response with updated data
+        response_data = {
+            "success": True,
+            "message": f"{record_type.replace('_', ' ').title()} updated successfully!",
+            "updated_item": {
+                "id": updated_item.id,
+            },
+        }
+
+        # Add date fields to response
+        date_fields = (
+            updated_item.get_date_fields() if hasattr(updated_item, "get_date_fields") else []
+        )
+        for field_name in date_fields:
+            if hasattr(updated_item, field_name):
+                field_value = getattr(updated_item, field_name)
+                response_data["updated_item"][field_name] = (
+                    field_value.isoformat() if field_value else None
+                )
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error in direct edit for {record_type}: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+@login_required
+@csrf_exempt
+def create_record(request, record_type):
+    """
+    Create a new record with automatic date conversion.
+    Supports both form data and JSON data.
+    """
+    models = {
+        "work_experience": WorkExperience,
+        "project": Project,
+        "education": Education,
+        "certification": Certification,
+        "publication": Publication,
+        "skill": Skill,
+    }
+
+    if record_type not in models:
+        return JsonResponse(
+            {"success": False, "error": f"Invalid record type: {record_type}"}, status=400
+        )
+
+    model_class = models[record_type]
+
+    try:
+        profile = request.user.userprofile
+
+        # Handle both JSON and form data
+        if request.content_type == "application/json":
+            form_data = json.loads(request.body)
+        else:
+            form_data = request.POST.dict()
+            form_data.pop("csrfmiddlewaretoken", None)
+
+        # Use the enhanced model's create method with automatic date conversion
+        new_item = model_class.create_from_form_data(profile=profile, **form_data)
+
+        # Return success response with created item data
+        response_data = {
+            "success": True,
+            "message": f"{record_type.replace('_', ' ').title()} created successfully!",
+            "created_item": {
+                "id": new_item.id,
+            },
+        }
+
+        # Add date fields to response
+        date_fields = new_item.get_date_fields() if hasattr(new_item, "get_date_fields") else []
+        for field_name in date_fields:
+            if hasattr(new_item, field_name):
+                field_value = getattr(new_item, field_name)
+                response_data["created_item"][field_name] = (
+                    field_value.isoformat() if field_value else None
+                )
+
+        # Add some common fields for display
+        if hasattr(new_item, "company") and hasattr(new_item, "position"):
+            response_data["created_item"][
+                "display_name"
+            ] = f"{new_item.position} at {new_item.company}"
+        elif hasattr(new_item, "title"):
+            response_data["created_item"]["display_name"] = new_item.title
+        elif hasattr(new_item, "name"):
+            response_data["created_item"]["display_name"] = new_item.name
+        else:
+            response_data["created_item"]["display_name"] = str(new_item)
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error creating {record_type}: {str(e)}")
+        return JsonResponse({"success": False, "error": str(e)}, status=500)
+
+
+@require_http_methods(["POST"])
+@login_required
+@csrf_exempt
+def bulk_create_records(request):
+    """
+    Create multiple records at once with automatic date conversion.
+    Useful for importing data or batch operations.
+    """
+    try:
+        data = json.loads(request.body)
+        record_type = data.get("record_type")
+        records_data = data.get("records", [])
+
+        if not record_type or not records_data:
+            return JsonResponse({"error": "Missing required parameters"}, status=400)
+
+        models = {
+            "work_experience": WorkExperience,
+            "project": Project,
+            "education": Education,
+            "certification": Certification,
+            "publication": Publication,
+            "skill": Skill,
+        }
+
+        if record_type not in models:
+            return JsonResponse({"error": f"Invalid record type: {record_type}"}, status=400)
+
+        model_class = models[record_type]
+        profile = request.user.userprofile
+        created_items = []
+        errors = []
+
+        for i, record_data in enumerate(records_data):
+            try:
+                # Use the enhanced model's create method with date conversion
+                new_item = model_class.create_from_form_data(profile=profile, **record_data)
+
+                created_item_data = {"id": new_item.id, "index": i}
+
+                # Add date fields
+                date_fields = (
+                    new_item.get_date_fields() if hasattr(new_item, "get_date_fields") else []
+                )
+                for field_name in date_fields:
+                    if hasattr(new_item, field_name):
+                        field_value = getattr(new_item, field_name)
+                        created_item_data[field_name] = (
+                            field_value.isoformat() if field_value else None
+                        )
+
+                created_items.append(created_item_data)
+
+            except Exception as e:
+                errors.append({"index": i, "error": str(e), "data": record_data})
+
+        response_data = {
+            "success": True,
+            "message": f"Bulk create completed. Created {len(created_items)} items.",
+            "created_count": len(created_items),
+            "error_count": len(errors),
+            "created_items": created_items,
+        }
+
+        if errors:
+            response_data["errors"] = errors
+            response_data["message"] += f" {len(errors)} items had errors."
+
+        return JsonResponse(response_data)
+
+    except Exception as e:
+        logger.error(f"Error in bulk create: {str(e)}")
+        return JsonResponse({"error": str(e)}, status=500)
+
+
 @require_POST
 @login_required
 def generate_profile_bio(request: HttpRequest) -> JsonResponse:
@@ -178,12 +411,10 @@ def generate_profile_bio(request: HttpRequest) -> JsonResponse:
         resume_composition = ResumeComposition(personal_agent)
         resume_composition.tailor_to_job()
 
-        # 4. Update and save profile
         user_profile.professional_summary = resume_composition.professional_summary.strip()
         user_profile.save(update_fields=["professional_summary"])
 
         logger.info(f"Successfully generated and updated bio for user {request.user.username}")
-        # messages.success(request, "Professional summary generated and updated successfully!") # Good for non-AJAX
 
         return JsonResponse({"success": True, "bio": user_profile.professional_summary})
 

@@ -2,7 +2,7 @@
 User profile models.
 """
 
-from datetime import date
+from datetime import date, datetime
 
 from dateutil.relativedelta import relativedelta
 from django.contrib.auth.models import User
@@ -373,6 +373,15 @@ class UserProfile(TimestampMixin):
         # Combine base info with additional sections
         return base_info + "\n" + "\n".join(additional_sections)
 
+    def parse_date_string(self, date_str):
+        """Safely parse an ISO date string to a date object"""
+        if not date_str:
+            return None
+        try:
+            return datetime.fromisoformat(date_str).date()
+        except (ValueError, AttributeError):
+            return None
+
     def get_all_user_info_formatted(self):
         """
         Returns a formatted string with all user information,
@@ -423,10 +432,14 @@ class UserProfile(TimestampMixin):
                 date_range = ""
                 if exp["start_date"]:
                     date_range = f"{exp['start_date'][:7]}"  # Just the YYYY-MM part
-                    if exp["end_date"] and exp["end_date"] > timezone.now().date():
+                    if exp["end_date"]:
+                        end_date = self.parse_date_string(exp["end_date"])
+                        if end_date > timezone.now().date():
+                            date_range += " - Present"
+                        else:
+                            date_range += f" - {exp['end_date'][:7]}"
+                    else:
                         date_range += " - Present"
-                    elif exp["end_date"]:
-                        date_range += f" - {exp['end_date'][:7]}"
 
                 lines.append(f"{exp['position']} at {exp['company']} ({date_range})")
                 if exp["location"]:
@@ -446,10 +459,14 @@ class UserProfile(TimestampMixin):
                 date_range = ""
                 if edu["start_date"]:
                     date_range = f"{edu['start_date'][:7]}"
-                    if edu["end_date"] and edu["end_date"] > timezone.now().date():
+                    if edu["end_date"]:
+                        end_date = self.parse_date_string(edu["end_date"])
+                        if end_date > timezone.now().date():
+                            date_range += " - Present"
+                        else:
+                            date_range += f" - {edu['end_date'][:7]}"
+                    else:
                         date_range += " - Present"
-                    elif edu["end_date"]:
-                        date_range += f" - {edu['end_date'][:7]}"
 
                 lines.append(f"{edu['degree']} in {edu['field_of_study']}")
                 lines.append(f"{edu['institution']} ({date_range})")
@@ -467,10 +484,14 @@ class UserProfile(TimestampMixin):
                 date_range = ""
                 if proj["start_date"]:
                     date_range = f"{proj['start_date'][:7]}"
-                    if proj["end_date"] and proj["end_date"] > timezone.now().date():
+                    if proj["end_date"]:
+                        end_date = self.parse_date_string(proj["end_date"])
+                        if end_date > timezone.now().date():
+                            date_range += " - Present"
+                        else:
+                            date_range += f" - {proj['end_date'][:7]}"
+                    else:
                         date_range += " - Present"
-                    elif proj["end_date"]:
-                        date_range += f" - {proj['end_date'][:7]}"
 
                 lines.append(f"{proj['title']} ({date_range})")
                 lines.append(f"{proj['description']}")
