@@ -242,9 +242,16 @@ class CertificationForm(forms.ModelForm):
 
     def clean(self):
         cleaned_data = super().clean()
-        return validate_date_range(
-            cleaned_data, start_date_field="issue_date", end_date_field="expiry_date"
-        )
+
+        issue_date = cleaned_data.get("issue_date")
+        expiry_date = cleaned_data.get("expiry_date")
+
+        if issue_date and expiry_date:
+            if expiry_date < issue_date:
+                # Raise a field-specific error for expiry_date
+                self.add_error("expiry_date", "Expiry date cannot be earlier than the issue date.")
+
+        return cleaned_data
 
     def clean_credential_url(self):
         return clean_url_field(self.cleaned_data, "credential_url")
