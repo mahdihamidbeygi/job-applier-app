@@ -435,7 +435,7 @@ class ResumeComposition:
             self.elements.append(Spacer(1, 2))
 
     def _create_certifications_section(self):
-        if not self.personal_agent.user_profile.certifications:
+        if self.personal_agent.user_profile.certifications.count() < 1:
             return
 
         self.elements.append(Paragraph("CERTIFICATIONS", self.styles["ResumeSectionHeader"]))
@@ -452,7 +452,7 @@ class ResumeComposition:
 
     def _create_education_section(self):
         """Create the education section of the resume."""
-        if not self.personal_agent.user_profile.education:
+        if self.personal_agent.user_profile.education.count() < 1:
             return
 
         self.elements.append(Paragraph("EDUCATION", self.styles["ResumeSectionHeader"]))
@@ -471,7 +471,7 @@ class ResumeComposition:
 
     def _create_skills_section(self, job_info: str):
         """Create the skills section of the resume."""
-        if not self.personal_agent.user_profile.skills:
+        if self.personal_agent.user_profile.skills.count() < 1:
             return
 
         self.elements.append(Paragraph("SKILLS", self.styles["ResumeSectionHeader"]))
@@ -678,7 +678,7 @@ class ResumeComposition:
         self._create_experience_section()
 
         # Add relevant projects section (using the tailored list)
-        if self.projects:
+        if len(self.projects) > 0:
             self.elements.append(Paragraph("PROJECTS", self.styles["ResumeSectionHeader"]))
             # Filter the user's full project list based on the tailored titles
             relevant_project_objects = [
