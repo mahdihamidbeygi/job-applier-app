@@ -24,9 +24,8 @@
             <p>{% trans "Please sign in to continue" %}</p>
           </div>
 
-          <div class="text-center mb-4">
+          <!-- <div class="text-center mb-4">
             <p class="small">{% trans "Sign in with" %}:</p>
-            <!-- Google Sign-in Button -->
             <a
               href="{% provider_login_url 'google' %}"
               class="btn btn-outline-light btn-lg w-100 mt-2"
@@ -34,7 +33,6 @@
               <i class="fab fa-google me-2"></i>
               {% trans "Sign in with Google" %}
             </a>
-            <!-- GitHub Sign-in Button (Add margin if needed) -->
             <a
               href="{% provider_login_url 'github' %}"
               class="btn btn-outline-light btn-lg w-100 mt-2"
@@ -46,7 +44,7 @@
 
           <div class="text-center mb-4">
             <p>{% trans "or sign in with credentials" %}</p>
-          </div>
+          </div> -->
 
           <form class="login" method="POST" action="{% url 'account_login' %}">
             {% csrf_token %} {% if form.errors %}

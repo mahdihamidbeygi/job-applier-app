@@ -39,13 +39,14 @@ logger = logging.getLogger(__name__)
 @login_required
 def delete_item(request, model_name, item_id):
     """Delete an item from user profile"""
+    # Map record types to models
     models = {
-        "work_experience": WorkExperience,
-        "project": Project,
-        "education": Education,
-        "certification": Certification,
-        "publication": Publication,
-        "skill": Skill,
+        WorkExperience().model_name: WorkExperience,
+        Project().model_name: Project,
+        Education().model_name: Education,
+        Certification().model_name: Certification,
+        Publication().model_name: Publication,
+        Skill().model_name: Skill,
     }
 
     if model_name not in models:
@@ -86,12 +87,12 @@ def bulk_delete_records(request):
 
         # Map record types to models
         models = {
-            "work_experience": WorkExperience,
-            "project": Project,
-            "education": Education,
-            "certification": Certification,
-            "publication": Publication,
-            "skill": Skill,
+            WorkExperience().model_name: WorkExperience,
+            Project().model_name: Project,
+            Education().model_name: Education,
+            Certification().model_name: Certification,
+            Publication().model_name: Publication,
+            Skill().model_name: Skill,
         }
 
         if record_type not in models:
@@ -193,13 +194,14 @@ def edit_record_direct(request, record_type, record_id):
     Alternative edit method using direct model update with automatic date conversion.
     Useful for API-style updates or when you want to bypass form validation.
     """
+    # Map record types to models
     models = {
-        "work_experience": WorkExperience,
-        "project": Project,
-        "education": Education,
-        "certification": Certification,
-        "publication": Publication,
-        "skill": Skill,
+        WorkExperience().model_name: WorkExperience,
+        Project().model_name: Project,
+        Education().model_name: Education,
+        Certification().model_name: Certification,
+        Publication().model_name: Publication,
+        Skill().model_name: Skill,
     }
 
     if record_type not in models:
@@ -257,13 +259,14 @@ def create_record(request, record_type):
     Create a new record with automatic date conversion.
     Supports both form data and JSON data.
     """
+    # Map record types to models
     models = {
-        "work_experience": WorkExperience,
-        "project": Project,
-        "education": Education,
-        "certification": Certification,
-        "publication": Publication,
-        "skill": Skill,
+        WorkExperience().model_name: WorkExperience,
+        Project().model_name: Project,
+        Education().model_name: Education,
+        Certification().model_name: Certification,
+        Publication().model_name: Publication,
+        Skill().model_name: Skill,
     }
 
     if record_type not in models:
@@ -339,13 +342,14 @@ def bulk_create_records(request):
         if not record_type or not records_data:
             return JsonResponse({"error": "Missing required parameters"}, status=400)
 
+        # Map record types to models
         models = {
-            "work_experience": WorkExperience,
-            "project": Project,
-            "education": Education,
-            "certification": Certification,
-            "publication": Publication,
-            "skill": Skill,
+            WorkExperience().model_name: WorkExperience,
+            Project().model_name: Project,
+            Education().model_name: Education,
+            Certification().model_name: Certification,
+            Publication().model_name: Publication,
+            Skill().model_name: Skill,
         }
 
         if record_type not in models:

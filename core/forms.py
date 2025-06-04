@@ -58,16 +58,9 @@ def validate_date_range(
     """
     start_date = cleaned_data.get(start_date_field)
     end_date = cleaned_data.get(end_date_field)
-    current = True if end_date and end_date > timezone.now().date() else False
-
-    if not current and not end_date:
-        raise forms.ValidationError(f"Please provide an end date or mark as current {entity_name}")
 
     if end_date and start_date and end_date < start_date:
         raise forms.ValidationError("End date cannot be earlier than start date")
-
-    if current and end_date:
-        raise forms.ValidationError(f"Cannot have both current {entity_name} and end date")
 
     return cleaned_data
 
