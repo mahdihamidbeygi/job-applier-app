@@ -4,7 +4,7 @@ Base models and mixins.
 
 import json
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from django.apps import apps
 from django.db import models
@@ -12,6 +12,71 @@ from django.utils import timezone
 import logging
 
 logger: logging.Logger = logging.getLogger(__name__)
+
+
+def safe_date_convert(value: Union[str, date, datetime, None]) -> Optional[date]:
+    """
+    Safely convert various date formats to a date object.
+
+    Args:
+        value: The value to convert (string, date, datetime, or None)
+
+    Returns:
+        date object or None if conversion fails or value is None/empty
+    """
+    if value is None or value == "":
+        return None
+
+    # If it's already a date object, return it
+    if isinstance(value, date):
+        return value
+
+    # If it's a datetime object, return the date part
+    if isinstance(value, datetime):
+        return value.date()
+
+    # If it's a string, try to parse it
+    if isinstance(value, str):
+        value = value.strip()
+        if not value or value.lower() in ("none", "null", "undefined"):
+            return None
+
+        # Common date formats to try
+        date_formats = [
+            "%Y-%m-%d",  # ISO format: 2023-12-25
+            "%m/%d/%Y",  # US format: 12/25/2023
+            "%d/%m/%Y",  # EU format: 25/12/2023
+            "%Y-%m-%d %H:%M:%S",  # Datetime string: 2023-12-25 10:30:00
+            "%Y-%m-%dT%H:%M:%S",  # ISO datetime: 2023-12-25T10:30:00
+            "%Y-%m-%dT%H:%M:%S.%f",  # ISO with microseconds
+            "%Y-%m-%dT%H:%M:%S.%fZ",  # ISO with timezone
+            "%Y-%m-%dT%H:%M:%S%z",  # ISO with timezone offset
+            "%Y-%m",  # Year-month: 2023-12
+            "%m/%Y",  # Month/Year: 12/2023
+            "%B %Y",  # Full month name: December 2023
+            "%b %Y",  # Abbreviated month: Dec 2023
+            "%Y",  # Just year: 2023
+        ]
+
+        for date_format in date_formats:
+            try:
+                parsed_date = datetime.strptime(value, date_format)
+                return parsed_date.date()
+            except ValueError:
+                continue
+
+        # Try using dateutil parser as fallback
+        try:
+            from dateutil import parser
+
+            parsed_date = parser.parse(value)
+            return parsed_date.date()
+        except (ImportError, ValueError, TypeError):
+            pass
+
+    # Log warning for unsuccessful conversion
+    logger.warning(f"Could not convert '{value}' (type: {type(value)}) to date object")
+    return None
 
 
 class TimestampMixin(models.Model):
@@ -23,8 +88,162 @@ class TimestampMixin(models.Model):
     class Meta:
         abstract = True
 
+    @classmethod
+    def get_date_fields(cls) -> List[str]:
+        """
+        Get all date fields for this model, including common ones and model-specific ones.
+
+        Returns:
+            List of field names that should be treated as date fields
+        """
+        # Common date field names across all models
+        common_date_fields = [
+            "start_date",
+            "end_date",
+            "date",
+            "created_date",
+            "updated_date",
+            "issue_date",
+            "expiry_date",
+            "publication_date",
+            "birth_date",
+            "graduation_date",
+            "hire_date",
+            "termination_date",
+        ]
+
+        # Combine with model-specific date fields
+        model_date_fields = getattr(cls, "DATE_FIELDS", [])
+
+        # Get all date fields that exist on this model
+        all_date_fields = set(common_date_fields + model_date_fields)
+
+        # Filter to only include fields that actually exist on this model
+        existing_fields = {
+            field.name
+            for field in cls._meta.get_fields()
+            if not field.is_relation
+            and hasattr(field, "get_internal_type")
+            and field.get_internal_type() == "DateField"
+        }
+
+        return [field for field in all_date_fields if field in existing_fields]
+
+    @classmethod
+    def convert_string_dates(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Convert string dates to date objects for all applicable fields.
+
+        Args:
+            data: Dictionary containing form data with potential string dates
+
+        Returns:
+            Dictionary with string dates converted to date objects
+        """
+        if not data:
+            return data
+
+        converted_data = data.copy()
+        date_fields = cls.get_date_fields()
+
+        for field_name in date_fields:
+            if field_name in converted_data:
+                original_value = converted_data[field_name]
+                converted_value = safe_date_convert(original_value)
+
+                # Only replace if conversion was successful or original was None/empty
+                if converted_value is not None or original_value in [None, "", "None", "null"]:
+                    converted_data[field_name] = converted_value
+
+                    # Log successful conversion for debugging
+                    if (
+                        original_value
+                        and converted_value
+                        and str(original_value) != str(converted_value)
+                    ):
+                        logger.debug(
+                            f"Converted {field_name}: '{original_value}' -> '{converted_value}'"
+                        )
+
+        return converted_data
+
+    @classmethod
+    def create_from_form_data(cls, **form_data):
+        """
+        Create an instance from form data with automatic date conversion.
+
+        Args:
+            **form_data: Form data including potential string dates
+
+        Returns:
+            Created model instance
+        """
+        converted_data = cls.convert_string_dates(form_data)
+
+        # Remove any fields that don't belong to this model
+        valid_fields = {
+            field.name
+            for field in cls._meta.get_fields()
+            if not field.is_relation or field.concrete
+        }
+        filtered_data = {k: v for k, v in converted_data.items() if k in valid_fields}
+
+        return cls.objects.create(**filtered_data)
+
+    def update_from_form_data(cls, instance, form_data: Dict[str, Any]):
+        """
+        Update an instance from form data with automatic date conversion.
+
+        Args:
+            instance: The model instance to update
+            form_data: Dictionary containing form data with potential string dates
+
+        Returns:
+            Updated model instance
+        """
+        converted_data = cls.convert_string_dates(form_data)
+
+        # Get valid fields for this model
+        valid_fields = {
+            field.name
+            for field in cls._meta.get_fields()
+            if not field.is_relation or field.concrete
+        }
+
+        # Update only valid fields
+        updated_fields = []
+        for field, value in converted_data.items():
+            if field in valid_fields and hasattr(instance, field):
+                old_value = getattr(instance, field)
+                if old_value != value:
+                    setattr(instance, field, value)
+                    updated_fields.append(field)
+
+        if updated_fields:
+            instance.save(update_fields=updated_fields + ["updated_at"])
+            logger.debug(f"Updated {cls.__name__} fields: {updated_fields}")
+
+        return instance
+
     def save(self, *args, **kwargs):
-        """Update timestamps on save"""
+        """
+        Enhanced save method that converts string dates and updates timestamps.
+        """
+        # Convert any string dates in this instance before saving
+        date_fields = self.get_date_fields()
+
+        for field_name in date_fields:
+            if hasattr(self, field_name):
+                field_value = getattr(self, field_name)
+                if field_value is not None:
+                    converted_value = safe_date_convert(field_value)
+                    if converted_value != field_value:
+                        setattr(self, field_name, converted_value)
+                        logger.debug(
+                            f"Auto-converted {field_name} on save: {field_value} -> {converted_value}"
+                        )
+
+        # Update timestamps on save
         self.updated_at = timezone.now()
         super().save(*args, **kwargs)
 
