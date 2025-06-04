@@ -1459,7 +1459,7 @@
     <section id="experience" class="section">
       <div class="section-header">
         <h2>Work Experience</h2>
-        <button class="add-record-btn" onclick="toggleForm('experience-form')">
+        <button class="add-record-btn" onclick="toggleForm('{{ work_experiences|model_name|default:"workexperience" }}-form')">
           <i class="fas fa-plus"></i> Add Experience
         </button>
       </div>
@@ -1513,7 +1513,7 @@
     <section id="projects" class="section">
       <div class="section-header">
         <h2>Projects</h2>
-        <button class="add-record-btn" onclick="toggleForm('project-form')">
+        <button class="add-record-btn" onclick="toggleForm('{{ projects|model_name|default:"project" }}-form')">
           <i class="fas fa-plus"></i> Add Project
         </button>
       </div>
@@ -1578,7 +1578,7 @@
     <section id="education" class="section">
       <div class="section-header">
         <h2>Education</h2>
-        <button class="add-record-btn" onclick="toggleForm('education-form')">
+        <button class="add-record-btn" onclick="toggleForm('{{ education|model_name|default:"education" }}-form')">
           <i class="fas fa-plus"></i> Add Education
         </button>
       </div>
@@ -1629,7 +1629,7 @@
         <h2>Certifications</h2>
         <button
           class="add-record-btn"
-          onclick="toggleForm('certification-form')"
+          onclick="toggleForm('{{ certifications|model_name|default:"certification" }}-form')"
         >
           <i class="fas fa-plus"></i> Add Certification
         </button>
@@ -1681,7 +1681,7 @@
     <section id="publications" class="section">
       <div class="section-header">
         <h2>Publications</h2>
-        <button class="add-record-btn" onclick="toggleForm('publication-form')">
+        <button class="add-record-btn" onclick="toggleForm('{{ publications|model_name|default:"publication" }}-form')">
           <i class="fas fa-plus"></i> Add Publication
         </button>
       </div>
@@ -1746,7 +1746,7 @@
           >
             <i class="fas fa-magic"></i> Clean Up Skills
           </button>
-          <button class="retry-button" onclick="toggleForm('skill-form')">
+          <button class="retry-button" onclick="toggleForm('{{ skills|model_name|default:"skill" }}-form')">
             <i class="fas fa-plus"></i> Add Skill
           </button>
         </div>
