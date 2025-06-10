@@ -33,7 +33,7 @@ BASE_DIR: Path = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 # Detect if we're running in GitHub Codespaces
 IN_CODESPACES = os.environ.get("CODESPACES", "false").lower() == "true"
