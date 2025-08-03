@@ -361,35 +361,15 @@ class ResumeComposition:
         except Exception:
             return 0.0
 
-    def _create_projects_section(self, job_description=None, max_projects=10):
-        if self.personal_agent.user_profile.projects.count() < 1:
-            return
-
-        # Score and sort projects by relevance
-        scored_projects: List[Tuple[float, Dict[str, Any]]] = []
-        for project in self.personal_agent.user_profile.projects.all():
-            # Clean the project title by removing anything in parentheses
-            title: str = project.title
-            cleaned_title = title.split("(")[0].strip()
-            project.title = cleaned_title
-
-            score = self._score_project_relevance(project, job_description)
-            scored_projects.append((score, project))
-
-        # Sort by score (descending) and limit to max_projects
-        sorted_projects: List[Tuple[float, Dict[str, Any]]] = sorted(
-            scored_projects, key=lambda x: (-x[0], x[1].title)
-        )
-        relevant_projects: List[Dict[str, Any]] = [
-            proj for _, proj in sorted_projects[:max_projects]
-        ]
-
-        if not relevant_projects:
+    def _create_projects_section(self):
+        if len(self.projects) < 1:
             return
 
         self.elements.append(Paragraph("PROJECTS", self.styles["ResumeSectionHeader"]))
 
-        for project in relevant_projects:
+        for project in self.personal_agent.user_profile.projects.all():
+            if project.title.strip() not in self.projects:
+                continue
             # Project title and dates row
             title_text = f"<b>{project.title}</b>"
             # TODO: Add technologies to project title
@@ -435,17 +415,20 @@ class ResumeComposition:
             self.elements.append(Spacer(1, 2))
 
     def _create_certifications_section(self):
-        if self.personal_agent.user_profile.certifications.count() < 1:
+        if len(self.certificates) < 1:
             return
 
         self.elements.append(Paragraph("CERTIFICATIONS", self.styles["ResumeSectionHeader"]))
 
         for cert in self.personal_agent.user_profile.certifications.all():
+            # print(cert.name.strip())
+            # if cert.name.lower() not in self.certificates:
+            #     continue
             cert_text: str = f"{cert.name}"
             if cert.issuer:
                 cert_text += f" - {cert.issuer}"
-            if cert.issue_date:
-                cert_text += f" ({self._format_date(cert.issue_date)})"
+            # if cert.issue_date:
+            #     cert_text += f" ({self._format_date(cert.issue_date)})"
             self.elements.append(Paragraph(cert_text, self.styles["ResumeCertification"]))
 
         self.elements.append(Spacer(1, 2))
@@ -463,11 +446,50 @@ class ResumeComposition:
                 edu_text += f" - {edu.degree}"
             if edu.field_of_study:
                 edu_text += f" in {edu.field_of_study}"
-            if edu.end_date:
-                edu_text += f" ({self._format_date(edu.end_date)})"
+            # if edu.end_date:
+            #     edu_text += f" ({self._format_date(edu.end_date)})"
             self.elements.append(Paragraph(edu_text, self.styles["ResumeEducation"]))
 
         self.elements.append(Spacer(1, 2))
+
+    def _create_publications_section(self):
+        """Create the publications section of the resume."""
+        if len(self.publications) < 1:
+            return
+
+        self.elements.append(Paragraph("PUBLICATIONS", self.styles["ResumeSectionHeader"]))
+
+        for pub in self.personal_agent.user_profile.publications.all():
+            if pub.title.strip() not in self.publications:
+                continue
+            pub_text: str = f"{pub.title}"
+            if pub.authors:
+                pub_text += f" - {pub.authors}"
+            if pub.publication_date:
+                pub_text += f" ({self._format_date(pub.publication_date)})"
+            if pub.journal:
+                pub_text += f" - {pub.journal}"
+            self.elements.append(Paragraph(f"• {pub_text}", self.styles["ResumeBullet"]))
+
+        self.elements.append(Spacer(1, 2))
+
+    def _score_publication_relevance(self, publication, job_description):
+        """Score a publication's relevance to the job description."""
+        if not job_description:
+            return 1.0  # If no job description, treat all publications as relevant
+
+        vectorizer = CountVectorizer(stop_words="english")
+
+        # Combine publication title, abstract, and keywords
+        publication_text = f"{publication.title} {getattr(publication, 'abstract', '')} {getattr(publication, 'keywords', '')}"
+
+        try:
+            # Create document vectors
+            vectors = vectorizer.fit_transform([publication_text, job_description])
+            similarity = cosine_similarity(vectors[0:1], vectors[1:2])[0][0]
+            return similarity
+        except Exception:
+            return 0.0
 
     def _create_skills_section(self, job_info: str):
         """Create the skills section of the resume."""
@@ -573,14 +595,10 @@ class ResumeComposition:
 
         {f"Job Description: {job_info}" if job_info else ""}
 
-        Candidate Background Summary:
+        Candidate Background:
+        {self.personal_agent.user_profile.years_of_experience} years of experience
         {self.personal_agent.get_formatted_background()}
 
-        Applicant Skills (Full List):
-        {', '.join([skill.name for skill in self.personal_agent.user_profile.skills.all()])}
-
-        Applicant Projects (Full List):
-        {', '.join([proj.title for proj in self.personal_agent.user_profile.projects.all()])}
 
         Instructions:
         1. Analyze the job description and identify key requirements and skills.
@@ -588,9 +606,11 @@ class ResumeComposition:
         3. Create a compelling 2-3 sentence professional summary highlighting the most relevant aspects for this specific job.
         4. Relevant titles to job description should be in the summary if not available, don't mention.
         4. Identify a list of the candidate's skills (from their full list) that are most relevant to this job description (max 15).
-        5. Identify a list of the candidate's projects (from their full list) that are most relevant to this job description (max 5).
+        5. Identify a list of the candidate's project titles (from their full list) that are most relevant to this job description (max 3).
         6. Ensure the summary maintains the candidate's authentic voice and style.
         7. Focus on achievements and impact.
+        8. Identify a list of the candidate's publication titles (from their full list) that are most relevant to this job description (max 3).
+        9. Identify a list of the candidate's certification names (from their full list) that are most relevant to this job description (max 5).
 
         Return the results as a JSON object containing 'summary', 'skills', and 'projects'.
         """
@@ -600,6 +620,8 @@ class ResumeComposition:
             "summary": "string",
             "skills": "list of strings",
             "projects": "list of strings",
+            "publications": "list of strings",
+            "certificates": "list of strings",
         }
 
         try:
@@ -609,10 +631,15 @@ class ResumeComposition:
             )
             logger.debug(f"Received structured output: {response_dict}")
 
+            projects = [
+                proj.title.strip() for proj in self.personal_agent.user_profile.projects.all()[:3]
+            ]
             # Safely extract data using .get() with defaults
             self.professional_summary = response_dict.get("summary", "").strip()
             self.skills = response_dict.get("skills", [])
-            self.projects = response_dict.get("projects", [])
+            self.projects = response_dict.get("projects", projects)
+            self.publications = response_dict.get("publications", [])
+            self.certificates = response_dict.get("certificates", [])
 
             # Validate that skills and projects are lists
             if not isinstance(self.skills, list):
@@ -624,8 +651,9 @@ class ResumeComposition:
                 logger.warning(
                     f"LLM returned non-list for projects: {self.projects}. Defaulting to empty list."
                 )
-                self.projects = []
-
+                self.projects = [
+                    proj.title.strip() for proj in self.personal_agent.user_profile.projects.all()
+                ]
             logger.info(
                 f"Resume tailoring successful. Summary length: {len(self.professional_summary)}, Skills found: {len(self.skills)}, Projects found: {len(self.projects)}"
             )
@@ -678,63 +706,16 @@ class ResumeComposition:
         self._create_experience_section()
 
         # Add relevant projects section (using the tailored list)
-        if len(self.projects) > 0:
-            self.elements.append(Paragraph("PROJECTS", self.styles["ResumeSectionHeader"]))
-            # Filter the user's full project list based on the tailored titles
-            relevant_project_objects = [
-                proj
-                for proj in self.personal_agent.user_profile.projects.all()
-                if proj.title.strip() in self.projects  # Use proj.title
-            ]
-            # Sort projects (optional, maybe by date or keep LLM order)
-            relevant_project_objects.sort(
-                key=lambda p: (
-                    self.projects.index(p.title.strip())
-                    if p.title.strip() in self.projects
-                    else 999
-                )
-            )
+        self._create_projects_section()
 
-            for project in relevant_project_objects[:3]:
-                # (Keep the existing project table generation logic from _create_projects_section)
-                title_text = f"<b>{project.title}</b>"  # Use project.title
-                start_date: str = self._format_date(project.start_date)  # Use project.start_date
-                end_date: str = self._format_date(project.end_date)  # Use project.end_date
-                date_text: str = f"{start_date}-{end_date}"
-
-                project_data: List[List[Paragraph]] = [
-                    [
-                        Paragraph(title_text, self.styles["ResumeProjectTitle"]),
-                        Paragraph(date_text, self.styles["ResumeDate"]),
-                    ]
-                ]
-                project_table = Table(project_data, colWidths=[460, 100])
-                project_table.setStyle(
-                    TableStyle(
-                        [
-                            ("ALIGN", (0, 0), (0, 0), "LEFT"),
-                            ("ALIGN", (-1, -1), (-1, -1), "RIGHT"),
-                            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                            ("LEFTPADDING", (0, 0), (0, 0), 0),
-                            ("RIGHTPADDING", (-1, -1), (-1, -1), 0),
-                        ]
-                    )
-                )
-                self.elements.append(project_table)
-                if project.description:  # Check attribute directly
-                    bullets = self._convert_description_to_bullets(
-                        project.description
-                    )  # Use project.description
-                    for bullet in bullets:
-                        self.elements.append(Paragraph(f"• {bullet}", self.styles["ResumeBullet"]))
-                self.elements.append(Spacer(1, 2))
-        else:
-            # Optionally call the original _create_projects_section as fallback
-            self._create_projects_section(job_info)
-            logger.warning("No tailored projects available to add to the resume.")
+        # # Add publications section
+        # if len(self.publications) > 0:
+        #     self._create_publications_section()
 
         # Add certifications section
-        self._create_certifications_section()
+        if len(self.certificates) > 0:
+            self._create_certifications_section()
+
         # Add education section
         self._create_education_section()
 

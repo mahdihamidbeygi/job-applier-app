@@ -23,7 +23,7 @@ class BaseLLMClient:
     """Base class for local LLM clients."""
 
     def __init__(self, **kwargs) -> None:
-        self.model: str = kwargs.get("model", "gemini-2.5-flash-preview-04-17")
+        self.model: str = kwargs.get("model", "gemini-2.5-flash")
         self.temperature: float = kwargs.get("temperature", settings.TEMPERATURE)
         self.api_key: str | None = kwargs.get("api_key", None)
         self.max_tokens: int = kwargs.get("max_tokens", 4096)

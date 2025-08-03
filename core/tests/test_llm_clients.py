@@ -40,7 +40,7 @@ def test_uploading_file_google():
     file_input = llm.upload_file(file_path=resume_path)
 
     resp = llm.client.models.generate_content(
-        model="gemini-2.5-flash-preview-04-17",
+        model="gemini-2.5-flash",
         contents=[file_input, "What is the name of the person in the resume? "],
     )
     return resp

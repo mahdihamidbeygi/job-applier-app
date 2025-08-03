@@ -136,6 +136,7 @@ class CoverLetterComposition:
                 Job Info: {self.job_agent.job_record.get_formatted_info()}
 
                 Candidate Information:
+                {self.personal_agent.user_profile.years_of_experience} years of experience
                 {self.personal_agent.get_background_str()}
 
                 Instructions:

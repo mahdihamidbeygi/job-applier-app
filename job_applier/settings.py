@@ -202,7 +202,7 @@ PINECONE_HOST = os.getenv(
 # Model Configuration
 OPENAI_MODEL = "gpt-4-turbo-preview"
 GROK_MODEL = "grok-2-1212"
-GOOGLE_MODEL = "gemini-2.5-flash-preview-04-17"
+GOOGLE_MODEL = "gemini-2.5-flash"
 
 # OAuth Client IDs (these are public)
 GOOGLE_CLIENT_ID = "282027751559-r0ocro82n0n6ibftimraa331gogpa399.apps.googleusercontent.com"

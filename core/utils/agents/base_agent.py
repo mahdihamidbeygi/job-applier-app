@@ -23,7 +23,7 @@ class BaseAgent:
         self,
         user_id: int | None = None,
         job_id: int | None = None,
-        model: str = "gemini-2.5-flash-preview-04-17",
+        model: str = "gemini-2.5-flash",
     ) -> None:
         self.user_id: int | None = user_id
         self.job_id: int | None = job_id
